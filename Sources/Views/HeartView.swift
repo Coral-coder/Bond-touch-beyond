@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// Send your heartbeat: one press reads your current heart rate (Apple Watch / Health) and
-/// sends 10 seconds of it to your partner's bracelet, which beats in time and then stops.
+/// sends 5 seconds of it to your partner's bracelet, which beats in time and then stops.
 struct HeartView: View {
     @EnvironmentObject var model: AppModel
     @EnvironmentObject var heart: HeartRateService
@@ -43,8 +43,8 @@ struct HeartView: View {
             .onChange(of: model.sendingHeartbeat) { on in if on { beatStart = Date() } }
 
             Text(model.sendingHeartbeat
-                 ? "\(partnerName)'s bracelet is beating with your heart for 10 seconds."
-                 : "Press to send 10 seconds of your heartbeat to \(partnerName).")
+                 ? "\(partnerName)'s bracelet is beating with your heart for 5 seconds."
+                 : "Press to send 5 seconds of your heartbeat to \(partnerName).")
                 .font(Theme.font(15)).foregroundStyle(Theme.subtitle)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 24)

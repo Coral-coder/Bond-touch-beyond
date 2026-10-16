@@ -113,9 +113,9 @@ final class BraceletManager: NSObject, ObservableObject {
         if gen != .v3 { enqueue(BondGATT.ledMotor(gen, rgb: touch.colorRGB)) }
     }
 
-    /// Plays a received heartbeat: one pulse per beat at `bpm` for `seconds` (10 s), then
+    /// Plays a received heartbeat: one pulse per beat at `bpm` for `seconds` (5 s), then
     /// stops on its own.
-    func playHeartbeat(bpm: Int, seconds: Double = 10, colorRGB: Int = 0xE85D75) {
+    func playHeartbeat(bpm: Int, seconds: Double = 5, colorRGB: Int = 0xE85D75) {
         let clamped = min(max(bpm, 30), 220)
         stopHeartbeat()
         heartbeatBPM = clamped
