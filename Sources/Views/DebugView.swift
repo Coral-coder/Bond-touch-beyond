@@ -97,29 +97,54 @@ struct DebugView: View {
     }
 }
 
-/// Fetches and shows the raw JSON of everything the signed-in account can read from the
-/// original Bond Touch database (api.bond-touch.com), endpoint by endpoint.
+/// Shows everything the signed-in account can read from the original Bond Touch database
+/// (api.bond-touch.com) as a collapsible, colour-coded JSON tree — one section per endpoint,
+/// with an editor (PUT) on the endpoints that accept writes.
 private struct DataDumpView: View {
     let bearer: String
-    @State private var dump = "Loading…"
+    @State private var items: [BondBackend.Fetched] = []
     @State private var loading = true
 
     var body: some View {
-        ScrollView([.vertical, .horizontal]) {
-            Text(dump)
-                .font(.system(size: 11, design: .monospaced))
-                .foregroundStyle(.white)
-                .textSelection(.enabled)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(16)
+        List {
+            if loading {
+                HStack { Spacer(); ProgressView().tint(Theme.accent); Spacer() }
+                    .listRowBackground(Color.clear)
+            }
+            ForEach(items) { item in
+                Section {
+                    if let json = item.json {
+                        JSONNode(key: nil, value: json)
+                            .listRowBackground(Color.white.opacity(0.04))
+                    } else {
+                        Text(item.pretty)
+                            .font(.system(size: 11, design: .monospaced)).foregroundStyle(.white)
+                            .textSelection(.enabled)
+                            .listRowBackground(Color.white.opacity(0.04))
+                    }
+                    if item.editable {
+                        NavigationLink {
+                            EndpointEditorView(path: item.path, initial: item.pretty, bearer: bearer)
+                        } label: {
+                            Label("Edit (PUT)", systemImage: "pencil").foregroundStyle(Theme.accent)
+                        }
+                        .listRowBackground(Color.white.opacity(0.04))
+                    }
+                } header: {
+                    Text("/\(item.path)  ·  HTTP \(item.status)")
+                        .font(.caption.monospaced()).foregroundStyle(Theme.subtitle)
+                }
+            }
         }
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
         .screenBackground()
         .navigationTitle("My database")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
-                if loading { ProgressView().tint(Theme.accent) }
-                else { Button { Task { await load() } } label: { Image(systemName: "arrow.clockwise") } }
+                Button { Task { await load() } } label: { Image(systemName: "arrow.clockwise") }
+                    .disabled(loading)
             }
         }
         .task { await load() }
@@ -127,7 +152,61 @@ private struct DataDumpView: View {
 
     private func load() async {
         loading = true
-        dump = await BondBackend.dumpAccount(bearer: bearer)
+        items = await BondBackend.dumpAccountStructured(bearer: bearer)
         loading = false
+    }
+}
+
+/// Raw JSON editor for one endpoint: edit the body and PUT it back.
+private struct EndpointEditorView: View {
+    let path: String
+    let bearer: String
+    @State private var text: String
+    @State private var result = ""
+    @State private var busy = false
+
+    init(path: String, initial: String, bearer: String) {
+        self.path = path
+        self.bearer = bearer
+        _text = State(initialValue: initial)
+    }
+
+    var body: some View {
+        VStack(spacing: 12) {
+            TextEditor(text: $text)
+                .font(.system(size: 12, design: .monospaced)).foregroundStyle(.white)
+                .scrollContentBackground(.hidden)
+                .padding(8).background(Color.white.opacity(0.06))
+                .clipShape(RoundedRectangle(cornerRadius: Metric.cornerMedium))
+            Button { Task { await save() } } label: {
+                HStack { if busy { ProgressView().tint(Theme.bgBottom) }; Text("Save (PUT)").font(.headline) }
+                    .frame(maxWidth: .infinity).frame(height: Metric.buttonHeight)
+                    .background(Theme.accent).foregroundStyle(Theme.bgBottom)
+                    .clipShape(RoundedRectangle(cornerRadius: Metric.cornerMedium))
+            }
+            .buttonStyle(.plain).disabled(busy)
+            if !result.isEmpty {
+                ScrollView {
+                    Text(result).font(.system(size: 11, design: .monospaced)).foregroundStyle(.white)
+                        .textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .frame(maxHeight: 180)
+            }
+            Spacer()
+        }
+        .padding(16)
+        .screenBackground()
+        .navigationTitle(path)
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private func save() async {
+        busy = true; result = ""
+        guard let data = text.data(using: .utf8),
+              (try? JSONSerialization.jsonObject(with: data)) != nil else {
+            result = "Invalid JSON — fix it before saving."; busy = false; return
+        }
+        result = await BondBackend.putRaw(path, body: data, bearer: bearer)
+        busy = false
     }
 }

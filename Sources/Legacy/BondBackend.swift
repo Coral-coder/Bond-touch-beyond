@@ -161,6 +161,70 @@ enum BondBackend {
         return Array(Set(ids))
     }
 
+    /// One endpoint's fetched result for the tree viewer / editor.
+    struct Fetched: Identifiable {
+        let id = UUID()
+        let path: String
+        let status: Int
+        let pretty: String
+        let json: Any?
+        /// True when the endpoint has a matching write (PUT) so it can be edited back.
+        let editable: Bool
+    }
+
+    private static func fetchOne(_ path: String, bearer: String, editable: Bool) async -> Fetched {
+        var req = URLRequest(url: apiBase.appendingPathComponent(path))
+        req.httpMethod = "GET"
+        req.setValue("Bearer " + bearer, forHTTPHeaderField: "Authorization")
+        do {
+            let (data, resp) = try await URLSession.shared.data(for: req)
+            let code = (resp as? HTTPURLResponse)?.statusCode ?? 0
+            return Fetched(path: path, status: code, pretty: pretty(data),
+                           json: try? JSONSerialization.jsonObject(with: data), editable: editable)
+        } catch {
+            return Fetched(path: path, status: -1, pretty: "ERROR: \(error.localizedDescription)",
+                           json: nil, editable: false)
+        }
+    }
+
+    /// Account-level endpoints that accept a PUT of the same body (so they're editable).
+    private static let editablePaths: Set<String> = [
+        "bond/api/v3/user", "bond/api/v3/user/details"
+    ]
+
+    /// Structured dump for the tree viewer: each account endpoint, then each bond's data.
+    static func dumpAccountStructured(bearer: String) async -> [Fetched] {
+        var out: [Fetched] = []
+        for path in accountReadPaths {
+            out.append(await fetchOne(path, bearer: bearer, editable: editablePaths.contains(path)))
+        }
+        for id in await bondIds(bearer: bearer) {
+            for path in ["bond/api/v3/bonds/\(id)/meanings",
+                         "bond/api/v3/bonds/\(id)/chatmessages",
+                         "bond/api/v3/presences/\(id)",
+                         "bond/api/v3/presences/\(id)/places"] {
+                out.append(await fetchOne(path, bearer: bearer, editable: false))
+            }
+        }
+        return out
+    }
+
+    /// Writes an edited body back to an endpoint with PUT; returns the status + response.
+    static func putRaw(_ path: String, body: Data, bearer: String) async -> String {
+        var req = URLRequest(url: apiBase.appendingPathComponent(path))
+        req.httpMethod = "PUT"
+        req.setValue("Bearer " + bearer, forHTTPHeaderField: "Authorization")
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = body
+        do {
+            let (data, resp) = try await URLSession.shared.data(for: req)
+            let code = (resp as? HTTPURLResponse)?.statusCode ?? 0
+            return "HTTP \(code)\n" + pretty(data)
+        } catch {
+            return "ERROR: \(error.localizedDescription)"
+        }
+    }
+
     /// Dumps everything the signed-in account can read: every account endpoint, then each
     /// bond's meanings, chat messages, presence and places.
     static func dumpAccount(bearer: String) async -> String {
