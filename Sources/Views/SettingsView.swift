@@ -11,7 +11,7 @@ struct SettingsView: View {
                 Text("Settings").font(.title3.bold()).foregroundStyle(.white).padding(.top, 10)
 
                 AvatarRing(name: store.profile.name.isEmpty ? "Me" : store.profile.name,
-                           color: Color(rgbInt: store.profile.colorRGB), size: 110)
+                           ringColor: Color(rgbInt: store.profile.colorRGB), size: 110)
                 Text(store.profile.name.isEmpty ? "Me" : store.profile.name)
                     .font(.title2.bold()).foregroundStyle(.white)
                 HStack(spacing: 6) {

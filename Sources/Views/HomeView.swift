@@ -87,7 +87,7 @@ struct HomeView: View {
         HStack(alignment: .top, spacing: 18) {
             VStack(spacing: 8) {
                 AvatarRing(name: store.profile.name.isEmpty ? "Me" : store.profile.name,
-                           color: Color(rgbInt: store.profile.colorRGB), size: 120)
+                           ringColor: Color(rgbInt: store.profile.colorRGB), size: 120)
                 Text(store.profile.name.isEmpty ? "Me" : store.profile.name)
                     .font(.headline).foregroundStyle(.white)
                 Text(statusText).font(.caption).foregroundStyle(Theme.subtitle)
@@ -100,7 +100,7 @@ struct HomeView: View {
 
             VStack(spacing: 8) {
                 AvatarRing(name: partner?.displayName ?? "Partner",
-                           color: Color(rgbInt: partner?.colorRGB ?? 0xAEE63C), size: 120)
+                           ringColor: Color(rgbInt: partner?.colorRGB ?? 0xAEE63C), size: 120)
                 Text(partner?.displayName ?? "Partner")
                     .font(.headline).foregroundStyle(.white)
                 Text(partner?.online == true ? "Online" : "Offline")

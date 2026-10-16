@@ -21,25 +21,30 @@ struct TouchViz: View {
     }
 
     var body: some View {
-        HStack(alignment: .center, spacing: 10) {
-            ForEach(Array(marks.enumerated()), id: \.offset) { _, mark in
-                switch mark {
-                case .dot:
-                    Circle()
-                        .fill(color)
-                        .frame(width: height * 0.42, height: height * 0.42)
-                        .shadow(color: color.opacity(0.9), radius: 8)
-                case .stroke(let gap):
-                    Capsule()
-                        .fill(LinearGradient(colors: [color.opacity(0.85), color],
-                                             startPoint: .leading, endPoint: .trailing))
-                        .frame(width: CGFloat(gap) / 700 * 64 + 22, height: height * 0.5)
-                        .shadow(color: color.opacity(0.8), radius: 9)
-                        .rotationEffect(.degrees(-18))
-                }
+        let items = marks
+        return HStack(alignment: .center, spacing: 10) {
+            ForEach(items.indices, id: \.self) { index in
+                markView(items[index])
             }
         }
         .frame(height: height)
+    }
+
+    @ViewBuilder private func markView(_ mark: Mark) -> some View {
+        switch mark {
+        case .dot:
+            Circle()
+                .fill(color)
+                .frame(width: height * 0.42, height: height * 0.42)
+                .shadow(color: color.opacity(0.9), radius: 8)
+        case .stroke(let gap):
+            Capsule()
+                .fill(LinearGradient(colors: [color.opacity(0.85), color],
+                                     startPoint: .leading, endPoint: .trailing))
+                .frame(width: CGFloat(gap) / 700 * 64 + 22, height: height * 0.5)
+                .shadow(color: color.opacity(0.8), radius: 9)
+                .rotationEffect(.degrees(-18))
+        }
     }
 
     private enum Mark { case dot; case stroke(Int) }
