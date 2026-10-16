@@ -46,17 +46,6 @@ struct BondView: View {
                 .disabled(taps.isEmpty)
             }
 
-            if !model.incoming.isEmpty {
-                List(model.incoming.reversed()) { touch in
-                    HStack {
-                        Circle().fill(Color(rgbInt: touch.colorRGB)).frame(width: 18, height: 18)
-                        Text("\(touch.pattern.count + 1) taps")
-                        Spacer()
-                        Text(touch.sentAt, style: .time).foregroundStyle(.secondary)
-                    }
-                }
-                .frame(maxHeight: 180)
-            }
             Spacer()
         }
         .padding()

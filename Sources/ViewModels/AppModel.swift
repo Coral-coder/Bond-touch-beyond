@@ -7,14 +7,15 @@ import SwiftUI
 @MainActor
 final class AppModel: ObservableObject {
     @Published var bond: Bond?
-    @Published var incoming: [TouchMessage] = []
+    @Published var history: [TouchMessage] = []   // sent + received, newest last
     @Published var statusLine: String = "Starting…"
     @Published var pendingShare: CKShare?
     @Published var braceletState: BraceletState = .disconnected
+    @Published private(set) var myUserID: String = ""
 
     let bracelet = BraceletManager()
+    let store = LocalStore()
     private let relay = CloudRelay()
-    private var myUserID: String = ""
 
     init() {
         // Re-publish the nested bracelet's state so SwiftUI views observing AppModel update.
@@ -60,8 +61,10 @@ final class AppModel: ObservableObject {
     func sendTouch(pattern: [Int], colorRGB: Int) async {
         guard let bond else { return }
         let touch = TouchMessage(senderID: myUserID, pattern: pattern, colorRGB: colorRGB)
-        do { try await relay.sendTouch(touch, bond: bond) }
-        catch { statusLine = "Send failed: \(error.localizedDescription)" }
+        do {
+            try await relay.sendTouch(touch, bond: bond)
+            history.append(touch)
+        } catch { statusLine = "Send failed: \(error.localizedDescription)" }
     }
 
     /// Called when a silent push wakes us: pull new touches and play them.
@@ -69,8 +72,10 @@ final class AppModel: ObservableObject {
         guard let bond else { return }
         do {
             let touches = try await relay.fetchNewTouches(bond: bond, myUserID: myUserID)
-            incoming.append(contentsOf: touches)
-            for touch in touches { bracelet.play(touch) }
+            history.append(contentsOf: touches)
+            if !store.doNotDisturb {
+                for touch in touches { bracelet.play(touch) }
+            }
         } catch {
             statusLine = "Fetch failed: \(error.localizedDescription)"
         }

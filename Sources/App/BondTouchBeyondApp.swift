@@ -11,6 +11,7 @@ struct BondTouchBeyondApp: App {
         WindowGroup {
             RootView()
                 .environmentObject(model)
+                .environmentObject(model.store)
                 .task { await model.bootstrap() }
                 .onAppear { appDelegate.model = model }
         }
