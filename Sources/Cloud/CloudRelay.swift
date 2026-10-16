@@ -64,22 +64,34 @@ final class CloudRelay {
     /// created and saved later, inside `UICloudSharingController`'s preparation handler, so
     /// that the controller hands the system share sheet a share whose server URL is ready
     /// (otherwise the invite link preview spins forever).
-    func createBond(displayName: String) async throws -> (Bond, CKRecord) {
+    func createBond(displayName: String) async throws -> (Bond, CKShare) {
         let zoneID = CKRecordZone.ID(zoneName: "bond-\(UUID().uuidString)", ownerName: CKCurrentUserDefaultName)
         let zone = CKRecordZone(zoneID: zoneID)
         _ = try await privateDB.modifyRecordZones(saving: [zone], deleting: [])
 
         try await installZoneSubscription(in: privateDB, zoneID: zoneID)
 
-        // Return an UNSAVED root; the share controller saves root + share together (the
-        // supported "share a new record" flow). Saving the root first and re-saving it with
-        // the share is what left the share sheet blank/grey.
+        // Save the root and its share together as new records, then hand the share sheet a
+        // share that is already saved (its URL is populated). Presenting an already-saved
+        // share is far more reliable than UICloudSharingController's preparation handler,
+        // which is what left the sheet grey or spinning in Messages.
         let rootID = CKRecord.ID(recordName: "root", zoneID: zoneID)
         let root = CKRecord(recordType: Self.recordTypeBond, recordID: rootID)
         root["ownerName"] = displayName as CKRecordValue
 
+        let share = CKShare(rootRecord: root)
+        share[CKShare.SystemFieldKey.title] = "Bond Touch Beyond" as CKRecordValue
+        share.publicPermission = .none
+
+        let result = try await privateDB.modifyRecords(saving: [root, share], deleting: [],
+                                                       savePolicy: .allKeys, atomically: true)
+        guard case .success(let savedShareRecord)? = result.saveResults[share.recordID],
+              let savedShare = savedShareRecord as? CKShare else {
+            throw CKError(.partialFailure)
+        }
+
         let bond = Bond(id: zoneID.zoneName, partnerName: "Pending…", isOwner: true, pending: true)
-        return (bond, root)
+        return (bond, savedShare)
     }
 
     /// Deletes a bond: an owner's invite/zone is removed from the private DB; a bond shared

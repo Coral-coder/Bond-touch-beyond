@@ -130,8 +130,8 @@ struct PartnerDetailView: View {
         }
         .sheet(isPresented: $showEncounters) { EncountersView(bondID: partnerID) }
         .sheet(isPresented: $showShare) {
-            if let root = model.pendingShareRoot {
-                CloudShareSheet(root: root, container: CKContainer(identifier: AppConfig.cloudContainerID),
+            if let share = model.pendingShare {
+                CloudShareSheet(share: share, container: CKContainer(identifier: AppConfig.cloudContainerID),
                                 onError: { msg in showShare = false; shareError = msg })
             }
         }
@@ -171,7 +171,7 @@ struct PartnerDetailView: View {
                     Task {
                         await model.inviteToICloudChat(p.id)
                         inviting = false
-                        showShare = model.pendingShareRoot != nil
+                        showShare = model.pendingShare != nil
                     }
                 } label: {
                     HStack {
