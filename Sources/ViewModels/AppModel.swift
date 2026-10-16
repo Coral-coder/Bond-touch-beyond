@@ -234,14 +234,21 @@ final class AppModel: ObservableObject {
         defer { UIApplication.shared.endBackgroundTask(bg) }
         let touch = TouchMessage(senderID: myUserID, pattern: pattern, generation: generation,
                                  colorRGB: colorRGB, endColorRGB: endColorRGB)
+        let route = bond.legacy ? "original Bond API" : "iCloud"
+        NetLog.shared.log(.send, "Send touch → \(bond.partnerName) (\(route))",
+                          "gen \(generation), \(pattern.count) samples")
         do {
             if bond.legacy {
                 try await legacySendTouch(touch, bond: bond)
             } else {
                 try await relay.sendTouch(touch, bond: bond)
+                NetLog.shared.log(.ok, "Touch → iCloud accepted", "\(bond.partnerName)")
             }
             history.append(touch)
-        } catch { statusLine = "Send failed: \(error.localizedDescription)" }
+        } catch {
+            statusLine = "Send failed: \(error.localizedDescription)"
+            NetLog.shared.log(.fail, "Send touch failed (\(route))", error.localizedDescription)
+        }
     }
 
     private func bond(for id: String?) -> Bond? {
@@ -272,6 +279,9 @@ final class AppModel: ObservableObject {
             guard let events = try? await relay.fetchNewEvents(bond: partner.bond, myUserID: myUserID) else { continue }
             guard index < cloudPartners.count, cloudPartners[index].id == partner.id else { continue }
             history.append(contentsOf: events.touches)
+            if !events.touches.isEmpty {
+                NetLog.shared.log(.recv, "Received \(events.touches.count) touch(es) ← \(partner.displayName) (iCloud)")
+            }
             if !events.messages.isEmpty {
                 appendChat(events.messages, bondID: partner.id)
             }

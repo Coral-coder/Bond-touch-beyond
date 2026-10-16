@@ -150,7 +150,12 @@ extension AppModel {
             // Received touches. New ones go to the history, play on the bracelet (except on
             // the very first sync after login, which only records what is already there),
             // and are acknowledged so the sender sees them delivered.
-            for t in (b["touches"] as? [[String: Any]]) ?? [] {
+            let incomingTouches = (b["touches"] as? [[String: Any]]) ?? []
+            if !firstSync, !incomingTouches.filter({ !seen.contains(($0["id"] as? String) ?? "") }).isEmpty {
+                let n = incomingTouches.filter { !seen.contains(($0["id"] as? String) ?? "") }.count
+                NetLog.shared.log(.recv, "Received \(n) touch(es) ← \(bond.partnerName) (original Bond API)")
+            }
+            for t in incomingTouches {
                 guard let touchId = t["id"] as? String, !seen.contains(touchId) else { continue }
                 seen.insert(touchId)
                 let msg = (t["message"] as? [String: Any]) ?? [:]

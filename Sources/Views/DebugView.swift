@@ -6,6 +6,7 @@ import SwiftUI
 struct DebugView: View {
     @EnvironmentObject var model: AppModel
     @EnvironmentObject var store: LocalStore
+    @ObservedObject private var netLog = NetLog.shared
     @Environment(\.dismiss) private var dismiss
 
     private var legacyActive: Bool { store.useLegacyFirebase && !store.firebaseAuthToken.isEmpty }
@@ -60,6 +61,40 @@ struct DebugView: View {
                         row("State", "\(model.braceletState)")
                     }
 
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Text("TOUCH SEND / RECEIVE LOG").font(.caption.bold()).foregroundStyle(Theme.accent)
+                            Spacer()
+                            if !netLog.entries.isEmpty {
+                                Button("Clear") { netLog.clear() }.font(.caption).foregroundStyle(Theme.subtitle)
+                            }
+                        }
+                        VStack(alignment: .leading, spacing: 8) {
+                            if netLog.entries.isEmpty {
+                                Text("Send a touch, or wait for one to arrive, and it shows here — which backend, and whether the server accepted it.")
+                                    .font(.footnote).foregroundStyle(Theme.subtitle)
+                            }
+                            ForEach(netLog.entries) { e in
+                                VStack(alignment: .leading, spacing: 2) {
+                                    HStack(spacing: 6) {
+                                        Text(logIcon(e.kind))
+                                        Text(e.title).font(.caption.bold()).foregroundStyle(.white)
+                                        Spacer()
+                                        Text(e.at.formatted(date: .omitted, time: .standard))
+                                            .font(.caption2).foregroundStyle(Theme.subtitle)
+                                    }
+                                    if !e.detail.isEmpty {
+                                        Text(e.detail).font(.caption2.monospaced()).foregroundStyle(Theme.subtitle)
+                                            .textSelection(.enabled)
+                                    }
+                                }
+                            }
+                        }
+                        .padding(14).frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Color.white.opacity(0.06))
+                        .clipShape(RoundedRectangle(cornerRadius: Metric.cornerMedium))
+                    }
+
                     section("My database") {
                         if store.firebaseAuthToken.isEmpty {
                             Text("Sign in under Settings → Bond Touch account to read your database.")
@@ -95,6 +130,15 @@ struct DebugView: View {
                 .padding(14).frame(maxWidth: .infinity, alignment: .leading)
                 .background(Color.white.opacity(0.06))
                 .clipShape(RoundedRectangle(cornerRadius: Metric.cornerMedium))
+        }
+    }
+
+    private func logIcon(_ kind: NetLog.Entry.Kind) -> String {
+        switch kind {
+        case .send: return "↗️"
+        case .ok:   return "✅"
+        case .fail: return "❌"
+        case .recv: return "↘️"
         }
     }
 
