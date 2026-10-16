@@ -43,6 +43,8 @@ final class AppModel: ObservableObject {
     @Published var partnerPhotos: [String: UIImage] = [:]
     @Published var myPhoto: UIImage?
     var photoRequests: Set<String> = []
+    /// Cloud bonds this device has already pushed its profile (incl. photo) to this session.
+    var profileSyncedBondIDs: Set<String> = []
     /// The Apple Watch link (touch bar + meanings on the watch).
     let watch = WatchBridge()
     /// Repairs a bracelet stuck in firmware-update mode.
@@ -274,6 +276,17 @@ final class AppModel: ObservableObject {
 
     func refreshAll() async {
         defer { autoLinkPartners() }
+        // Make sure every cloud partner — including one who just accepted an invite — has
+        // this device's current profile (name, colour, photo) at least once per launch.
+        let unsent = cloudPartners.filter { !profileSyncedBondIDs.contains($0.id) }
+        if !unsent.isEmpty {
+            let p = store.profile
+            for partner in unsent {
+                try? await relay.sendProfile(name: p.name, colorRGB: p.colorRGB, photo: myPhotoFileURL,
+                                             bond: partner.bond, senderID: myUserID)
+                profileSyncedBondIDs.insert(partner.id)
+            }
+        }
         for index in cloudPartners.indices {
             let partner = cloudPartners[index]
             guard let events = try? await relay.fetchNewEvents(bond: partner.bond, myUserID: myUserID) else { continue }

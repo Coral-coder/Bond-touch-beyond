@@ -253,21 +253,24 @@ struct HomeView: View {
         let mine = touch.senderID == model.myUserID || touch.senderID == ChatMessage.legacySelf
         return HStack(spacing: 12) {
             TouchViz(pattern: touch.pattern, generation: touch.generation,
-                     colorRGB: touch.colorRGB, endColorRGB: touch.endColorRGB, height: 36)
+                     colorRGB: touch.colorRGB, endColorRGB: touch.endColorRGB, height: 64)
+                .frame(maxWidth: .infinity)
             VStack(alignment: .trailing, spacing: 2) {
                 Text(mine ? "You" : (partner?.displayName ?? "Partner"))
                     .font(Theme.font(12, .bold)).foregroundStyle(.white)
                 Text(touch.sentAt.formatted(date: .omitted, time: .shortened))
-                    .font(Theme.font(12)).foregroundStyle(Theme.subtitle)
+                    .font(Theme.font(11)).foregroundStyle(Theme.subtitle)
+                Button { model.bracelet.play(touch) } label: {
+                    Image(systemName: "play.fill").font(.system(size: 12, weight: .bold)).foregroundStyle(.white)
+                        .frame(width: 30, height: 30).background(Circle().fill(.white.opacity(0.14)))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Play on bracelet")
+                .padding(.top, 2)
             }
-            Button { model.bracelet.play(touch) } label: {
-                Image(systemName: "play.fill").font(.system(size: 13, weight: .bold)).foregroundStyle(.white)
-                    .frame(width: 32, height: 32).background(Circle().fill(.white.opacity(0.14)))
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Play on bracelet")
+            .fixedSize()
         }
-        .padding(.horizontal, 14).padding(.vertical, 12)
+        .padding(.horizontal, 14).padding(.vertical, 10)
         .glass(cornerRadius: 22)
     }
 }
@@ -280,16 +283,16 @@ private struct HomeTouchBarCard: View {
     @Binding var showCompose: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 9) {
             HStack {
-                Text("Touch bar").font(Theme.font(17, .heavy)).foregroundStyle(.white)
+                Text("Touch bar").font(Theme.font(15, .heavy)).foregroundStyle(.white)
                 Spacer()
                 if recorder.recording {
                     Button("Send now") { recorder.finish() }
                         .font(Theme.font(13, .heavy)).foregroundStyle(Theme.onAccent)
-                        .padding(.horizontal, 12).frame(height: 30)
+                        .padding(.horizontal, 12).frame(height: 28)
                         .background(Capsule().fill(Theme.accent))
-                    CountdownRing(progress: recorder.progress, remaining: recorder.remaining, size: 34)
+                    CountdownRing(progress: recorder.progress, remaining: recorder.remaining, size: 30)
                 } else {
                     Text(model.braceletState == .connected ? "Bracelet connected" : "No bracelet needed")
                         .font(Theme.font(12, .bold)).foregroundStyle(Theme.subtitle)
@@ -305,18 +308,18 @@ private struct HomeTouchBarCard: View {
             }
             TouchBarSurface(recorder: recorder, vertical: false,
                             startRGB: store.profile.colorRGB, endRGB: store.profile.colorRGB)
-                .frame(height: 72)
+                .frame(height: 46)
             if recorder.recording {
                 TouchViz(pattern: recorder.samples, generation: 3,
-                         colorRGB: store.profile.colorRGB, height: 34)
+                         colorRGB: store.profile.colorRGB, height: 40)
             } else {
                 Text("Touch to start · tap and slide for \(Int(store.touchWindowSeconds)) s · sends when time's up")
-                    .font(Theme.font(12)).foregroundStyle(Theme.subtitle)
+                    .font(Theme.font(11)).foregroundStyle(Theme.subtitle)
                     .frame(maxWidth: .infinity)
             }
         }
-        .padding(16)
-        .glass(cornerRadius: 28)
+        .padding(14)
+        .glass(cornerRadius: 26)
         .disabled(model.selectedPartner == nil)
         .opacity(model.selectedPartner == nil ? 0.5 : 1)
     }
