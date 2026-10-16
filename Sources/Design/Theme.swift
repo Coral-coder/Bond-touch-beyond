@@ -15,19 +15,19 @@ enum Theme {
     static let glassTop = Color.white.opacity(0.22)
     static let glassBottom = Color.white.opacity(0.07)
 
-    // Interactive accent — teal/cyan.
-    static let accent = Color(rgbInt: 0x3ED9CE)
-    static let accentDeep = Color(rgbInt: 0x2FC2B8)
-    static let teal = Color(rgbInt: 0x3ED9CE)
-    static let cyan = Color(rgbInt: 0x3ED9CE)
+    // Interactive accent — teal/cyan, softened a touch so it reads calm, not neon.
+    static let accent = Color(rgbInt: 0x57C3BB)
+    static let accentDeep = Color(rgbInt: 0x3FA69E)
+    static let teal = Color(rgbInt: 0x57C3BB)
+    static let cyan = Color(rgbInt: 0x57C3BB)
     /// Text on accent-filled buttons.
     static let onAccent = Color(rgbInt: 0x06283F)
 
     // Touch stroke colours (neon).
-    static let lime = Color(rgbInt: 0xAEE63C)
-    static let pink = Color(rgbInt: 0xFF2E74)
-    static let magenta = Color(rgbInt: 0xBE5BFF)
-    static let amber = Color(rgbInt: 0xF5A623)
+    static let lime = Color(rgbInt: 0x9FD257)
+    static let pink = Color(rgbInt: 0xEC5A89)
+    static let magenta = Color(rgbInt: 0xB173DF)
+    static let amber = Color(rgbInt: 0xECA94B)
     static let danger = Color(rgbInt: 0xFF6B6B)
 
     // Touch feed surfaces.
@@ -58,9 +58,9 @@ struct AeroSky: View {
             GeometryReader { geo in
                 let w = geo.size.width, h = geo.size.height
                 ZStack {
-                    bloom(Theme.accent, 0.55, w * 1.2).position(x: w * 0.15, y: 0)
-                    bloom(Theme.magenta, 0.45, w * 1.0).position(x: w, y: h * 0.35)
-                    bloom(Theme.pink, 0.35, w * 0.9).position(x: 0, y: h)
+                    bloom(Theme.accent, 0.34, w * 1.2).position(x: w * 0.15, y: 0)
+                    bloom(Theme.magenta, 0.26, w * 1.0).position(x: w, y: h * 0.35)
+                    bloom(Theme.pink, 0.22, w * 0.9).position(x: 0, y: h)
                 }
             }
         }
@@ -115,10 +115,10 @@ struct AccentButtonStyle: ButtonStyle {
             .foregroundStyle(Theme.onAccent)
             .frame(maxWidth: .infinity).frame(height: height)
             .background(
-                Capsule().fill(LinearGradient(colors: [Color(rgbInt: 0x6FF2E7), Theme.accentDeep],
+                Capsule().fill(LinearGradient(colors: [Color(rgbInt: 0x74D3CB), Theme.accentDeep],
                                               startPoint: .top, endPoint: .bottom))
                     .overlay(Capsule().stroke(.white.opacity(0.5), lineWidth: 1))
-                    .shadow(color: Theme.accent.opacity(0.4), radius: 12, y: 6)
+                    .shadow(color: Theme.accent.opacity(0.28), radius: 10, y: 5)
             )
             .opacity(configuration.isPressed ? 0.85 : 1)
             .scaleEffect(configuration.isPressed ? 0.98 : 1)

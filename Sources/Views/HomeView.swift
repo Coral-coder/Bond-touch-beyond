@@ -239,13 +239,25 @@ struct HomeView: View {
 
     // MARK: Feed
 
+    /// Touches for the selected partner only, newest first.
+    private var partnerHistory: [TouchMessage] {
+        guard let id = model.selectedPartnerID else { return [] }
+        return Array(model.history.filter { $0.bondID == id }.suffix(40).reversed())
+    }
+
     @ViewBuilder private var feed: some View {
-        if !model.history.isEmpty {
-            Text("Recent touches").font(Theme.font(15, .heavy)).foregroundStyle(Theme.mutedHeadline)
+        let touches = partnerHistory
+        if !touches.isEmpty {
+            Text("Recent touches with \(partner?.displayName ?? "partner")")
+                .font(Theme.font(15, .heavy)).foregroundStyle(Theme.mutedHeadline)
                 .padding(.horizontal, 4).padding(.top, 4)
-            ForEach(model.history.suffix(40).reversed()) { touch in
+            ForEach(touches) { touch in
                 touchRow(touch)
             }
+        } else if partner != nil {
+            Text("No touches yet with \(partner?.displayName ?? "partner"). Send one above.")
+                .font(Theme.font(13)).foregroundStyle(Theme.subtitle)
+                .frame(maxWidth: .infinity).padding(.top, 12)
         }
     }
 
