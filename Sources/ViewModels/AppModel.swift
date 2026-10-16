@@ -230,10 +230,8 @@ final class AppModel: ObservableObject {
 
     // MARK: - Partners
 
-    /// Creates an iCloud invite. Returns an error message when it can't (chiefly: not signed
-    /// into iCloud), so the UI can show it instead of a dead end.
-    @discardableResult
-    /// Creates an iCloud bond and its invite link. Returns an error message when it can't.
+    /// Creates an iCloud bond and its invite link. Returns an error message when it can't
+    /// (chiefly: not signed into iCloud), so the UI can show it instead of a dead end.
     @discardableResult
     func createBond() async -> String? {
         iCloudStatus = await relay.accountStatusMessage()
