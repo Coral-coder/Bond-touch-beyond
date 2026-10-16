@@ -34,8 +34,10 @@ final class WatchBridge: NSObject, WCSessionDelegate {
         for p in model.partners {
             let list = p.bond.legacy ? (model.legacyMeanings[p.id] ?? []) : model.store.meanings
             meanings[p.id] = list.map {
-                ["name": $0.label, "pattern": $0.pattern, "gen": $0.touchGeneration,
-                 "start": $0.colorRGB, "end": $0.endColorRGB]
+                var d: [String: Any] = ["name": $0.label, "pattern": $0.pattern, "gen": $0.touchGeneration,
+                                        "start": $0.colorRGB, "end": $0.endColorRGB]
+                if let sid = $0.serverID { d["meaningId"] = sid }   // so it lights the partner's bracelet
+                return d
             }
         }
         var context: [String: Any] = ["partners": partners, "meanings": meanings,
@@ -50,9 +52,18 @@ final class WatchBridge: NSObject, WCSessionDelegate {
             switch message["type"] as? String {
             case "touch":
                 guard let bond = message["bond"] as? String, let pattern = message["pattern"] as? [Int] else { return }
-                await model.sendTouch(pattern: pattern, generation: (message["gen"] as? Int) ?? 3,
-                                      colorRGB: (message["start"] as? Int) ?? model.store.profile.colorRGB,
-                                      endColorRGB: message["end"] as? Int, toBondID: bond)
+                let start = (message["start"] as? Int) ?? model.store.profile.colorRGB
+                let end = message["end"] as? Int ?? start
+                let gen = (message["gen"] as? Int) ?? 3
+                // A saved meaning carries its id, so send it as a meaning (lights the partner's band).
+                if let sid = message["meaningId"] as? String, !sid.isEmpty {
+                    let m = TouchMeaning(label: "Touch", emoji: "", colorRGB: start, endColorRGB: end,
+                                         pattern: pattern, serverID: sid, generation: gen)
+                    await model.sendMeaning(m, toBondID: bond)
+                } else {
+                    await model.sendTouch(pattern: pattern, generation: gen,
+                                          colorRGB: start, endColorRGB: end, toBondID: bond)
+                }
             case "select":
                 if let bond = message["bond"] as? String, model.partners.contains(where: { $0.id == bond }) {
                     model.selectedPartnerID = bond

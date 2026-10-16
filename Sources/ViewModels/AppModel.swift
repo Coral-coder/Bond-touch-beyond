@@ -65,7 +65,7 @@ final class AppModel: ObservableObject {
     @Published var history: [TouchMessage] = []                  // sent + received touches
     @Published var messagesByBond: [String: [ChatMessage]] = [:] // chat per bond
     @Published var statusLine: String = "Starting…"
-    @Published var pendingShareRoot: CKRecord?
+    @Published var pendingShare: CKShare?
     @Published var braceletState: BraceletState = .disconnected
     @Published var partnerHeartbeatActive = false
     /// True for the 5 s while the user's own heartbeat is being sent.
@@ -189,10 +189,10 @@ final class AppModel: ObservableObject {
 
     func createBond() async {
         do {
-            let (bond, root) = try await relay.createBond(displayName: store.profile.name.isEmpty ? "Me" : store.profile.name)
+            let (bond, share) = try await relay.createBond(displayName: store.profile.name.isEmpty ? "Me" : store.profile.name)
             // A created invite is pending until the partner accepts — it is not a partner yet.
             cloudPending.append(bond)
-            pendingShareRoot = root
+            pendingShare = share
         } catch {
             statusLine = "Couldn't create bond: \(error.localizedDescription)"
         }
@@ -251,6 +251,35 @@ final class AppModel: ObservableObject {
             statusLine = "Send failed: \(error.localizedDescription)"
             NetLog.shared.log(.fail, "Send touch failed (\(route))", error.localizedDescription)
         }
+    }
+
+    /// Sends a saved meaning. For a partner on the original app, send it by the meaning's id
+    /// (`/touches/basic`) so their app plays it as that meaning and its colour lights their
+    /// bracelet; a raw pattern would only buzz. iCloud carries the colour, so it goes as a
+    /// normal touch there.
+    func sendMeaning(_ meaning: TouchMeaning, toBondID: String? = nil) async {
+        guard let bond = bond(for: toBondID) else { return }
+        if bond.legacy, let serverID = meaning.serverID {
+            let bg = UIApplication.shared.beginBackgroundTask(withName: "send-meaning")
+            defer { UIApplication.shared.endBackgroundTask(bg) }
+            let touch = TouchMessage(bondID: bond.id, senderID: myUserID, pattern: meaning.pattern,
+                                     generation: meaning.touchGeneration, colorRGB: meaning.colorRGB,
+                                     endColorRGB: meaning.endColorRGB)
+            NetLog.shared.log(.send, "Send meaning \"\(meaning.label)\" → \(bond.partnerName) (original Bond API)",
+                              "meaningId \(serverID)")
+            do {
+                try await BondBackend.sendMeaningTouch(bondId: bond.id, meaningId: serverID,
+                                                       bearer: try await legacyToken())
+                history.append(touch)
+            } catch {
+                statusLine = "Send failed: \(error.localizedDescription)"
+                NetLog.shared.log(.fail, "Send meaning failed", error.localizedDescription)
+            }
+            return
+        }
+        // iCloud, or a legacy meaning without a server id: send the pattern and colour.
+        await sendTouch(pattern: meaning.pattern, generation: meaning.touchGeneration,
+                        colorRGB: meaning.colorRGB, endColorRGB: meaning.endColorRGB, toBondID: toBondID)
     }
 
     private func bond(for id: String?) -> Bond? {

@@ -69,12 +69,7 @@ struct MeaningsView: View {
                 }
                 Spacer()
                 Button {
-                    Task {
-                        await model.sendTouch(pattern: meaning.pattern,
-                                              generation: meaning.touchGeneration,
-                                              colorRGB: meaning.colorRGB,
-                                              endColorRGB: meaning.endColorRGB)
-                    }
+                    Task { await model.sendMeaning(meaning) }
                     clearNew(meaning)
                 } label: {
                     Text("Send").font(Theme.font(15, .heavy)).foregroundStyle(Theme.onAccent)

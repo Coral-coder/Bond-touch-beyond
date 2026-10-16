@@ -192,7 +192,7 @@ struct WatchMeaningsView: View {
                 }
                 ForEach(list) { m in
                     Button {
-                        link.sendTouch(pattern: m.pattern, generation: m.generation, startRGB: m.startRGB, endRGB: m.endRGB)
+                        link.sendMeaning(m)
                     } label: {
                         HStack {
                             Circle().fill(LinearGradient(colors: [Color(rgb: m.startRGB), Color(rgb: m.endRGB)],

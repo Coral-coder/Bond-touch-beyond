@@ -86,7 +86,7 @@ extension AppModel {
     }
 
     /// Creates an iCloud bond to invite an original-app partner to chat; it is linked to them
-    /// right away and the share sheet is offered (`pendingShareRoot`).
+    /// right away and the share sheet is offered (`pendingShare`).
     func inviteToICloudChat(_ legacyID: String) async {
         // Replace an earlier, still-unaccepted invite rather than piling them up.
         if let old = store.chatLinks[legacyID], let pending = cloudPending.first(where: { $0.id == old }) {

@@ -56,7 +56,14 @@ final class LocalStore: ObservableObject {
     /// Keep running in the background so touches from original-app partners arrive while
     /// the phone is locked (uses low-accuracy background location).
     @Published var keepAliveInBackground: Bool {
-        didSet { UserDefaults.standard.set(keepAliveInBackground, forKey: Key.keepAlive.rawValue) }
+        didSet {
+            UserDefaults.standard.set(keepAliveInBackground, forKey: Key.keepAlive.rawValue)
+            // Also store in iCloud key-value storage so the choice latches across reinstalls
+            // and new devices (UserDefaults is wiped when the app is deleted).
+            let kv = NSUbiquitousKeyValueStore.default
+            kv.set(keepAliveInBackground, forKey: Key.keepAlive.rawValue)
+            kv.synchronize()
+        }
     }
 
     /// Original-app partner (bond id) → the iCloud bond that carries chat with them.
@@ -133,12 +140,33 @@ final class LocalStore: ObservableObject {
         self.legacyChatEnabled = UserDefaults.standard.bool(forKey: Key.legacyChat.rawValue)
         self.photoBackgrounds = LocalStore.load([String: Bool].self, for: .photoBg) ?? [:]
         self.chatLinks = LocalStore.load([String: String].self, for: .chatLinks) ?? [:]
-        self.keepAliveInBackground = (UserDefaults.standard.object(forKey: Key.keepAlive.rawValue) as? Bool) ?? true
+        // Prefer the iCloud-latched choice, then this device's, then the default (on).
+        let kv = NSUbiquitousKeyValueStore.default
+        kv.synchronize()
+        if kv.object(forKey: Key.keepAlive.rawValue) != nil {
+            self.keepAliveInBackground = kv.bool(forKey: Key.keepAlive.rawValue)
+        } else {
+            self.keepAliveInBackground = (UserDefaults.standard.object(forKey: Key.keepAlive.rawValue) as? Bool) ?? true
+        }
         self.backgroundSoftness = (UserDefaults.standard.object(forKey: Key.bgSoftness.rawValue) as? Double) ?? 18
         self.touchWindowSeconds = (UserDefaults.standard.object(forKey: Key.touchWindow.rawValue) as? Double) ?? 5
         self.greetings = LocalStore.load([String: String].self, for: .greetings) ?? [:]
         self.encounters = LocalStore.load([String: Date].self, for: .encounters) ?? [:]
         self.privateSpacePasscodeHash = UserDefaults.standard.string(forKey: Key.psPasscode.rawValue)
+
+        // If the latched setting changes on another device, mirror it here.
+        NotificationCenter.default.addObserver(
+            forName: NSUbiquitousKeyValueStore.didChangeExternallyNotification,
+            object: NSUbiquitousKeyValueStore.default, queue: .main) { [weak self] _ in
+            Task { @MainActor in
+                guard let self else { return }
+                let kv = NSUbiquitousKeyValueStore.default
+                if kv.object(forKey: Key.keepAlive.rawValue) != nil {
+                    let v = kv.bool(forKey: Key.keepAlive.rawValue)
+                    if v != self.keepAliveInBackground { self.keepAliveInBackground = v }
+                }
+            }
+        }
     }
 
     var legacyFirebase: LegacyFirebaseClient? {
