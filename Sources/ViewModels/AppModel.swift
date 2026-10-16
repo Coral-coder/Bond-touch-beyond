@@ -99,7 +99,11 @@ final class AppModel: ObservableObject {
         }
         watch.start(self)
         recovery.start(bracelet)
+        AppModel.shared = self
     }
+
+    /// A weak reference so the scene delegate can route an accepted CloudKit share invite in.
+    static weak var shared: AppModel?
 
     /// Whether the app needs to keep running in the background: on in Settings and some
     /// partner is on the original servers (iCloud partners wake the app with pushes).
@@ -156,6 +160,11 @@ final class AppModel: ObservableObject {
             await publishProfile()
             await setOnline(true)
             await refreshAll()
+            // A share invite tapped before the app was ready (cold launch via the link).
+            if let metadata = AppModel.pendingShareMetadata {
+                AppModel.pendingShareMetadata = nil
+                await accept(metadata)
+            }
         } catch {
             statusLine = "iCloud error: \(error.localizedDescription)"
         }
@@ -208,6 +217,18 @@ final class AppModel: ObservableObject {
             if selectedPartnerID == bond.id { selectedPartnerID = partners.first?.id }
         } catch {
             statusLine = "Couldn't remove: \(error.localizedDescription)"
+        }
+    }
+
+    /// A share invite the partner accepted while the app was launching, held until ready.
+    static var pendingShareMetadata: CKShare.Metadata?
+
+    /// Routes an accepted CloudKit share invite in, whether the app is ready or still starting.
+    static func deliverShare(_ metadata: CKShare.Metadata) {
+        if let model = shared {
+            Task { @MainActor in await model.accept(metadata) }
+        } else {
+            pendingShareMetadata = metadata
         }
     }
 

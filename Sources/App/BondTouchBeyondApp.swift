@@ -27,8 +27,9 @@ struct BondTouchBeyondApp: App {
     }
 }
 
-/// Minimal app delegate: registers for silent pushes and routes CloudKit share
-/// acceptance + notifications into `AppModel`. No analytics, no third-party SDKs.
+/// Minimal app delegate: registers for silent pushes and routes notifications into
+/// `AppModel`, and installs the scene delegate that accepts CloudKit share invites. No
+/// analytics, no third-party SDKs.
 final class AppDelegate: NSObject, UIApplicationDelegate {
     weak var model: AppModel?
 
@@ -44,7 +45,30 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         return .newData
     }
 
-    func application(_ application: UIApplication, userDidAcceptCloudKitShareWith metadata: CKShare.Metadata) {
-        Task { await model?.accept(metadata) }
+    // This app uses the SwiftUI (scene-based) lifecycle, so CloudKit share acceptance is
+    // delivered to the scene delegate, NOT this app delegate's
+    // userDidAcceptCloudKitShareWith. Install a scene delegate for it.
+    func application(_ application: UIApplication,
+                     configurationForConnecting connectingSceneSession: UISceneSession,
+                     options: UIScene.ConnectionOptions) -> UISceneConfiguration {
+        let config = UISceneConfiguration(name: nil, sessionRole: connectingSceneSession.role)
+        config.delegateClass = ShareSceneDelegate.self
+        return config
+    }
+}
+
+/// Accepts CloudKit share invites. SwiftUI's `WindowGroup` still provides the window; this
+/// only adds the share-acceptance callbacks (warm app and cold launch via the invite link).
+final class ShareSceneDelegate: NSObject, UIWindowSceneDelegate {
+    func scene(_ scene: UIScene, willConnectTo session: UISceneSession,
+               options connectionOptions: UIScene.ConnectionOptions) {
+        if let metadata = connectionOptions.cloudKitShareMetadata {
+            AppModel.deliverShare(metadata)
+        }
+    }
+
+    func windowScene(_ windowScene: UIWindowScene,
+                     userDidAcceptCloudKitShareWith cloudKitShareMetadata: CKShare.Metadata) {
+        AppModel.deliverShare(cloudKitShareMetadata)
     }
 }
