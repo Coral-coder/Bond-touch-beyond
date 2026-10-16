@@ -9,7 +9,7 @@ struct LegacyDataView: View {
     var body: some View {
         Form {
             Section {
-                Toggle("Use legacy Firebase", isOn: $store.useLegacyFirebase).tint(Theme.teal)
+                Toggle("Use legacy Firebase", isOn: $store.useLegacyFirebase).tint(Theme.accent)
                 if store.useLegacyFirebase {
                     TextField("Database URL (https://…firebaseio.com)", text: $store.firebaseDatabaseURL)
                         .textInputAutocapitalization(.never).autocorrectionDisabled()

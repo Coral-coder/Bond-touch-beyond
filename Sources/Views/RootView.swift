@@ -11,7 +11,7 @@ struct RootView: View {
             content
         }
         .preferredColorScheme(.dark)
-        .tint(Theme.teal)
+        .tint(Theme.accent)
     }
 
     @ViewBuilder private var content: some View {

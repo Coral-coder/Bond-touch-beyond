@@ -29,7 +29,7 @@ struct MapTabView: View {
                         .font(.subheadline.bold()).foregroundStyle(.black)
                 }
                 .padding(.horizontal, 16).padding(.vertical, 12)
-                .background(Theme.teal).clipShape(RoundedRectangle(cornerRadius: 14))
+                .background(Theme.accent).clipShape(RoundedRectangle(cornerRadius: 14))
             }
             .padding(.horizontal, 16).padding(.top, 8)
         }

@@ -24,7 +24,7 @@ struct MeaningsView: View {
                         Button { showAdd = true } label: {
                             Image(systemName: "plus")
                                 .font(.system(size: 18, weight: .bold))
-                                .foregroundStyle(Theme.teal)
+                                .foregroundStyle(Theme.accent)
                                 .frame(width: 44, height: 44)
                                 .background(Circle().fill(Color.white.opacity(0.06)))
                         }
@@ -45,7 +45,7 @@ struct MeaningsView: View {
                                 Button {
                                     Task { await model.sendTouch(pattern: meaning.pattern, colorRGB: meaning.colorRGB) }
                                 } label: {
-                                    Text("Send").font(.headline.weight(.bold)).foregroundStyle(Theme.teal)
+                                    Text("Send").font(.headline.weight(.bold)).foregroundStyle(Theme.accent)
                                 }
                                 .buttonStyle(.plain)
                             }

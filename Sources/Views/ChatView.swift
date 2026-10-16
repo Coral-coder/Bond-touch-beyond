@@ -45,7 +45,7 @@ struct ChatView: View {
                     Text(msg.text)
                         .foregroundStyle(mine ? .white : .white.opacity(0.95))
                         .padding(.horizontal, 14).padding(.vertical, 10)
-                        .background(mine ? Theme.teal.opacity(0.22) : Color.white.opacity(0.08))
+                        .background(mine ? Theme.accent.opacity(0.22) : Color.white.opacity(0.08))
                         .clipShape(RoundedRectangle(cornerRadius: 18))
                 }
                 if !mine { Spacer(minLength: 40) }
@@ -61,7 +61,7 @@ struct ChatView: View {
             Image(systemName: "camera.fill")
                 .foregroundStyle(.white)
                 .frame(width: 44, height: 44)
-                .background(Circle().fill(Theme.teal.opacity(0.9)))
+                .background(Circle().fill(Theme.accent.opacity(0.9)))
             TextField("", text: $draft, prompt: Text("Message \(model.selectedPartner?.displayName ?? "")…")
                 .foregroundColor(Theme.subtitle))
                 .foregroundStyle(.white)
@@ -75,7 +75,7 @@ struct ChatView: View {
                     .font(.system(size: 18, weight: .bold)).foregroundStyle(.white)
                     .frame(width: 40, height: 40)
                     .background(Circle().fill(draft.trimmingCharacters(in: .whitespaces).isEmpty
-                                              ? Color.white.opacity(0.12) : Theme.teal))
+                                              ? Color.white.opacity(0.12) : Theme.accent))
             }
             .disabled(draft.trimmingCharacters(in: .whitespaces).isEmpty)
         }
