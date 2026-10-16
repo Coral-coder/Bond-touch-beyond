@@ -26,7 +26,7 @@ struct JSONNode: View {
         }
     }
 
-    @ViewBuilder private func branch<C: View>(summary: String, @ViewBuilder content: () -> C) -> some View {
+    @ViewBuilder private func branch<C: View>(summary: String, @ViewBuilder content: @escaping () -> C) -> some View {
         DisclosureGroup {
             content()
         } label: {
