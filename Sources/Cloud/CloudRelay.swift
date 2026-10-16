@@ -56,6 +56,24 @@ final class CloudRelay {
         (try? await container.accountStatus()) == .available
     }
 
+    /// nil when iCloud is usable; otherwise a plain explanation of why it isn't, so the UI
+    /// can tell the user instead of silently failing (no account, restricted, offline…).
+    func accountStatusMessage() async -> String? {
+        let status = (try? await container.accountStatus()) ?? .couldNotDetermine
+        switch status {
+        case .available:
+            return nil
+        case .noAccount:
+            return "You're not signed into iCloud on this iPhone. Open Settings, sign in to iCloud, and make sure iCloud Drive is on — then pairing, photos and your heartbeat will work."
+        case .restricted:
+            return "iCloud is restricted on this iPhone (Screen Time or a configuration profile). Allow iCloud to pair over it."
+        case .temporarilyUnavailable:
+            return "iCloud is temporarily unavailable. Give it a moment and try again."
+        default:
+            return "Can't reach iCloud. Check your internet connection and that you're signed into iCloud."
+        }
+    }
+
     // MARK: - Creating & sharing a bond
 
     /// Creates a new bond: a dedicated zone plus a root record, and returns a

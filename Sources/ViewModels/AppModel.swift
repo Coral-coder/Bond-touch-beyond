@@ -89,6 +89,17 @@ final class AppModel: ObservableObject {
     @Published var sendingHeartbeat = false
     @Published private(set) var myUserID: String = ""
     @Published private(set) var ready = false
+    /// nil when iCloud is usable; otherwise why it isn't, shown to the user. iCloud features
+    /// (pairing, photos, heartbeat relay) need this to be nil; the original backend doesn't.
+    @Published var iCloudStatus: String?
+
+    /// Re-checks iCloud and, if it became available, finishes the iCloud setup bootstrap did
+    /// not. Call when the app returns to the foreground (the user may have just signed in).
+    func refreshICloudStatus() async {
+        let msg = await relay.accountStatusMessage()
+        iCloudStatus = msg
+        if msg == nil, !ready { await bootstrap() }
+    }
 
     let bracelet = BraceletManager()
     let store = LocalStore()
@@ -163,8 +174,9 @@ final class AppModel: ObservableObject {
         bracelet.startScanning()
         // The original backend works without iCloud, so start it first and independently.
         startLegacySync()
-        guard await relay.accountIsAvailable() else {
-            statusLine = "Sign in to iCloud to use Bond Touch Beyond."
+        iCloudStatus = await relay.accountStatusMessage()
+        guard iCloudStatus == nil else {
+            statusLine = "iCloud is not signed in."
             return
         }
         do {
@@ -193,6 +205,7 @@ final class AppModel: ObservableObject {
     /// sync loop runs only while the app is active.
     func setActive(_ active: Bool) async {
         if active {
+            await refreshICloudStatus()   // the user may have just signed into iCloud
             updateKeepAlive()
             startLegacySync()
             await legacySetOnline(true)
@@ -215,14 +228,21 @@ final class AppModel: ObservableObject {
 
     // MARK: - Partners
 
-    func createBond() async {
+    /// Creates an iCloud invite. Returns an error message when it can't (chiefly: not signed
+    /// into iCloud), so the UI can show it instead of a dead end.
+    @discardableResult
+    func createBond() async -> String? {
+        iCloudStatus = await relay.accountStatusMessage()
+        if let msg = iCloudStatus { return msg }
         do {
             let (bond, share) = try await relay.createBond(displayName: store.profile.name.isEmpty ? "Me" : store.profile.name)
             // A created invite is pending until the partner accepts — it is not a partner yet.
             cloudPending.append(bond)
             pendingShare = share
+            return nil
         } catch {
             statusLine = "Couldn't create bond: \(error.localizedDescription)"
+            return "Couldn't create the invite: \(error.localizedDescription)"
         }
     }
 
