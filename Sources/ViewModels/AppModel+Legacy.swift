@@ -92,6 +92,7 @@ extension AppModel {
         var incoming: [Bond] = []
         var seen = seenTouchIDs
         var toAck: [(bondId: String, touchId: String)] = []
+        var newTouches: [TouchMessage] = []
         let firstSync = !legacyPrimed
 
         for b in bonds {
@@ -162,20 +163,20 @@ extension AppModel {
                 let ms = (msg["timestamp"] as? NSNumber)?.doubleValue ?? Date().timeIntervalSince1970 * 1000
                 let meaningName = t["meaning"] as? String
                 let meaning = meanings.first { $0.label == meaningName }
-                let touch = TouchMessage(bondID: id,
+                let touch = TouchMessage(id: TouchMessage.stableID(from: touchId), bondID: id,
                                          senderID: (b["firebaseId"] as? String) ?? id,
                                          pattern: BondBackend.pattern(msg["pattern"]),
                                          generation: BondBackend.generation(msg["generation"]),
                                          colorRGB: meaning?.colorRGB ?? color,
                                          endColorRGB: meaning?.endColorRGB ?? color,
                                          sentAt: Date(timeIntervalSince1970: ms / 1000))
-                history.append(touch)
+                newTouches.append(touch)
                 if !firstSync, id == selectedPartnerID, !store.doNotDisturb { bracelet.play(touch) }
                 toAck.append((id, touchId))
             }
         }
 
-        history.sort { $0.sentAt < $1.sentAt }
+        recordTouches(newTouches)
         legacyPartners = partners
         autoLinkPartners()
         legacyPending = pending

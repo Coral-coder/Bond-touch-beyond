@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 
 /// A single "touch" exchanged between partners.
@@ -54,4 +55,44 @@ struct TouchMessage: Identifiable, Codable, Equatable {
 
     /// The pattern as 50 ms position samples (for the Bond Touch More).
     var samples: [Int] { generation == 3 ? pattern : TouchPattern.samples(fromOnOff: pattern) }
+
+    /// A stable id derived from a server touch id, so the same touch gets the same id across
+    /// launches and isn't duplicated in the saved feed when it's re-fetched.
+    static func stableID(from serverTouchID: String) -> UUID {
+        if let u = UUID(uuidString: serverTouchID) { return u }
+        let digest = Array(SHA256.hash(data: Data(serverTouchID.utf8)).prefix(16))
+        return UUID(uuid: (digest[0], digest[1], digest[2], digest[3], digest[4], digest[5],
+                           digest[6], digest[7], digest[8], digest[9], digest[10], digest[11],
+                           digest[12], digest[13], digest[14], digest[15]))
+    }
+}
+
+/// Saves recent touches to disk so the feed survives closing the app and updating. Keeps
+/// the most recent `perBond` touches for each partner (the backends re-add newer ones).
+enum TouchArchive {
+    static let perBond = 40
+
+    private static var file: URL {
+        let d = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("history", isDirectory: true)
+        try? FileManager.default.createDirectory(at: d, withIntermediateDirectories: true)
+        return d.appendingPathComponent("touches.json")
+    }
+
+    static func load() -> [TouchMessage] {
+        guard let data = try? Data(contentsOf: file) else { return [] }
+        return (try? JSONDecoder().decode([TouchMessage].self, from: data)) ?? []
+    }
+
+    /// Caps to the most recent `perBond` per partner, oldest-first overall, and saves.
+    static func save(_ history: [TouchMessage]) {
+        var byBond: [String: [TouchMessage]] = [:]
+        for t in history { byBond[t.bondID, default: []].append(t) }
+        var capped: [TouchMessage] = []
+        for list in byBond.values { capped.append(contentsOf: list.suffix(perBond)) }
+        capped.sort { $0.sentAt < $1.sentAt }
+        if let data = try? JSONEncoder().encode(capped) {
+            try? data.write(to: file, options: [.atomic, .completeFileProtection])
+        }
+    }
 }
