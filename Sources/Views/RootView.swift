@@ -15,14 +15,10 @@ struct RootView: View {
     }
 
     @ViewBuilder private var content: some View {
+        // The original app gates on a complete profile, not on having a partner — the
+        // dashboard is shown either way (it offers "Add a partner" when there is none).
         if !store.profile.isComplete {
             OnboardingView()
-        } else if model.partners.isEmpty {
-            NavigationStack { PairingView().navigationTitle("Bond Touch Beyond") }
-                .safeAreaInset(edge: .bottom) {
-                    Text(model.statusLine).font(.footnote).foregroundStyle(Theme.subtitle)
-                        .frame(maxWidth: .infinity).padding(8)
-                }
         } else {
             ZStack(alignment: .bottom) {
                 Group {
