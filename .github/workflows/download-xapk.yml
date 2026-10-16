@@ -7,9 +7,11 @@
 # from the request. Tick "release" to also attach the file to a GitHub release tagged
 # apk-<versionName>.
 #
-# An XAPK is a zip holding the base APK, split APKs and a manifest.json; the workflow checks
-# that what came back really is one (APKPure answers blocked requests with an HTML page), reads
-# the version from manifest.json and also uploads the extracted APKs.
+# The website link sits behind a Cloudflare challenge that GitHub's runners don't pass, so the
+# workflow falls back to the API APKPure's Android app uses (api.pureapk.com), which lists a
+# download link per version. An XAPK is a zip holding the base APK, split APKs and a
+# manifest.json; the workflow checks that what came back really is one, that its versionCode is
+# the one asked for, and also uploads the extracted APKs.
 name: Download Bond Touch XAPK
 
 on:
@@ -90,19 +92,24 @@ jobs:
               -H "x-abis: ${ABI:-arm64-v8a,armeabi-v7a,armeabi}" -H "x-gp: 1" \
               -o out/versions.bin -w 'HTTP %{http_code}\n' \
               "https://api.pureapk.com/m/v3/cms/app_version?hl=en-US&package_name=${PACKAGE}" || true
-            echo "Readable strings in the answer:"
-            strings -n 6 out/versions.bin 2>/dev/null | head -150 || true
             grep -aoE 'https?://[A-Za-z0-9.-]+/b/(XAPK|APK)/[^[:space:][:cntrl:]"]+' out/versions.bin \
               2>/dev/null | awk '!seen[$0]++' > out/links.txt || true
-            echo "$(wc -l < out/links.txt) links found:"; head -40 out/links.txt
+            echo "$(wc -l < out/links.txt) links found"
             echo "::endgroup::"
-            # Links that name the wanted versionCode go first; the rest are checked against the
-            # version_code in each XAPK's manifest.json (at most 15 of them).
-            if [ -n "$VERSION_CODE" ]; then
-              { grep -E "[?&]versionCode=${VERSION_CODE}(&|$)" out/links.txt || true
-                grep -vE "[?&]versionCode=" out/links.txt || true; } | head -15 > out/pick.txt
-            else
-              head -1 out/links.txt > out/pick.txt
+            # Each link's c= parameter ends in base64 of "dev=...&t=xapk&s=<size>&vn=<name>&vc=<code>";
+            # pick the link whose vc is the wanted versionCode (else the first, the newest). The
+            # versionCode is checked again against the XAPK's manifest.json after the download.
+            : > out/pick.txt
+            while read -r link; do
+              c=${link##*c=}; c=${c##*%7C}; c=$(printf '%s' "$c" | tr -- '-_' '+/')
+              while [ $(( ${#c} % 4 )) -ne 0 ]; do c="$c="; done
+              vc=$(printf '%s' "$c" | base64 -d 2>/dev/null | sed -n 's/.*[?&]vc=\([0-9]*\).*/\1/p' || true)
+              echo "versionCode ${vc:-?}: ${link%%\?*}"
+              if [ -z "$VERSION_CODE" ] || [ "$vc" = "$VERSION_CODE" ]; then echo "$link" >> out/pick.txt; fi
+            done < out/links.txt
+            head -1 out/pick.txt > out/pick1.txt && mv out/pick1.txt out/pick.txt
+            if [ ! -s out/pick.txt ]; then
+              echo "::error::APKPure lists no download for versionCode ${VERSION_CODE}."
             fi
             while read -r link; do
               fetch "$link" || continue
