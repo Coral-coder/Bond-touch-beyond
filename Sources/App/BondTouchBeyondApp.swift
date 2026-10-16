@@ -6,6 +6,7 @@ import UIKit
 struct BondTouchBeyondApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var model = AppModel()
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {
         WindowGroup {
@@ -15,6 +16,9 @@ struct BondTouchBeyondApp: App {
                 .environmentObject(model.heart)
                 .task { await model.bootstrap() }
                 .onAppear { appDelegate.model = model }
+                .onChange(of: scenePhase) { phase in
+                    Task { await model.setOnline(phase == .active) }
+                }
         }
     }
 }

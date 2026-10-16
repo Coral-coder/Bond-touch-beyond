@@ -33,7 +33,7 @@ struct HeartView: View {
                 get: { model.sharingHeartbeat },
                 set: { on in Task { on ? await model.startSharingHeartbeat() : model.stopSharingHeartbeat() } }
             )) {
-                Label("Send my heartbeat to \(model.bond?.partnerName ?? "partner")",
+                Label("Send my heartbeat to \(model.selectedPartner?.displayName ?? "partner")",
                       systemImage: "antenna.radiowaves.left.and.right")
             }
             .padding(.horizontal)

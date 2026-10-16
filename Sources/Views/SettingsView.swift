@@ -17,7 +17,8 @@ struct SettingsView: View {
                 Toggle("Do Not Disturb", isOn: $store.doNotDisturb)
             }
             Section("Partner") {
-                LabeledContent("Paired with", value: model.bond?.partnerName ?? "—")
+                LabeledContent("Selected partner", value: model.selectedPartner?.displayName ?? "—")
+                LabeledContent("Partners", value: "\(model.partners.count)")
             }
             Section("About") {
                 LabeledContent("Relay", value: "iCloud (CloudKit)")

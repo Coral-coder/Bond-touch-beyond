@@ -27,12 +27,12 @@ client. This tracks every feature area, its iOS mapping, and build status.
 - Pair bracelet (`connect/`: ConnectActivity, ConnectSearching/Setup) — scan, connect, firmware-update gate.
 - Pair with a partner (`invitation/`, `people/`) — invite code / link → CloudKit share. **done (relay).**
 - Send/receive touch (rhythm + colour) — **done (relay + BLE).**
-- Touch meanings (`touchmeaning/`, `MeaningMessage`) — assign label/emoji/colour to a touch pattern.
+- Touch meanings (`touchmeaning/`, `MeaningMessage`) — assign label/emoji/colour to a touch pattern. **done.**
 
-### Messaging & history
-- Partner chat (`ChatMessage`, `ChatMessageViewModel`) — text + touch, Signal-encrypted.
-- History (`history/`, `HistoryMessage`) — log of sent/received touches & messages.
-- Touch "test" / delivery status (`TestMessage`, `SentMessage`, `ReceivedMessage`).
+### Messaging & history  ✅ core done
+- Partner chat (text + touch) over CloudKit — **done** (`ChatView`, `CloudRelay.sendChat`). (Signal-grade E2E deferred — see below.)
+- History log of sent/received touches — **done** (`HistoryView`).
+- Multiple partners, selectable — **done** (`PeopleView`, `Partner`).
 
 ### Heartbeat sharing (`heartble/`, `heartcommon/`, `ecg.dat`)  ✅ HealthKit-based
 - Original derived BPM from camera PPG (`HeartBeatFrameAnalyzer`, RR intervals) + a heart BLE device.
@@ -40,20 +40,20 @@ client. This tracks every feature area, its iOS mapping, and build status.
   partner's device beats their bracelet at that BPM via the 0x26 motor command.
   `HeartRateService`, `CloudRelay.sendHeartbeat`, `BraceletManager.startHeartbeat`, `HeartView`.
 
-### Presence (`presence/`, `ui/compose/presence/`, `encounters/`)
-- Presence+ (was a subscription — now free): live online/near presence, "encounters" when partners are close, partner map.
+### Presence (`presence/`, `encounters/`)  ✅ online status done
+- Online / last-seen presence over CloudKit — **done** (`CloudRelay.sendPresence`, People list).
+- Map / "encounters" (near each other) — deferred (needs MapKit + location).
 
 ### Private Space (`privatespace/`, Signal pre-keys in `models/`)
 - Passcode-locked private photo gallery + chat, E2E-encrypted (X3DH + Kyber pre-keys).
 
-### Profile & onboarding (`profile/`, `tutorials/`, `walkthrough/`, `entry/`)
-- Profile setup: username, colour, vibration pattern, birthday.
-- Tutorials (classic + v3 interactive), add-partner walkthrough.
+### Profile & onboarding (`profile/`, `tutorials/`, `walkthrough/`, `entry/`)  ✅ core done
+- Profile setup: name + colour — **done** (`OnboardingView`, synced to partners via `CloudRelay.sendProfile`).
+- Tutorials / interactive walkthrough — deferred (content-heavy; not blocking).
 
-### Settings (`settings/`, many `Settings*ViewModel`)
-- Device (bracelet) settings: notifications, vibration strength, DnD, privacy.
-- User: profile colour, vibration, username, passcode, language, temperature units.
-- Partner settings, help/report a problem, data sharing, parental consent.
+### Settings (`settings/`)  ◑ core done
+- Bracelet: connection, vibration strength, Do Not Disturb — **done** (`SettingsView`, `ConnectView`).
+- Remaining sub-screens (language, passcode, temperature units, help, data sharing) — deferred.
 
 ### Dropped
 - `billing/`, `BtlBuySubscription*`, `PresencePlusSubscription*` — no paywalls.
@@ -62,11 +62,11 @@ client. This tracks every feature area, its iOS mapping, and build status.
 ## Build order (incremental, each verified by `ios-build-check.yml`)
 1. ✅ BLE protocol + relay + send/receive touch.
 2. Navigation shell + Dashboard + History + Touch meanings + Settings skeleton.  ← current
-3. Partner chat (text + touch) over CloudKit.
-4. Bracelet pairing/connect flow + firmware-update gate (Nordic DFU → iOS DFU lib).
-5. Presence / encounters / map (MapKit).
+3. ✅ Partner chat (text + touch) over CloudKit.
+4. ✅ Bracelet pairing/connect screen (firmware-update DFU flow still to add).
+5. ◑ Presence done; encounters/map (MapKit) deferred.
 6. ✅ Heartbeat sharing via HealthKit → partner's bracelet.
-7. Private Space (E2E gallery/chat).
-8. WidgetKit, then Apple Watch app.
+7. ✅ Multiple partners, profile + onboarding.
+8. Deferred: Private Space (E2E gallery/chat), WidgetKit, Apple Watch app, tutorials, Nordic DFU firmware update.
 
 Progress is tracked here; decompiled reference stays in scratch, never committed.

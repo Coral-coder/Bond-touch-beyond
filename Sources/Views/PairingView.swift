@@ -1,9 +1,10 @@
 import CloudKit
 import SwiftUI
 
+/// Create a bond and invite a partner. Used when the user has no partners yet, and from
+/// the People screen to add another.
 struct PairingView: View {
     @EnvironmentObject var model: AppModel
-    @State private var displayName = ""
     @State private var showShare = false
 
     var body: some View {
@@ -11,17 +12,13 @@ struct PairingView: View {
             Image(systemName: "heart.circle.fill")
                 .font(.system(size: 72))
                 .foregroundStyle(.pink)
-            Text("Pair with one person. Touches you send go to their bracelet, and theirs to yours — relayed privately through iCloud.")
+            Text("Pair with someone. Touches, messages and your heartbeat are relayed privately through iCloud — no account, no server.")
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)
 
-            TextField("Your name", text: $displayName)
-                .textFieldStyle(.roundedBorder)
-                .autocorrectionDisabled()
-
             Button {
                 Task {
-                    await model.createBond(displayName: displayName.isEmpty ? "Me" : displayName)
+                    await model.createBond()
                     showShare = model.pendingShare != nil
                 }
             } label: {
@@ -30,7 +27,7 @@ struct PairingView: View {
             }
             .buttonStyle(.borderedProminent)
 
-            Text("Your partner joins by opening the invite you send them. No account, no server — just your two iCloud accounts.")
+            Text("Your partner joins by opening the invite you send them.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)

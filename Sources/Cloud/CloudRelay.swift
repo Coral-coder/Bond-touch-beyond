@@ -12,12 +12,20 @@ final class CloudRelay {
     static let recordTypeTouch = "Touch"
     static let recordTypeBond = "Bond"
     static let recordTypeHeartbeat = "Heartbeat"
+    static let recordTypeMessage = "Message"
+    static let recordTypePresence = "Presence"
+    static let recordTypeProfile = "Profile"
     static let subscriptionID = "bond-zone-changes"
 
-    /// What a fetch pulled since the last change token.
+    /// What a fetch pulled since the last change token, for one bond.
     struct RelayEvents {
         var touches: [TouchMessage] = []
+        var messages: [ChatMessage] = []
         var latestBPM: Int?
+        var presenceOnline: Bool?
+        var presenceLastSeen: Date?
+        var partnerName: String?
+        var partnerColorRGB: Int?
     }
 
     private let container: CKContainer
@@ -79,6 +87,28 @@ final class CloudRelay {
         return Bond(id: zoneID.zoneName, partnerName: name, isOwner: false)
     }
 
+    /// Lists every bond the user has: zones they created (private DB) and zones shared
+    /// with them (shared DB). Bond zone names start with "bond-".
+    func loadBonds() async throws -> [Bond] {
+        var bonds: [Bond] = []
+        for (db, owner) in [(privateDB, true), (sharedDB, false)] {
+            let zones = (try? await db.allRecordZones()) ?? []
+            for zone in zones where zone.zoneID.zoneName.hasPrefix("bond-") {
+                // On a shared zone the root's ownerName is the partner (the creator). On a
+                // zone we created it's our own name, so don't use it as the partner name —
+                // the partner's Profile record (fetched later) fills that in.
+                var name = "Partner"
+                if !owner,
+                   let root = try? await db.record(for: CKRecord.ID(recordName: "root", zoneID: zone.zoneID)),
+                   let ownerName = root["ownerName"] as? String {
+                    name = ownerName
+                }
+                bonds.append(Bond(id: zone.zoneID.zoneName, partnerName: name, isOwner: owner))
+            }
+        }
+        return bonds
+    }
+
     // MARK: - Sending & receiving touches
 
     func sendTouch(_ touch: TouchMessage, bond: Bond) async throws {
@@ -110,6 +140,46 @@ final class CloudRelay {
         _ = try await db.modifyRecords(saving: [record], deleting: [], savePolicy: .changedKeys)
     }
 
+    // MARK: - Chat, presence, profile
+
+    func sendChat(_ message: ChatMessage, bond: Bond) async throws {
+        let db = bond.isOwner ? privateDB : sharedDB
+        let zoneID = try await zoneID(forBond: bond, in: db)
+        let record = CKRecord(recordType: Self.recordTypeMessage,
+                              recordID: CKRecord.ID(recordName: message.id.uuidString, zoneID: zoneID))
+        record["senderID"] = message.senderID as CKRecordValue
+        record["kind"] = message.kind.rawValue as CKRecordValue
+        record["text"] = message.text as CKRecordValue
+        record["colorRGB"] = message.colorRGB as CKRecordValue
+        record["sentAt"] = message.sentAt as CKRecordValue
+        _ = try await db.modifyRecords(saving: [record], deleting: [])
+    }
+
+    /// Publishes the user's presence (one stable record per sender, overwritten).
+    func sendPresence(online: Bool, bond: Bond, senderID: String) async throws {
+        let db = bond.isOwner ? privateDB : sharedDB
+        let zoneID = try await zoneID(forBond: bond, in: db)
+        let record = CKRecord(recordType: Self.recordTypePresence,
+                              recordID: CKRecord.ID(recordName: "presence-\(senderID)", zoneID: zoneID))
+        record["senderID"] = senderID as CKRecordValue
+        record["online"] = (online ? 1 : 0) as CKRecordValue
+        record["sentAt"] = Date() as CKRecordValue
+        _ = try await db.modifyRecords(saving: [record], deleting: [], savePolicy: .changedKeys)
+    }
+
+    /// Publishes the user's profile (name + colour) into the bond so the partner sees it.
+    func sendProfile(name: String, colorRGB: Int, bond: Bond, senderID: String) async throws {
+        let db = bond.isOwner ? privateDB : sharedDB
+        let zoneID = try await zoneID(forBond: bond, in: db)
+        let record = CKRecord(recordType: Self.recordTypeProfile,
+                              recordID: CKRecord.ID(recordName: "profile-\(senderID)", zoneID: zoneID))
+        record["senderID"] = senderID as CKRecordValue
+        record["name"] = name as CKRecordValue
+        record["colorRGB"] = colorRGB as CKRecordValue
+        record["sentAt"] = Date() as CKRecordValue
+        _ = try await db.modifyRecords(saving: [record], deleting: [], savePolicy: .changedKeys)
+    }
+
     /// Fetches touches and the partner's latest heartbeat since our last change token.
     /// Ignores anything we sent ourselves, so we don't echo our own taps/heartbeat.
     func fetchNewEvents(bond: Bond, myUserID: String) async throws -> RelayEvents {
@@ -117,6 +187,8 @@ final class CloudRelay {
         let zoneID = try await zoneID(forBond: bond, in: db)
         var events = RelayEvents()
         var newestHeartbeat: Date = .distantPast
+        var newestPresence: Date = .distantPast
+        var newestProfile: Date = .distantPast
 
         let changes = try await db.recordZoneChanges(inZoneWith: zoneID, since: changeTokens[zoneID])
         for modification in changes.modificationResultsByID.values {
@@ -132,10 +204,30 @@ final class CloudRelay {
                     events.touches.append(TouchMessage(id: id, senderID: sender, pattern: pattern,
                                                        colorRGB: color, sentAt: sentAt))
                 }
+            case Self.recordTypeMessage:
+                if let id = UUID(uuidString: record.recordID.recordName) {
+                    let kind = ChatMessage.Kind(rawValue: record["kind"] as? String ?? "text") ?? .text
+                    events.messages.append(ChatMessage(
+                        id: id, bondID: bond.id, senderID: sender, kind: kind,
+                        text: record["text"] as? String ?? "",
+                        colorRGB: record["colorRGB"] as? Int ?? 0xFF4081, sentAt: sentAt))
+                }
             case Self.recordTypeHeartbeat:
                 if let bpm = record["bpm"] as? Int, sentAt > newestHeartbeat {
                     newestHeartbeat = sentAt
                     events.latestBPM = bpm
+                }
+            case Self.recordTypePresence:
+                if sentAt > newestPresence {
+                    newestPresence = sentAt
+                    events.presenceOnline = (record["online"] as? Int ?? 0) == 1
+                    events.presenceLastSeen = sentAt
+                }
+            case Self.recordTypeProfile:
+                if sentAt > newestProfile {
+                    newestProfile = sentAt
+                    events.partnerName = record["name"] as? String
+                    events.partnerColorRGB = record["colorRGB"] as? Int
                 }
             default:
                 break
@@ -143,6 +235,7 @@ final class CloudRelay {
         }
         changeTokens[zoneID] = changes.changeToken
         events.touches.sort { $0.sentAt < $1.sentAt }
+        events.messages.sort { $0.sentAt < $1.sentAt }
         return events
     }
 

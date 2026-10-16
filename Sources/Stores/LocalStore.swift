@@ -16,14 +16,19 @@ final class LocalStore: ObservableObject {
     @Published var doNotDisturb: Bool {
         didSet { UserDefaults.standard.set(doNotDisturb, forKey: Key.dnd.rawValue) }
     }
+    /// The local user's profile (name, colour, default pattern).
+    @Published var profile: UserProfile {
+        didSet { save(profile, for: .profile) }
+    }
 
-    private enum Key: String { case meanings, vibration, dnd }
+    private enum Key: String { case meanings, vibration, dnd, profile }
 
     init() {
         self.meanings = LocalStore.load([TouchMeaning].self, for: .meanings) ?? TouchMeaning.starters
         let v = UserDefaults.standard.object(forKey: Key.vibration.rawValue) as? Double
         self.vibrationStrength = v ?? 200
         self.doNotDisturb = UserDefaults.standard.bool(forKey: Key.dnd.rawValue)
+        self.profile = LocalStore.load(UserProfile.self, for: .profile) ?? .empty
     }
 
     private func save<T: Encodable>(_ value: T, for key: Key) {
