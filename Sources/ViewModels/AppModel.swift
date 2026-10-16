@@ -181,6 +181,7 @@ final class AppModel: ObservableObject {
         }
         do {
             myUserID = try await relay.currentUserID()
+            await relay.installSharedDatabaseSubscription()   // wake on a newly accepted bond
             let bonds = try await relay.loadBonds()
             cloudPartners = bonds.filter { !$0.pending }.map { Partner(bond: $0) }
             cloudPartners.forEach { loadCachedPhoto(bondID: $0.id) }
