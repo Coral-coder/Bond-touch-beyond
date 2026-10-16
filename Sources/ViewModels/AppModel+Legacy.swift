@@ -162,7 +162,8 @@ extension AppModel {
                 let ms = (msg["timestamp"] as? NSNumber)?.doubleValue ?? Date().timeIntervalSince1970 * 1000
                 let meaningName = t["meaning"] as? String
                 let meaning = meanings.first { $0.label == meaningName }
-                let touch = TouchMessage(senderID: (b["firebaseId"] as? String) ?? id,
+                let touch = TouchMessage(bondID: id,
+                                         senderID: (b["firebaseId"] as? String) ?? id,
                                          pattern: BondBackend.pattern(msg["pattern"]),
                                          generation: BondBackend.generation(msg["generation"]),
                                          colorRGB: meaning?.colorRGB ?? color,

@@ -7,6 +7,8 @@ import Foundation
 /// bars) is one 50 ms position sample per entry — a 2D trace of time × finger position.
 struct TouchMessage: Identifiable, Codable, Equatable {
     let id: UUID
+    /// Which bond (partner) this touch belongs to, so history is shown per partner.
+    var bondID: String = ""
     /// Who sent it (CloudKit user record name, the partner's Firebase id, or "me").
     let senderID: String
     let pattern: [Int]
@@ -19,9 +21,10 @@ struct TouchMessage: Identifiable, Codable, Equatable {
     /// When the sender created it.
     let sentAt: Date
 
-    init(id: UUID = UUID(), senderID: String, pattern: [Int], generation: Int = 2,
+    init(id: UUID = UUID(), bondID: String = "", senderID: String, pattern: [Int], generation: Int = 2,
          colorRGB: Int, endColorRGB: Int? = nil, sentAt: Date = Date()) {
         self.id = id
+        self.bondID = bondID
         self.senderID = senderID
         self.pattern = pattern
         self.generation = generation == 3 ? 3 : 2
@@ -31,12 +34,13 @@ struct TouchMessage: Identifiable, Codable, Equatable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, senderID, pattern, generation, colorRGB, endColorRGB, sentAt
+        case id, bondID, senderID, pattern, generation, colorRGB, endColorRGB, sentAt
     }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decode(UUID.self, forKey: .id)
+        bondID = try c.decodeIfPresent(String.self, forKey: .bondID) ?? ""
         senderID = try c.decode(String.self, forKey: .senderID)
         pattern = try c.decode([Int].self, forKey: .pattern)
         generation = try c.decodeIfPresent(Int.self, forKey: .generation) ?? 2

@@ -234,7 +234,7 @@ final class AppModel: ObservableObject {
         // made on the bracelet while the phone is locked).
         let bg = UIApplication.shared.beginBackgroundTask(withName: "send-touch")
         defer { UIApplication.shared.endBackgroundTask(bg) }
-        let touch = TouchMessage(senderID: myUserID, pattern: pattern, generation: generation,
+        let touch = TouchMessage(bondID: bond.id, senderID: myUserID, pattern: pattern, generation: generation,
                                  colorRGB: colorRGB, endColorRGB: endColorRGB)
         let route = bond.legacy ? "original Bond API" : "iCloud"
         NetLog.shared.log(.send, "Send touch → \(bond.partnerName) (\(route))",
@@ -291,7 +291,7 @@ final class AppModel: ObservableObject {
             let partner = cloudPartners[index]
             guard let events = try? await relay.fetchNewEvents(bond: partner.bond, myUserID: myUserID) else { continue }
             guard index < cloudPartners.count, cloudPartners[index].id == partner.id else { continue }
-            history.append(contentsOf: events.touches)
+            history.append(contentsOf: events.touches.map { var t = $0; t.bondID = partner.id; return t })
             if !events.touches.isEmpty {
                 NetLog.shared.log(.recv, "Received \(events.touches.count) touch(es) ← \(partner.displayName) (iCloud)")
             }
