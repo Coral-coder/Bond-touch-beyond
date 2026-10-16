@@ -27,6 +27,11 @@ targets:
       properties:
         CFBundleDisplayName: Bond Touch Beyond
         UILaunchScreen: {}
+        # XcodeGen generates the Info.plist from these properties, so orientations must be
+        # declared here (iPhone-only → portrait is enough) or TestFlight rejects the upload.
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        ITSAppUsesNonExemptEncryption: false
         # CoreBluetooth usage strings are required or the app is rejected / crashes on first scan.
         NSBluetoothAlwaysUsageDescription: Bond Touch Beyond uses Bluetooth to talk to your bracelet.
         NSBluetoothPeripheralUsageDescription: Bond Touch Beyond uses Bluetooth to talk to your bracelet.
