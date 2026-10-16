@@ -123,12 +123,15 @@ struct HomeView: View {
     @ViewBuilder private func touchCard(_ touch: TouchMessage) -> some View {
         let mine = touch.senderID == model.myUserID
         VStack(alignment: mine ? .trailing : .leading, spacing: 6) {
-            GlassCard {
-                HStack {
-                    if mine { Spacer() }
-                    TouchViz(pattern: touch.pattern, colorRGB: touch.colorRGB)
-                    if !mine { Spacer() }
-                }
+            HStack(spacing: 0) {
+                if mine { Spacer(minLength: 44) }
+                TouchViz(pattern: touch.pattern, colorRGB: touch.colorRGB)
+                    .padding(.horizontal, 18).padding(.vertical, 14)
+                    .background(mine ? Theme.touchSent : Theme.touchReceived)
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.cardCorner))
+                    .overlay(RoundedRectangle(cornerRadius: Theme.cardCorner)
+                        .stroke(Color.white.opacity(0.06), lineWidth: 1))
+                if !mine { Spacer(minLength: 44) }
             }
             Text("\(mine ? "Sent" : "Received") \(touch.sentAt.formatted(date: .omitted, time: .shortened))")
                 .font(.caption2).foregroundStyle(Theme.subtitle)
