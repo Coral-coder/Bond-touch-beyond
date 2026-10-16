@@ -233,4 +233,17 @@ extension BondBackend {
         user.removeValue(forKey: "bypassFlags")   // not part of the update body
         _ = try await call("bond/api/v3/user", "PUT", bearer: bearer, body: user)
     }
+
+    /// Marks the profile as having (or not having) a photo and bumps its version, as the
+    /// original app does after uploading `images/<uid>/profile`. Only call after the upload
+    /// succeeded, or the official app would show a broken photo.
+    static func setProfileHasImage(_ hasImage: Bool, bearer: String) async throws {
+        guard var user = try await call("bond/api/v3/user", "GET", bearer: bearer) as? [String: Any] else { return }
+        var profile = (user["profile"] as? [String: Any]) ?? [:]
+        profile["hasImage"] = hasImage
+        profile["version"] = ((profile["version"] as? NSNumber)?.int64Value ?? 0) + 1
+        user["profile"] = profile
+        user.removeValue(forKey: "bypassFlags")
+        _ = try await call("bond/api/v3/user", "PUT", bearer: bearer, body: user)
+    }
 }

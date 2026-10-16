@@ -5,7 +5,7 @@ import SwiftUI
 struct HeartView: View {
     @EnvironmentObject var model: AppModel
     @EnvironmentObject var heart: HeartRateService
-    @State private var beat = false
+    @State private var beatStart = Date()
     @State private var sentBPM: Int?
 
     private var partnerName: String { model.selectedPartner?.displayName ?? "your partner" }
@@ -18,28 +18,29 @@ struct HeartView: View {
                     sentBPM = await model.sendHeartbeat()
                 }
             } label: {
-                ZStack {
-                    Circle()
-                        .fill(RadialGradient(colors: [Theme.pink, Color(rgbInt: 0x9E1748)],
-                                             center: .center, startRadius: 10, endRadius: 130))
-                        .overlay(Circle().stroke(.white.opacity(0.5), lineWidth: 2))
-                        .shadow(color: Theme.pink.opacity(0.6), radius: model.sendingHeartbeat ? 30 : 14)
-                    VStack(spacing: 4) {
-                        Image(systemName: "heart.fill").font(.system(size: 54)).foregroundStyle(.white)
-                        Text(model.sendingHeartbeat ? "\(sentBPM ?? heart.currentBPM ?? 0) BPM" : "Send my heartbeat")
-                            .font(Theme.font(17, .heavy)).foregroundStyle(.white)
+                // Driven by the clock, not an implicit animation, so only the size pulses —
+                // a repeating animation also animated the button's position into place.
+                TimelineView(.animation(paused: !model.sendingHeartbeat)) { context in
+                    ZStack {
+                        Circle()
+                            .fill(RadialGradient(colors: [Theme.pink, Color(rgbInt: 0x9E1748)],
+                                                 center: .center, startRadius: 10, endRadius: 130))
+                            .overlay(Circle().stroke(.white.opacity(0.5), lineWidth: 2))
+                            .shadow(color: Theme.pink.opacity(0.6), radius: model.sendingHeartbeat ? 30 : 14)
+                        VStack(spacing: 4) {
+                            Image(systemName: "heart.fill").font(.system(size: 54)).foregroundStyle(.white)
+                            Text(model.sendingHeartbeat ? "\(sentBPM ?? heart.currentBPM ?? 0) BPM" : "Send my heartbeat")
+                                .font(Theme.font(17, .heavy)).foregroundStyle(.white)
+                        }
                     }
+                    .frame(width: 230, height: 230)
+                    .scaleEffect(model.sendingHeartbeat ? pulse(at: context.date) : 1)
                 }
-                .frame(width: 230, height: 230)
-                .scaleEffect(model.sendingHeartbeat && beat ? 1.06 : 1)
-                .animation(model.sendingHeartbeat
-                           ? .easeInOut(duration: beatInterval / 2).repeatForever(autoreverses: true)
-                           : .default, value: beat)
             }
             .buttonStyle(.plain)
             .disabled(model.sendingHeartbeat || model.selectedPartner == nil)
             .accessibilityLabel("Send my heartbeat to \(partnerName)")
-            .onChange(of: model.sendingHeartbeat) { on in beat = on }
+            .onChange(of: model.sendingHeartbeat) { on in if on { beatStart = Date() } }
 
             Text(model.sendingHeartbeat
                  ? "\(partnerName)'s bracelet is beating with your heart for 10 seconds."
@@ -65,6 +66,13 @@ struct HeartView: View {
         }
         .padding()
         .screenBackground()
+    }
+
+    /// A heartbeat-shaped size: a quick swell at the start of each beat, then rest.
+    private func pulse(at date: Date) -> CGFloat {
+        let phase = date.timeIntervalSince(beatStart).truncatingRemainder(dividingBy: beatInterval) / beatInterval
+        let swell = phase < 0.3 ? sin(phase / 0.3 * .pi) : 0
+        return 1 + 0.08 * CGFloat(swell)
     }
 
     private var beatInterval: Double {

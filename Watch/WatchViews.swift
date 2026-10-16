@@ -31,40 +31,53 @@ struct WatchRootView: View {
     }
 }
 
-/// Records a touch like the Bond Touch More bar: the first touch opens the window, one
-/// sample every 50 ms of where the finger is on the bar's 9 positions, sent when it ends.
+/// Records a touch like the Bond Touch More bar: the first touch opens the window, the bar
+/// is sampled every 50 ms for where the finger is on its 9 positions, sent when it ends.
+/// Finger changes are logged with their time and sampled from the log, so short taps count.
 final class WatchRecorder: ObservableObject {
     @Published var position: CGFloat?
-    @Published private(set) var samples: [Int] = []
     @Published private(set) var recording = false
     @Published private(set) var remaining: Double = 0
     var windowSeconds: Double = 5
     var onFinish: (([Int]) -> Void)?
     private var timer: Timer?
-    private var started = Date()
+    private var started: TimeInterval = 0
+    private var events: [TouchPattern.BarEvent] = []
+    private var current: [Int] = []
+
+    private var now: TimeInterval { ProcessInfo.processInfo.systemUptime }
+    private var window: Double { min(windowSeconds, Double(TouchPattern.maxSamples * TouchPattern.sampleMs) / 1000) }
 
     func touch(_ f: CGFloat?) {
         if position == nil, f != nil { WKInterfaceDevice.current().play(.click) }
         position = f
         if f != nil, !recording { start() }
+        guard recording else { return }
+        let bar = f.map { [Int(($0 * CGFloat(TouchPattern.positions - 1)).rounded())] } ?? []
+        guard bar != current else { return }
+        current = bar
+        events.append(.init(t: max(0, now - started), fingers: bar))
     }
 
     private func start() {
-        samples = []; recording = true; started = Date(); remaining = windowSeconds
-        timer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] _ in self?.tick() }
+        events = []; current = []
+        recording = true; started = now; remaining = window
+        let t = Timer(timeInterval: 0.1, repeats: true) { [weak self] _ in self?.tick() }
+        RunLoop.main.add(t, forMode: .common)
+        timer = t
     }
 
     private func tick() {
-        let fingers = position.map { [Int(($0 * CGFloat(TouchPattern.positions - 1)).rounded())] } ?? []
-        samples.append(TouchPattern.sample(fingers))
-        remaining = max(0, windowSeconds - Date().timeIntervalSince(started))
-        if remaining <= 0 || samples.count >= TouchPattern.maxSamples { finish() }
+        remaining = max(0, window - (now - started))
+        if remaining <= 0 { finish() }
     }
 
     func finish() {
         guard recording else { return }
+        let samples = TouchPattern.samples(from: events, duration: min(window, now - started))
         timer?.invalidate(); timer = nil
         recording = false; remaining = 0
+        events = []; current = []
         let touch = TouchPattern.trimmed(samples)
         if !touch.isEmpty { onFinish?(touch) }
     }

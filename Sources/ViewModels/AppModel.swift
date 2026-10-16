@@ -134,6 +134,7 @@ final class AppModel: ObservableObject {
     // MARK: - Lifecycle
 
     func bootstrap() async {
+        loadMyPhoto()
         bracelet.startScanning()
         // The original backend works without iCloud, so start it first and independently.
         startLegacySync()
@@ -145,6 +146,7 @@ final class AppModel: ObservableObject {
             myUserID = try await relay.currentUserID()
             let bonds = try await relay.loadBonds()
             cloudPartners = bonds.filter { !$0.pending }.map { Partner(bond: $0) }
+            cloudPartners.forEach { loadCachedPhoto(bondID: $0.id) }
             cloudPending = bonds.filter { $0.pending }
             if selectedPartnerID == nil { selectedPartnerID = partners.first?.id }
             ready = true
@@ -254,7 +256,8 @@ final class AppModel: ObservableObject {
         guard p.isComplete else { return }
         legacyPublishProfile(name: p.name, colorRGB: p.colorRGB)
         for partner in cloudPartners {
-            try? await relay.sendProfile(name: p.name, colorRGB: p.colorRGB, bond: partner.bond, senderID: myUserID)
+            try? await relay.sendProfile(name: p.name, colorRGB: p.colorRGB, photo: myPhotoFileURL,
+                                         bond: partner.bond, senderID: myUserID)
         }
     }
 
@@ -274,6 +277,7 @@ final class AppModel: ObservableObject {
             }
             if let name = events.partnerName { cloudPartners[index].displayName = name }
             if let color = events.partnerColorRGB { cloudPartners[index].colorRGB = color }
+            if let photo = events.partnerPhoto { setPartnerPhoto(photo, bondID: partner.id) }
             if let online = events.presenceOnline { cloudPartners[index].online = online }
             if let seen = events.presenceLastSeen { cloudPartners[index].lastSeen = seen }
             if let lat = events.presenceLat, let lng = events.presenceLng {

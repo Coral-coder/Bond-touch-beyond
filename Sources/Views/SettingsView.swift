@@ -1,3 +1,4 @@
+import PhotosUI
 import SwiftUI
 
 /// Settings — profile header plus a list of sections, matching the original's layout.
@@ -10,8 +11,7 @@ struct SettingsView: View {
             VStack(spacing: 16) {
                 Text("Settings").font(.title3.bold()).foregroundStyle(.white).padding(.top, 10)
 
-                AvatarRing(name: store.profile.name.isEmpty ? "Me" : store.profile.name,
-                           ringColor: Color(rgbInt: store.profile.colorRGB), size: 110)
+                MyPhotoPicker(size: 110)
                 Text(store.profile.name.isEmpty ? "Me" : store.profile.name)
                     .font(.title2.bold()).foregroundStyle(.white)
                 HStack(spacing: 6) {
@@ -247,6 +247,48 @@ struct AppIconPicker: View {
         guard UIApplication.shared.supportsAlternateIcons, name != current else { return }
         UIApplication.shared.setAlternateIconName(name) { error in
             if error == nil { DispatchQueue.main.async { current = name } }
+        }
+    }
+}
+
+/// Your avatar; tap it to choose, change or remove your profile photo. The photo is shared
+/// with your partners.
+struct MyPhotoPicker: View {
+    @EnvironmentObject var model: AppModel
+    @EnvironmentObject var store: LocalStore
+    var size: CGFloat
+    @State private var item: PhotosPickerItem?
+    @State private var showOptions = false
+    @State private var showPicker = false
+
+    var body: some View {
+        Button { model.myPhoto == nil ? (showPicker = true) : (showOptions = true) } label: {
+            AvatarRing(name: store.profile.name.isEmpty ? "Me" : store.profile.name,
+                       ringColor: Color(rgbInt: store.profile.colorRGB), size: size, photo: model.myPhoto)
+                .overlay(alignment: .bottomTrailing) {
+                    Image(systemName: "camera.fill").font(.system(size: size * 0.13, weight: .bold))
+                        .foregroundStyle(Theme.onAccent)
+                        .frame(width: size * 0.3, height: size * 0.3)
+                        .background(Circle().fill(Theme.accent))
+                        .overlay(Circle().stroke(.white, lineWidth: 2))
+                }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(model.myPhoto == nil ? "Add a profile photo" : "Change your profile photo")
+        .photosPicker(isPresented: $showPicker, selection: $item, matching: .images)
+        .confirmationDialog("Profile photo", isPresented: $showOptions) {
+            Button("Choose a new photo") { showPicker = true }
+            Button("Remove photo", role: .destructive) { model.removeMyPhoto() }
+        }
+        .onChange(of: item) { picked in
+            guard let picked else { return }
+            Task {
+                if let data = try? await picked.loadTransferable(type: Data.self),
+                   let image = UIImage(data: data) {
+                    model.setMyPhoto(image)
+                }
+                item = nil
+            }
         }
     }
 }
