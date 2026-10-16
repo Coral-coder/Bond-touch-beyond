@@ -8,6 +8,8 @@ on:
     paths:
       - "project.yml"
       - "Sources/**"
+      - "ThirdParty/**"
+      - "scripts/**"
       - ".github/workflows/ios-build-check.yml"
   pull_request:
     paths:
@@ -22,6 +24,9 @@ jobs:
 
       - name: Install XcodeGen
         run: brew install xcodegen
+
+      - name: Fetch libsignal_ffi (Signal protocol core)
+        run: scripts/fetch-libsignal-ffi.sh
 
       - name: Generate Xcode project
         run: xcodegen generate

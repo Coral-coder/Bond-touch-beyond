@@ -17,9 +17,33 @@ settings:
     TARGETED_DEVICE_FAMILY: "1"   # iPhone only (avoids iPad icon/orientation requirements)
 
 targets:
+  # Signal's LibSignalClient v0.86.5 (AGPL-3.0) — the same Signal-protocol library the
+  # original iOS app ships, needed to interoperate with its end-to-end encrypted chat.
+  # Swift sources are vendored in ThirdParty/LibSignalClient; the Rust core
+  # (libsignal_ffi.a) is fetched by scripts/fetch-libsignal-ffi.sh (SHA-256 pinned).
+  LibSignalClient:
+    type: framework.static
+    platform: iOS
+    sources:
+      - path: ThirdParty/LibSignalClient/LibSignalClient
+    settings:
+      base:
+        SWIFT_VERSION: "5"
+        PRODUCT_BUNDLE_IDENTIFIER: org.signal.libsignal-client
+        SWIFT_INCLUDE_PATHS: $(SRCROOT)/ThirdParty/LibSignalClient/SignalFfi
+        HEADER_SEARCH_PATHS: $(SRCROOT)/ThirdParty/LibSignalClient/SignalFfi
+        GENERATE_INFOPLIST_FILE: YES
+        SKIP_INSTALL: YES
+        BUILD_LIBRARY_FOR_DISTRIBUTION: NO
+        OTHER_SWIFT_FLAGS: -suppress-warnings
+
   BondTouchBeyond:
     type: application
     platform: iOS
+    dependencies:
+      - target: LibSignalClient
+        link: true
+        embed: false
     sources:
       - path: Sources
     info:
@@ -64,3 +88,11 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.lightwave.beyond
+        # LibSignalClient imports the SignalFfi C module; the app must see it too, and the
+        # final link pulls in the prebuilt Rust core for the SDK/arch being built.
+        SWIFT_INCLUDE_PATHS: $(SRCROOT)/ThirdParty/LibSignalClient/SignalFfi
+        HEADER_SEARCH_PATHS: $(SRCROOT)/ThirdParty/LibSignalClient/SignalFfi
+        "LIBRARY_SEARCH_PATHS[sdk=iphoneos*]": $(SRCROOT)/ThirdParty/libsignal-ffi/target/aarch64-apple-ios/release
+        "LIBRARY_SEARCH_PATHS[sdk=iphonesimulator*][arch=arm64]": $(SRCROOT)/ThirdParty/libsignal-ffi/target/aarch64-apple-ios-sim/release
+        "LIBRARY_SEARCH_PATHS[sdk=iphonesimulator*][arch=x86_64]": $(SRCROOT)/ThirdParty/libsignal-ffi/target/x86_64-apple-ios/release
+        OTHER_LDFLAGS: -lsignal_ffi -lz

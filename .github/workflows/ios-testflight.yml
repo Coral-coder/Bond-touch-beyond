@@ -145,6 +145,9 @@ jobs:
           sudo xcode-select -s "$xcode/Contents/Developer"
           xcodebuild -version
 
+      - name: Fetch libsignal_ffi (Signal protocol core)
+        run: scripts/fetch-libsignal-ffi.sh
+
       - name: Find the project, scheme and bundle ID
         env:
           XCODE_PROJECT: ${{ vars.XCODE_PROJECT }}
