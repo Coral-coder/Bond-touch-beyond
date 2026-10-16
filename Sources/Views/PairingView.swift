@@ -22,19 +22,20 @@ struct PairingView: View {
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)
 
+            if let msg = model.iCloudStatus { iCloudBanner(msg) }
+
             Button {
                 Task {
                     inviteResult = nil
-                    await model.createBond()
-                    if model.pendingShare == nil, shareError == nil {
-                        shareError = "Couldn't create the invite. Make sure you're signed into iCloud."
-                    }
+                    let error = await model.createBond()
+                    if let error { shareError = error }
                 }
             } label: {
                 Label("Create an invite link", systemImage: "link")
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
+            .disabled(model.iCloudStatus != nil)
 
             Text("Your partner joins by opening the invite you send them.")
                 .font(.footnote)
@@ -56,6 +57,25 @@ struct PairingView: View {
         .alert("Can't invite", isPresented: Binding(get: { shareError != nil }, set: { if !$0 { shareError = nil } })) {
             Button("OK", role: .cancel) { shareError = nil }
         } message: { Text(shareError ?? "") }
+    }
+
+    /// Shown when iCloud isn't usable (chiefly: not signed in) — the reason, plus a button
+    /// straight to Settings. iCloud pairing can't work until this clears.
+    @ViewBuilder private func iCloudBanner(_ message: String) -> some View {
+        VStack(spacing: 10) {
+            Label("iCloud needed to pair", systemImage: "exclamationmark.icloud")
+                .font(.headline).foregroundStyle(.white)
+            Text(message).font(.footnote).foregroundStyle(Theme.subtitle)
+                .multilineTextAlignment(.center)
+            Button {
+                if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) }
+            } label: {
+                Label("Open Settings", systemImage: "gear").frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+        }
+        .padding(14)
+        .background(Theme.amber.opacity(0.16), in: RoundedRectangle(cornerRadius: Metric.cornerMedium))
     }
 
     /// The ready invite link — share or copy it and send any way. This bypasses the

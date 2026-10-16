@@ -63,6 +63,23 @@ final class AppModel: ObservableObject {
     var pendingBonds: [Bond] { cloudPending + legacyPending }
     @Published var selectedPartnerID: String?
     @Published var history: [TouchMessage] = []                  // sent + received touches
+    private var historyIDs: Set<UUID> = []
+
+    /// Adds touches to the feed, skipping ones already present (the backends re-fetch on
+    /// each launch), sorting by time, and saving to disk so the feed survives app updates.
+    func recordTouches(_ touches: [TouchMessage]) {
+        var added = false
+        for t in touches where !historyIDs.contains(t.id) {
+            history.append(t)
+            historyIDs.insert(t.id)
+            added = true
+        }
+        guard added else { return }
+        history.sort { $0.sentAt < $1.sentAt }
+        TouchArchive.save(history)
+    }
+
+    func recordTouch(_ touch: TouchMessage) { recordTouches([touch]) }
     @Published var messagesByBond: [String: [ChatMessage]] = [:] // chat per bond
     @Published var statusLine: String = "Starting…"
     @Published var pendingShare: CKShare?
@@ -72,6 +89,17 @@ final class AppModel: ObservableObject {
     @Published var sendingHeartbeat = false
     @Published private(set) var myUserID: String = ""
     @Published private(set) var ready = false
+    /// nil when iCloud is usable; otherwise why it isn't, shown to the user. iCloud features
+    /// (pairing, photos, heartbeat relay) need this to be nil; the original backend doesn't.
+    @Published var iCloudStatus: String?
+
+    /// Re-checks iCloud and, if it became available, finishes the iCloud setup bootstrap did
+    /// not. Call when the app returns to the foreground (the user may have just signed in).
+    func refreshICloudStatus() async {
+        let msg = await relay.accountStatusMessage()
+        iCloudStatus = msg
+        if msg == nil, !ready { await bootstrap() }
+    }
 
     let bracelet = BraceletManager()
     let store = LocalStore()
@@ -86,6 +114,8 @@ final class AppModel: ObservableObject {
 
     init() {
         messagesByBond = ChatArchive.load()
+        history = TouchArchive.load()
+        historyIDs = Set(history.map { $0.id })
         bracelet.$state.receive(on: DispatchQueue.main).assign(to: &$braceletState)
         bracelet.$heartbeatActive.receive(on: DispatchQueue.main).assign(to: &$partnerHeartbeatActive)
         location.onUpdate = { [weak self] coord in Task { @MainActor in await self?.broadcastLocation(coord) } }
@@ -144,12 +174,14 @@ final class AppModel: ObservableObject {
         bracelet.startScanning()
         // The original backend works without iCloud, so start it first and independently.
         startLegacySync()
-        guard await relay.accountIsAvailable() else {
-            statusLine = "Sign in to iCloud to use Bond Touch Beyond."
+        iCloudStatus = await relay.accountStatusMessage()
+        guard iCloudStatus == nil else {
+            statusLine = "iCloud is not signed in."
             return
         }
         do {
             myUserID = try await relay.currentUserID()
+            await relay.installSharedDatabaseSubscription()   // wake on a newly accepted bond
             let bonds = try await relay.loadBonds()
             cloudPartners = bonds.filter { !$0.pending }.map { Partner(bond: $0) }
             cloudPartners.forEach { loadCachedPhoto(bondID: $0.id) }
@@ -174,6 +206,7 @@ final class AppModel: ObservableObject {
     /// sync loop runs only while the app is active.
     func setActive(_ active: Bool) async {
         if active {
+            await refreshICloudStatus()   // the user may have just signed into iCloud
             updateKeepAlive()
             startLegacySync()
             await legacySetOnline(true)
@@ -196,14 +229,21 @@ final class AppModel: ObservableObject {
 
     // MARK: - Partners
 
-    func createBond() async {
+    /// Creates an iCloud invite. Returns an error message when it can't (chiefly: not signed
+    /// into iCloud), so the UI can show it instead of a dead end.
+    @discardableResult
+    func createBond() async -> String? {
+        iCloudStatus = await relay.accountStatusMessage()
+        if let msg = iCloudStatus { return msg }
         do {
             let (bond, share) = try await relay.createBond(displayName: store.profile.name.isEmpty ? "Me" : store.profile.name)
             // A created invite is pending until the partner accepts — it is not a partner yet.
             cloudPending.append(bond)
             pendingShare = share
+            return nil
         } catch {
             statusLine = "Couldn't create bond: \(error.localizedDescription)"
+            return "Couldn't create the invite: \(error.localizedDescription)"
         }
     }
 
@@ -267,7 +307,7 @@ final class AppModel: ObservableObject {
                 try await relay.sendTouch(touch, bond: bond)
                 NetLog.shared.log(.ok, "Touch → iCloud accepted", "\(bond.partnerName)")
             }
-            history.append(touch)
+            recordTouch(touch)
         } catch {
             statusLine = "Send failed: \(error.localizedDescription)"
             NetLog.shared.log(.fail, "Send touch failed (\(route))", error.localizedDescription)
@@ -291,7 +331,7 @@ final class AppModel: ObservableObject {
             do {
                 try await BondBackend.sendMeaningTouch(bondId: bond.id, meaningId: serverID,
                                                        bearer: try await legacyToken())
-                history.append(touch)
+                recordTouch(touch)
             } catch {
                 statusLine = "Send failed: \(error.localizedDescription)"
                 NetLog.shared.log(.fail, "Send meaning failed", error.localizedDescription)
@@ -341,7 +381,7 @@ final class AppModel: ObservableObject {
             let partner = cloudPartners[index]
             guard let events = try? await relay.fetchNewEvents(bond: partner.bond, myUserID: myUserID) else { continue }
             guard index < cloudPartners.count, cloudPartners[index].id == partner.id else { continue }
-            history.append(contentsOf: events.touches.map { var t = $0; t.bondID = partner.id; return t })
+            recordTouches(events.touches.map { var t = $0; t.bondID = partner.id; return t })
             if !events.touches.isEmpty {
                 NetLog.shared.log(.recv, "Received \(events.touches.count) touch(es) ← \(partner.displayName) (iCloud)")
             }

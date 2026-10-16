@@ -1,0 +1,63 @@
+DEFINE SCHEMA
+
+    RECORD TYPE Bond (
+        ownerName   STRING,
+        GRANT WRITE TO "_creator",
+        GRANT CREATE TO "_icloud",
+        GRANT READ TO "_world"
+    );
+
+    RECORD TYPE Touch (
+        senderID    STRING,
+        pattern     BYTES,
+        generation  INT64,
+        colorRGB    INT64,
+        endColorRGB INT64,
+        sentAt      TIMESTAMP,
+        GRANT WRITE TO "_creator",
+        GRANT CREATE TO "_icloud",
+        GRANT READ TO "_world"
+    );
+
+    RECORD TYPE Heartbeat (
+        senderID    STRING,
+        bpm         INT64,
+        sentAt      TIMESTAMP,
+        GRANT WRITE TO "_creator",
+        GRANT CREATE TO "_icloud",
+        GRANT READ TO "_world"
+    );
+
+    RECORD TYPE Message (
+        senderID    STRING,
+        kind        STRING,
+        text        STRING,
+        colorRGB    INT64,
+        sentAt      TIMESTAMP,
+        image       ASSET,
+        GRANT WRITE TO "_creator",
+        GRANT CREATE TO "_icloud",
+        GRANT READ TO "_world"
+    );
+
+    RECORD TYPE Presence (
+        senderID    STRING,
+        online      INT64,
+        lat         DOUBLE,
+        lng         DOUBLE,
+        sentAt      TIMESTAMP,
+        GRANT WRITE TO "_creator",
+        GRANT CREATE TO "_icloud",
+        GRANT READ TO "_world"
+    );
+
+    RECORD TYPE Profile (
+        senderID    STRING,
+        name        STRING,
+        colorRGB    INT64,
+        photo       ASSET,
+        sentAt      TIMESTAMP,
+        GRANT WRITE TO "_creator",
+        GRANT CREATE TO "_icloud",
+        GRANT READ TO "_world"
+    );
