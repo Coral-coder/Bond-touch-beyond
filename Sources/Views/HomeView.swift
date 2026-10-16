@@ -125,7 +125,7 @@ struct HomeView: View {
         VStack(alignment: .trailing, spacing: 6) {
             GlassCard {
                 HStack(spacing: 12) {
-                    TouchViz(pattern: touch.pattern, colorRGB: touch.colorRGB)
+                    TouchViz(pattern: touch.pattern, colorRGB: touch.colorRGB, endColorRGB: touch.endColorRGB)
                     Spacer(minLength: 8)
                     Button { model.bracelet.play(touch) } label: {
                         Image(systemName: "play.circle")

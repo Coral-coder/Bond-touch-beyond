@@ -143,21 +143,23 @@ enum BondGATT {
     /// Replays an on/off millisecond pattern as a touch in `rgb`.
     /// v2-base: a queue-pause marker, one 0x33 "send-message" step per on-segment, then a
     /// resume marker. v3: a single FFB2 frame carrying the duration bytes.
-    static func touchSend(_ gen: BondGeneration, pattern: [Int], rgb: Int) -> [(CBUUID, Data)] {
+    static func touchSend(_ gen: BondGeneration, pattern: [Int],
+                          startRGB: Int, endRGB: Int) -> [(CBUUID, Data)] {
         let onOff = pattern.isEmpty ? [200] : pattern
         switch gen {
         case .v3:
-            return v3TouchFrames(onOff: onOff, rgb: rgb)
+            return v3TouchFrames(onOff: onOff, startRGB: startRGB, endRGB: endRGB)
         case .v1:
             // v1 has no segmented send; fall back to a colour + buzz.
-            return ledMotor(.v1, rgb: rgb)
+            return ledMotor(.v1, rgb: startRGB)
         default:
             var out: [(CBUUID, Data)] = [(charAppCmd, pad([0x32, 0x00, 0x22], to: 20))]
-            let (r, g, b) = rgbBytes(rgb)
-            // Alternate on/off: even indices are "on" (buzz) segments.
+            let (r, g, b) = rgbBytes(startRGB)
+            // Alternate on/off: even indices are "on" (buzz) segments. The 0x33 frame carries
+            // the start→end gradient in its three colour slots.
             for (i, ms) in onOff.enumerated() where i % 2 == 0 {
                 var f: [UInt8] = [0x33, 0x00, r, g, b]
-                f += be3(rgb) + be3(rgb) + be3(rgb)
+                f += be3(startRGB) + be3(endRGB) + be3(endRGB)
                 f += u16le(UInt16(clamping: ms))
                 out.append((charAppCmd, pad(f, to: 20)))
             }
@@ -166,10 +168,10 @@ enum BondGATT {
         }
     }
 
-    private static func v3TouchFrames(onOff: [Int], rgb: Int) -> [(CBUUID, Data)] {
+    private static func v3TouchFrames(onOff: [Int], startRGB: Int, endRGB: Int) -> [(CBUUID, Data)] {
         // Duration bytes (10 ms units, clamped to a byte), chunked 20 per packet.
         let durations = onOff.map { UInt8(clamping: $0 / 10) }
-        let header: [UInt8] = [0x01, UInt8(clamping: durations.count), 0x01] + be3(rgb) + be3(rgb) + [0xFF]
+        let header: [UInt8] = [0x01, UInt8(clamping: durations.count), 0x01] + be3(startRGB) + be3(endRGB) + [0xFF]
         var frames: [(CBUUID, Data)] = [(ffb2, pad(header, to: 20))]
         var idx = 0
         while idx < durations.count {

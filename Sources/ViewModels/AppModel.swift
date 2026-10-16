@@ -90,9 +90,10 @@ final class AppModel: ObservableObject {
 
     // MARK: - Sending
 
-    func sendTouch(pattern: [Int], colorRGB: Int, toBondID: String? = nil) async {
+    func sendTouch(pattern: [Int], colorRGB: Int, endColorRGB: Int? = nil, toBondID: String? = nil) async {
         guard let bond = bond(for: toBondID) else { return }
-        let touch = TouchMessage(senderID: myUserID, pattern: pattern, colorRGB: colorRGB)
+        let touch = TouchMessage(senderID: myUserID, pattern: pattern,
+                                 colorRGB: colorRGB, endColorRGB: endColorRGB)
         do {
             try await relay.sendTouch(touch, bond: bond)
             history.append(touch)

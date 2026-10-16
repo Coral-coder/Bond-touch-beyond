@@ -13,16 +13,20 @@ struct TouchMessage: Identifiable, Codable, Equatable {
     /// Milliseconds between consecutive taps; `pattern.count + 1` taps total.
     /// An empty array is a single tap.
     let pattern: [Int]
-    /// 0xRRGGBB colour the partner's bracelet should glow.
+    /// 0xRRGGBB start colour of the touch's gradient (the partner's bracelet glows it).
     let colorRGB: Int
+    /// 0xRRGGBB end colour of the gradient. Equals `colorRGB` for a single-colour touch.
+    let endColorRGB: Int
     /// When the sender created it.
     let sentAt: Date
 
-    init(id: UUID = UUID(), senderID: String, pattern: [Int], colorRGB: Int, sentAt: Date = Date()) {
+    init(id: UUID = UUID(), senderID: String, pattern: [Int], colorRGB: Int,
+         endColorRGB: Int? = nil, sentAt: Date = Date()) {
         self.id = id
         self.senderID = senderID
         self.pattern = pattern
         self.colorRGB = colorRGB
+        self.endColorRGB = endColorRGB ?? colorRGB
         self.sentAt = sentAt
     }
 }

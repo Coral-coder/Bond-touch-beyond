@@ -87,7 +87,8 @@ final class BraceletManager: NSObject, ObservableObject {
     /// Plays a received touch: replays the rhythm and glows/buzzes in its colour.
     func play(_ touch: TouchMessage) {
         guard let gen else { return }
-        enqueue(BondGATT.touchSend(gen, pattern: touch.pattern, rgb: touch.colorRGB))
+        enqueue(BondGATT.touchSend(gen, pattern: touch.pattern,
+                                   startRGB: touch.colorRGB, endRGB: touch.endColorRGB))
         enqueue(BondGATT.ledMotor(gen, rgb: touch.colorRGB))
     }
 

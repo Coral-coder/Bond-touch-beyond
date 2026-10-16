@@ -7,13 +7,26 @@ struct TouchMeaning: Identifiable, Codable, Equatable {
     var id: UUID = UUID()
     var label: String
     var emoji: String
+    /// Start colour of the touch's two-stop gradient.
     var colorRGB: Int
+    /// End colour of the gradient (equals `colorRGB` for a single-colour touch).
+    var endColorRGB: Int
     var pattern: [Int]   // inter-tap gaps in ms
+    /// Freshly added meanings show a "New" badge until sent, as in the original.
+    var isNew: Bool = false
 
-    static let starters: [TouchMeaning] = [
-        TouchMeaning(label: "Thinking of you", emoji: "💭", colorRGB: 0xFF4081, pattern: [200, 200]),
-        TouchMeaning(label: "Goodnight", emoji: "🌙", colorRGB: 0x3F51B5, pattern: [500]),
-        TouchMeaning(label: "I love you", emoji: "❤️", colorRGB: 0xF44336, pattern: [150, 150, 150]),
-        TouchMeaning(label: "Miss you", emoji: "🥺", colorRGB: 0x9C27B0, pattern: [300, 120])
-    ]
+    init(id: UUID = UUID(), label: String, emoji: String, colorRGB: Int,
+         endColorRGB: Int? = nil, pattern: [Int], isNew: Bool = false) {
+        self.id = id
+        self.label = label
+        self.emoji = emoji
+        self.colorRGB = colorRGB
+        self.endColorRGB = endColorRGB ?? colorRGB
+        self.pattern = pattern
+        self.isNew = isNew
+    }
+
+    /// The original app's library starts empty; meanings come from the partner adding them
+    /// (and server recommendations). No hardcoded defaults.
+    static let starters: [TouchMeaning] = []
 }
