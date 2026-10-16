@@ -62,27 +62,53 @@ jobs:
           if [ -n "$SDK" ]; then query="${query}&sv=${SDK}"; fi
           ua="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0 Safari/537.36"
           ok=
-          # XAPK first; the plain APK endpoint is the fallback for versions shipped without splits.
+          # Fetches $1 into out/download; succeeds when the body is a zip (starts with "PK").
+          # APKPure answers blocked requests with an HTML page (Cloudflare's "Just a moment...").
+          fetch() {
+            echo "::group::$1"
+            rm -f out/download out/headers.txt
+            code=$(curl -sS -L --retry 2 --connect-timeout 20 -A "$ua" -H "Accept: */*" \
+              -D out/headers.txt -o out/download -w '%{http_code}' "$1" || echo 000)
+            echo "HTTP $code, $(stat -c %s out/download 2>/dev/null || echo 0) bytes"
+            grep -i -E '^(location|content-type|content-disposition):' out/headers.txt || true
+            echo "::endgroup::"
+            [ "$code" = 200 ] && [ "$(head -c 2 out/download)" = "PK" ]
+          }
+          # 1. The website link, then the same path on download.pureapk.com, the host APKPure's
+          #    Android app downloads from (d.apkpure.com sits behind a Cloudflare challenge that
+          #    GitHub's runners don't pass). XAPK first; APK is for versions without splits.
           for kind in XAPK APK; do
-            url="https://d.apkpure.com/b/${kind}/${PACKAGE}?${query}"
-            for attempt in 1 2 3 4; do
-              echo "::group::$kind attempt $attempt: $url"
-              rm -f out/download
-              code=$(curl -sS -L --retry 2 -A "$ua" -H "Accept: */*" -H "Referer: https://apkpure.com/" \
-                -D out/headers.txt -o out/download -w '%{http_code}' "$url" || echo 000)
-              echo "HTTP $code, $(stat -c %s out/download 2>/dev/null || echo 0) bytes"
-              grep -i -E '^(location|content-type|content-disposition):' out/headers.txt || true
-              echo "::endgroup::"
-              # A real package is a zip (starts with "PK"); anything else is an error page.
-              if [ "$code" = 200 ] && [ "$(head -c 2 out/download)" = "PK" ]; then
-                ok=$kind; break 2
-              fi
-              sleep $((attempt * 5))
+            for host in d.apkpure.com download.pureapk.com; do
+              if fetch "https://${host}/b/${kind}/${PACKAGE}?${query}"; then ok=$kind; break 2; fi
             done
           done
+          # 2. Ask the app's API for the version list and take the matching download link from it.
+          #    The answer is protobuf, so the links are picked out of it as plain strings.
+          if [ -z "$ok" ]; then
+            echo "::group::APKPure app API"
+            curl -sS -L --retry 2 -A "okhttp/4.9.3" -H "x-cv: 3172501" -H "x-sv: ${SDK:-29}" \
+              -H "x-abis: ${ABI:-arm64-v8a,armeabi-v7a,armeabi}" -H "x-gp: 1" \
+              -o out/versions.bin -w 'HTTP %{http_code}\n' \
+              "https://api.pureapk.com/m/v3/cms/app_version?hl=en-US&package_name=${PACKAGE}" || true
+            grep -aoE "https?://[A-Za-z0-9.-]+/b/(XAPK|APK)/${PACKAGE//./\\.}\?[A-Za-z0-9=&_.%-]+" \
+              out/versions.bin 2>/dev/null | awk '!seen[$0]++' > out/links.txt || true
+            echo "$(wc -l < out/links.txt) links found:"; head -20 out/links.txt
+            echo "::endgroup::"
+            if [ -n "$VERSION_CODE" ]; then
+              grep -E "[?&]versionCode=${VERSION_CODE}(&|$)" out/links.txt > out/pick.txt || true
+            else
+              cp out/links.txt out/pick.txt
+            fi
+            while read -r link; do
+              if fetch "$link"; then
+                case "$link" in */b/XAPK/*) ok=XAPK ;; *) ok=APK ;; esac
+                break
+              fi
+            done < out/pick.txt
+          fi
           if [ -z "$ok" ]; then
             echo "::error::APKPure did not return a package. First bytes of the last response:"
-            head -c 600 out/download || true
+            head -c 600 out/download 2>/dev/null || true
             exit 1
           fi
           ext=$(echo "$ok" | tr 'A-Z' 'a-z')
