@@ -6,6 +6,10 @@ struct PartnerBar: View {
     @EnvironmentObject var model: AppModel
     @EnvironmentObject var store: LocalStore
 
+    @State private var taps = 0
+    @State private var lastTap = Date.distantPast
+    @State private var showDebug = false
+
     var body: some View {
         HStack(spacing: -10) {
             smallAvatar(name: store.profile.name.isEmpty ? "Me" : store.profile.name,
@@ -22,6 +26,17 @@ struct PartnerBar: View {
         .padding(6)
         .background(Capsule().fill(Color.white.opacity(0.06)))
         .overlay(Capsule().stroke(Color.white.opacity(0.10), lineWidth: 1))
+        // Tap the partner bar 5× quickly to open the hidden debug panel.
+        .contentShape(Capsule())
+        .simultaneousGesture(TapGesture().onEnded { registerDebugTap() })
+        .sheet(isPresented: $showDebug) { DebugView() }
+    }
+
+    private func registerDebugTap() {
+        let now = Date()
+        taps = now.timeIntervalSince(lastTap) > 1.5 ? 1 : taps + 1
+        lastTap = now
+        if taps >= 5 { taps = 0; showDebug = true }
     }
 
     private func smallAvatar(name: String, color: Color, active: Bool) -> some View {

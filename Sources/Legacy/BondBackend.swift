@@ -19,6 +19,11 @@ enum BondBackend {
     static let apiBase = URL(string: "https://api.bond-touch.com/")!
     static let androidPackage = "com.impossible.bondtouch"
     static let androidCert = "23460F11B7C87B163329E7ECF3B6D6D89A139E33"
+    // Original Firebase project config (from the app's google-services values).
+    static let projectId = "bond-touch"
+    static let rtdbURL = "https://bond-touch.firebaseio.com"
+    static let storageBucket = "bond-touch.appspot.com"
+    static let senderId = "625752440215"
     private static let identityBase = "https://identitytoolkit.googleapis.com/v1/"
 
     struct Session: Equatable {
