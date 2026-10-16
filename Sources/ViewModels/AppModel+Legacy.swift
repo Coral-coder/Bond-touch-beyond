@@ -137,9 +137,14 @@ extension AppModel {
             if let msg = b["dashboardMessage"] as? String, !msg.isEmpty, store.greetings[id] != msg {
                 store.greetings[id] = msg
             }
-            if let ms = (b["encounterDateTimestamp"] as? NSNumber)?.doubleValue {
-                let date: Date? = ms > 0 ? Date(timeIntervalSince1970: ms / 1000) : nil
+            if let raw = (b["encounterDateTimestamp"] as? NSNumber)?.doubleValue {
+                let (date, wrongUnits) = BondBackend.encounterDate(fromTimestamp: raw)
                 if store.encounters[id] != date { store.setNextMeeting(date, for: id) }
+                // Repair a date an earlier build stored in milliseconds (the original app
+                // showed it as millions of days away).
+                if wrongUnits, let date {
+                    Task { try? await BondBackend.updateEncounter(id, date: date, bearer: token) }
+                }
             }
 
             // Received touches. New ones go to the history, play on the bracelet (except on
