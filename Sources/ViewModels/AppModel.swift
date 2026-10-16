@@ -1,5 +1,6 @@
 import CloudKit
 import Combine
+import CoreLocation
 import Foundation
 import SwiftUI
 
@@ -24,7 +25,10 @@ final class AppModel: ObservableObject {
     let bracelet = BraceletManager()
     let store = LocalStore()
     let heart = HeartRateService()
+    let location = LocationService()
     private let relay = CloudRelay()
+
+    @Published var sharingLocation = false
 
     var selectedPartner: Partner? { partners.first { $0.id == selectedPartnerID } }
     var activeBond: Bond? { selectedPartner?.bond }
@@ -33,6 +37,27 @@ final class AppModel: ObservableObject {
         bracelet.$state.receive(on: DispatchQueue.main).assign(to: &$braceletState)
         bracelet.$heartbeatActive.receive(on: DispatchQueue.main).assign(to: &$partnerHeartbeatActive)
         heart.onBPM = { [weak self] bpm in Task { @MainActor in await self?.relayHeartbeat(bpm) } }
+        location.onUpdate = { [weak self] coord in Task { @MainActor in await self?.broadcastLocation(coord) } }
+    }
+
+    // MARK: - Presence (live location)
+
+    func setLocationSharing(_ on: Bool) {
+        sharingLocation = on
+        if on {
+            location.start()
+        } else {
+            location.stop()
+            Task { await setOnline(true) }   // keep presence, drop the shared coordinates
+        }
+    }
+
+    private func broadcastLocation(_ coord: CLLocationCoordinate2D) async {
+        guard sharingLocation else { return }
+        for partner in partners {
+            try? await relay.sendPresence(online: true, bond: partner.bond, senderID: myUserID,
+                                          latitude: coord.latitude, longitude: coord.longitude)
+        }
     }
 
     // MARK: - Lifecycle
@@ -156,6 +181,10 @@ final class AppModel: ObservableObject {
             if let color = events.partnerColorRGB { partners[index].colorRGB = color }
             if let online = events.presenceOnline { partners[index].online = online }
             if let seen = events.presenceLastSeen { partners[index].lastSeen = seen }
+            if let lat = events.presenceLat, let lng = events.presenceLng {
+                partners[index].latitude = lat
+                partners[index].longitude = lng
+            }
 
             // Only the selected partner's touches/heartbeat drive the bracelet.
             if partner.id == selectedPartnerID, !store.doNotDisturb {

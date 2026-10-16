@@ -24,6 +24,8 @@ final class CloudRelay {
         var latestBPM: Int?
         var presenceOnline: Bool?
         var presenceLastSeen: Date?
+        var presenceLat: Double?
+        var presenceLng: Double?
         var partnerName: String?
         var partnerColorRGB: Int?
     }
@@ -185,13 +187,18 @@ final class CloudRelay {
     }
 
     /// Publishes the user's presence (one stable record per sender, overwritten).
-    func sendPresence(online: Bool, bond: Bond, senderID: String) async throws {
+    func sendPresence(online: Bool, bond: Bond, senderID: String,
+                      latitude: Double? = nil, longitude: Double? = nil) async throws {
         let db = bond.isOwner ? privateDB : sharedDB
         let zoneID = try await zoneID(forBond: bond, in: db)
         let record = CKRecord(recordType: Self.recordTypePresence,
                               recordID: CKRecord.ID(recordName: "presence-\(senderID)", zoneID: zoneID))
         record["senderID"] = senderID as CKRecordValue
         record["online"] = (online ? 1 : 0) as CKRecordValue
+        if let latitude, let longitude {
+            record["lat"] = latitude as CKRecordValue
+            record["lng"] = longitude as CKRecordValue
+        }
         record["sentAt"] = Date() as CKRecordValue
         _ = try await db.modifyRecords(saving: [record], deleting: [], savePolicy: .changedKeys)
     }
@@ -252,6 +259,8 @@ final class CloudRelay {
                     newestPresence = sentAt
                     events.presenceOnline = (record["online"] as? Int ?? 0) == 1
                     events.presenceLastSeen = sentAt
+                    events.presenceLat = record["lat"] as? Double
+                    events.presenceLng = record["lng"] as? Double
                 }
             case Self.recordTypeProfile:
                 if sentAt > newestProfile {
