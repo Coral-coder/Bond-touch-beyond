@@ -7,7 +7,7 @@ struct RootView: View {
         Group {
             if model.bond == nil {
                 NavigationStack {
-                    PairingView().navigationTitle("Bond Touch Beyond")
+                    PairingView().navigationTitle("Beyond Touch")
                 }
             } else {
                 TabView {

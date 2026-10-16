@@ -57,7 +57,7 @@ final class CloudRelay {
         root["ownerName"] = displayName as CKRecordValue
 
         let share = CKShare(rootRecord: root)
-        share[CKShare.SystemFieldKey.title] = "Bond Touch" as CKRecordValue
+        share[CKShare.SystemFieldKey.title] = "Beyond Touch" as CKRecordValue
         share.publicPermission = .none
 
         _ = try await privateDB.modifyRecords(saving: [root, share], deleting: [])
