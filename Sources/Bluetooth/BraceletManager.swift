@@ -39,12 +39,33 @@ final class BraceletManager: NSObject, ObservableObject {
 
     func startScanning() {
         guard central.state == .poweredOn else { state = .bluetoothOff; return }
+
+        // 1. A bracelet that's already paired/connected at the iOS level (e.g. bonded, or in use
+        //    by the official app) will NEVER appear in a scan. Ask the system for it directly.
+        var known = central.retrieveConnectedPeripherals(withServices: [BondGATT.service])
+        if known.isEmpty {
+            known = central.retrieveConnectedPeripherals(withServices: [BondGATT.batteryService])
+                .filter { BondGATT.isBondName($0.name) }
+        }
+        if let peripheral = known.first {
+            connect(peripheral)
+            return
+        }
+
+        // 2. Otherwise scan. The bracelet does NOT advertise its 128-bit vendor service UUID (the
+        //    original app scans by name/address, never by service), so scan for all peripherals
+        //    and filter by advertised name.
         state = .scanning
-        // The bracelet does NOT advertise its 128-bit vendor service UUID (the original app
-        // scans by device name / address, never by service), so scanning `withServices:` would
-        // never discover it. Scan for all peripherals and filter by advertised name instead.
         central.scanForPeripherals(withServices: nil,
                                    options: [CBCentralManagerScanOptionAllowDuplicatesKey: false])
+    }
+
+    private func connect(_ peripheral: CBPeripheral) {
+        bracelet = peripheral
+        peripheral.delegate = self
+        state = .connecting
+        central.stopScan()
+        central.connect(peripheral)
     }
 
     /// Plays a touch: send the rhythm on FFB2 and a matching buzz/glow on FFB1.
@@ -116,11 +137,7 @@ extension BraceletManager: CBCentralManagerDelegate {
                         advertisementData: [String: Any], rssi RSSI: NSNumber) {
         let advName = advertisementData[CBAdvertisementDataLocalNameKey] as? String ?? peripheral.name
         guard BondGATT.isBondName(advName) else { return }
-        bracelet = peripheral
-        peripheral.delegate = self
-        state = .connecting
-        central.stopScan()
-        central.connect(peripheral)
+        connect(peripheral)
     }
 
     func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
