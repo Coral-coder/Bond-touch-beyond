@@ -10,7 +10,7 @@ struct RootView: View {
                 OnboardingView()
             } else if model.partners.isEmpty {
                 NavigationStack {
-                    PairingView().navigationTitle("Beyond Touch")
+                    PairingView().navigationTitle("Bond Touch Beyond")
                 }
                 .safeAreaInset(edge: .bottom) { statusBar }
             } else {

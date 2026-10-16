@@ -37,7 +37,7 @@ final class AppModel: ObservableObject {
 
     func bootstrap() async {
         guard await relay.accountIsAvailable() else {
-            statusLine = "Sign in to iCloud to use Beyond Touch."
+            statusLine = "Sign in to iCloud to use Bond Touch Beyond."
             return
         }
         do {

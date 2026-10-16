@@ -6,7 +6,7 @@ import Foundation
 /// an auth token).
 ///
 /// IMPORTANT: if the Firebase project restricts access to the original app's package name /
-/// signing certificate (or App Check), requests from Beyond Touch will be rejected and
+/// signing certificate (or App Check), requests from Bond Touch Beyond will be rejected and
 /// `testConnection()` returns `.rejected`. That's a server-side rule only the project owner
 /// can change; the app can't work around it.
 struct LegacyFirebaseClient {

@@ -42,7 +42,7 @@ struct SettingsView: View {
             } header: {
                 Text("Legacy data")
             } footer: {
-                Text("Experimental. Beyond Touch uses iCloud by default. The original Firebase project only accepts the original app, so unless its owner registers this app (\(AppConfig.bundleID)) or you provide a working database URL and token, the connection will be rejected.")
+                Text("Experimental. Bond Touch Beyond uses iCloud by default. The original Firebase project only accepts the original app, so unless its owner registers this app (\(AppConfig.bundleID)) or you provide a working database URL and token, the connection will be rejected.")
             }
             Section("About") {
                 LabeledContent("Relay", value: store.useLegacyFirebase ? "iCloud + legacy Firebase" : "iCloud (CloudKit)")

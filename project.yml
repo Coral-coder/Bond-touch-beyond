@@ -23,12 +23,12 @@ targets:
     info:
       path: Sources/App/Info.plist
       properties:
-        CFBundleDisplayName: Beyond Touch
+        CFBundleDisplayName: Bond Touch Beyond
         UILaunchScreen: {}
         # CoreBluetooth usage strings are required or the app is rejected / crashes on first scan.
-        NSBluetoothAlwaysUsageDescription: Beyond Touch uses Bluetooth to talk to your bracelet.
-        NSBluetoothPeripheralUsageDescription: Beyond Touch uses Bluetooth to talk to your bracelet.
-        NSHealthShareUsageDescription: Beyond Touch reads your heart rate so you can send your live heartbeat to your partner's bracelet.
+        NSBluetoothAlwaysUsageDescription: Bond Touch Beyond uses Bluetooth to talk to your bracelet.
+        NSBluetoothPeripheralUsageDescription: Bond Touch Beyond uses Bluetooth to talk to your bracelet.
+        NSHealthShareUsageDescription: Bond Touch Beyond reads your heart rate so you can send your live heartbeat to your partner's bracelet.
         UIBackgroundModes:
           - bluetooth-central
           - remote-notification
