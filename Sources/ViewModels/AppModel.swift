@@ -183,6 +183,7 @@ final class AppModel: ObservableObject {
         do {
             myUserID = try await relay.currentUserID()
             let bonds = try await relay.loadBonds(codes: Array(store.cloudBondCodes.keys), myUserID: myUserID)
+            await relay.ensureSubscriptions(codes: Array(store.cloudBondCodes.keys))   // wake only on our bonds
             cloudPartners = bonds.filter { !$0.pending }.map { Partner(bond: $0) }
             cloudPartners.forEach { loadCachedPhoto(bondID: $0.id) }
             cloudPending = bonds.filter { $0.pending }

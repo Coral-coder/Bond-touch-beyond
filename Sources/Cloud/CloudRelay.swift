@@ -283,6 +283,8 @@ final class CloudRelay {
         return out
     }
 
+    /// A silent push ONLY for records in this exact bond (predicate `bondID == code`), so a
+    /// phone is woken only by its own pair's touches — never by any other bond's activity.
     private func installSubscription(code: String) async throws {
         let predicate = NSPredicate(format: "bondID == %@", code)
         let sub = CKQuerySubscription(recordType: Self.recordTypeTouch, predicate: predicate,
@@ -291,6 +293,12 @@ final class CloudRelay {
         note.shouldSendContentAvailable = true
         sub.notificationInfo = note
         _ = try? await db.modifySubscriptions(saving: [sub], deleting: [])
+    }
+
+    /// Makes sure a per-bond push subscription exists for each known code (called on launch),
+    /// so a phone listens to exactly its bonds and nothing else.
+    func ensureSubscriptions(codes: [String]) async {
+        for code in codes { try? await installSubscription(code: code) }
     }
 }
 
