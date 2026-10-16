@@ -72,6 +72,10 @@ targets:
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         UILaunchScreen: {}
+        # Required for CloudKit sharing: tells iOS the app accepts CKShare invites, so an
+        # invite link routes to userDidAcceptCloudKitShareWith and the share provisions
+        # correctly. Without it the invite link is inert and the share sheet can spin.
+        CKSharingSupported: true
         # XcodeGen generates the Info.plist from these properties, so orientations must be
         # declared here (iPhone-only → portrait is enough) or TestFlight rejects the upload.
         UISupportedInterfaceOrientations:
