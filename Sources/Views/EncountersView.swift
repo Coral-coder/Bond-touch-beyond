@@ -47,9 +47,9 @@ struct EncountersView: View {
                         store.setNextMeeting(date, for: bondID); dismiss()
                     } label: {
                         Text(daysLeft == nil ? "Set next encounter" : "Update date")
-                            .font(.headline).frame(maxWidth: .infinity).padding(.vertical, 14)
+                            .font(.headline).frame(maxWidth: .infinity).frame(height: Metric.buttonHeight)
                             .background(Theme.accent).foregroundStyle(Theme.bgBottom)
-                            .clipShape(RoundedRectangle(cornerRadius: Theme.cardCorner))
+                            .clipShape(RoundedRectangle(cornerRadius: Metric.cornerMedium))
                     }
                     .buttonStyle(.plain)
 
