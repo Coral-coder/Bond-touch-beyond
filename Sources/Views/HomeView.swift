@@ -7,6 +7,8 @@ struct HomeView: View {
     @EnvironmentObject var store: LocalStore
     @State private var showHeart = false
     @State private var showPeople = false
+    @State private var editingGreeting = false
+    @State private var greetingDraft = ""
 
     private var partner: Partner? { model.selectedPartner }
 
@@ -15,10 +17,23 @@ struct HomeView: View {
             topBar
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
-                    Text("Hello,\nthis is us")
-                        .font(.system(size: 44, weight: .heavy, design: .rounded))
-                        .foregroundStyle(Theme.mutedHeadline)
-                        .padding(.top, 4)
+                    Button {
+                        greetingDraft = store.greeting(for: model.selectedPartnerID)
+                        editingGreeting = true
+                    } label: {
+                        HStack(alignment: .top, spacing: 8) {
+                            Text(store.greeting(for: model.selectedPartnerID))
+                                .font(.system(size: 44, weight: .heavy, design: .rounded))
+                                .foregroundStyle(Theme.mutedHeadline)
+                                .multilineTextAlignment(.leading)
+                            Image(systemName: "pencil")
+                                .font(.system(size: 15, weight: .semibold))
+                                .foregroundStyle(Theme.subtitle)
+                                .padding(.top, 8)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.top, 4)
 
                     pairRow
 
@@ -35,6 +50,12 @@ struct HomeView: View {
         }
         .sheet(isPresented: $showPeople) {
             NavigationStack { PeopleView().navigationTitle("People") }
+        }
+        .sheet(isPresented: $editingGreeting) {
+            GreetingEditor(text: $greetingDraft) {
+                store.setGreeting(greetingDraft, for: model.selectedPartnerID)
+            }
+            .presentationDetents([.height(240)])
         }
     }
 
@@ -113,5 +134,34 @@ struct HomeView: View {
                 .font(.caption2).foregroundStyle(Theme.subtitle)
         }
         .frame(maxWidth: .infinity, alignment: mine ? .trailing : .leading)
+    }
+}
+
+/// Small sheet to edit the per-partner home greeting.
+private struct GreetingEditor: View {
+    @Environment(\.dismiss) private var dismiss
+    @Binding var text: String
+    let onSave: () -> Void
+
+    var body: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("This greeting shows at the top of Home for this partner.")
+                    .font(.footnote).foregroundStyle(.secondary)
+                TextField("Greeting", text: $text, axis: .vertical)
+                    .lineLimit(2...3)
+                    .textFieldStyle(.roundedBorder)
+                Spacer()
+            }
+            .padding()
+            .navigationTitle("Greeting")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") { onSave(); dismiss() }
+                }
+            }
+        }
     }
 }
