@@ -64,7 +64,7 @@ final class CloudRelay {
         case .available:
             return nil
         case .noAccount:
-            return "You're not signed into iCloud on this iPhone. Open Settings, sign in to iCloud, and make sure iCloud Drive is on — then pairing, photos and your heartbeat will work."
+            return "You're not signed into iCloud on this iPhone. Open the Settings app, tap \"Sign in to your iPhone\" at the top, sign in with your Apple ID, and turn on iCloud Drive — then come back and pairing, photos and your heartbeat will work. (Apps can't open the iCloud sign-in for you.)"
         case .restricted:
             return "iCloud is restricted on this iPhone (Screen Time or a configuration profile). Allow iCloud to pair over it."
         case .temporarilyUnavailable:
