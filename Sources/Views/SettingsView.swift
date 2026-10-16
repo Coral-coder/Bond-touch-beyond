@@ -29,7 +29,7 @@ struct SettingsView: View {
                     row("Private Space", "") { PrivateSpaceView() }
                     row("Help & Support", "") { HelpView() }
                     row("Bracelet notifications", "") { BraceletNotificationsView() }
-                    row("Legacy data", "") { LegacyDataView() }
+                    row("Bond Touch account (beta)", "") { LegacyLoginView() }
                     languageRow
                 }
                 Text("Bond Touch Beyond").font(.caption2).foregroundStyle(Theme.subtitle).padding(.top, 8)

@@ -31,6 +31,13 @@ final class LocalStore: ObservableObject {
     @Published var firebaseAuthToken: String {
         didSet { UserDefaults.standard.set(firebaseAuthToken, forKey: Key.fbToken.rawValue) }
     }
+    /// The email of the signed-in original Bond Touch account (empty if not logged in).
+    @Published var legacyEmail: String {
+        didSet { UserDefaults.standard.set(legacyEmail, forKey: Key.legacyEmail.rawValue) }
+    }
+    @Published var legacyRefreshToken: String {
+        didSet { UserDefaults.standard.set(legacyRefreshToken, forKey: Key.legacyRefresh.rawValue) }
+    }
     /// Per-partner home greeting ("Hello, this is us"), keyed by bond id.
     @Published var greetings: [String: String] {
         didSet { save(greetings, for: .greetings) }
@@ -80,7 +87,7 @@ final class LocalStore: ObservableObject {
         greetings[bondID] = text
     }
 
-    private enum Key: String { case meanings, vibration, dnd, profile, fbEnabled, fbURL, fbToken, greetings, encounters, psPasscode }
+    private enum Key: String { case meanings, vibration, dnd, profile, fbEnabled, fbURL, fbToken, greetings, encounters, psPasscode, legacyEmail, legacyRefresh }
 
     init() {
         self.meanings = LocalStore.load([TouchMeaning].self, for: .meanings) ?? TouchMeaning.starters
@@ -91,6 +98,8 @@ final class LocalStore: ObservableObject {
         self.useLegacyFirebase = UserDefaults.standard.bool(forKey: Key.fbEnabled.rawValue)
         self.firebaseDatabaseURL = UserDefaults.standard.string(forKey: Key.fbURL.rawValue) ?? ""
         self.firebaseAuthToken = UserDefaults.standard.string(forKey: Key.fbToken.rawValue) ?? ""
+        self.legacyEmail = UserDefaults.standard.string(forKey: Key.legacyEmail.rawValue) ?? ""
+        self.legacyRefreshToken = UserDefaults.standard.string(forKey: Key.legacyRefresh.rawValue) ?? ""
         self.greetings = LocalStore.load([String: String].self, for: .greetings) ?? [:]
         self.encounters = LocalStore.load([String: Date].self, for: .encounters) ?? [:]
         self.privateSpacePasscodeHash = UserDefaults.standard.string(forKey: Key.psPasscode.rawValue)
