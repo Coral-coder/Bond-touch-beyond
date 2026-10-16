@@ -51,6 +51,12 @@ final class BraceletManager: NSObject, ObservableObject {
     private var heartbeatBPM = 0
     @Published private(set) var heartbeatActive = false
 
+    /// CoreBluetooth's `connect` never times out, and service discovery / the pairing
+    /// handshake can stall — so a connection can sit in "connecting" forever. This fires if
+    /// we haven't reached `.connected` in time and recovers by cancelling and rescanning.
+    private var connectWatchdog: Timer?
+    private var connectAttempts = 0
+
     /// A bracelet found stuck in firmware-update (DFU) mode, waiting to be reflashed.
     struct DFUCandidate: Equatable {
         let id: UUID
@@ -93,13 +99,73 @@ final class BraceletManager: NSObject, ObservableObject {
         if let old = bracelet, old != peripheral { central.cancelPeripheralConnection(old) }
         bracelet = peripheral
         peripheral.delegate = self
-        state = .connecting
         central.stopScan()
-        central.connect(peripheral)
+        central.connect(peripheral, options: [CBConnectPeripheralOptionNotifyOnDisconnectionKey: true])
+        enterConnecting()
     }
 
     func disconnect() {
+        clearConnectWatchdog()
         if let bracelet { central.cancelPeripheralConnection(bracelet) }
+    }
+
+    /// Force a fresh connection attempt — for the Settings "Reconnect" button when it's stuck.
+    func reconnect() {
+        clearConnectWatchdog()
+        connectAttempts = 0
+        if let bracelet { central.cancelPeripheralConnection(bracelet) }
+        bracelet = nil
+        resetConnectionState()
+        state = .disconnected
+        startScanning()
+    }
+
+    // MARK: - Connection watchdog
+
+    /// Enters the connecting state and arms the watchdog. Called whenever a connect is
+    /// started (fresh connect, auto-reconnect, or state restoration).
+    private func enterConnecting() {
+        state = .connecting
+        connectWatchdog?.invalidate()
+        let timeout: TimeInterval = 15
+        let t = Timer(timeInterval: timeout, repeats: false) { [weak self] _ in
+            Task { @MainActor in self?.connectTimedOut() }
+        }
+        RunLoop.main.add(t, forMode: .common)
+        connectWatchdog = t
+    }
+
+    /// Reached a fully usable connection — clears the watchdog and resets the attempt count.
+    private func markConnected() {
+        clearConnectWatchdog()
+        connectAttempts = 0
+        let was = state
+        state = .connected
+        if was != .connected { NetLog.shared.record(.ok, "Bracelet connected", gen.map { "\($0)" } ?? "") }
+    }
+
+    private func clearConnectWatchdog() {
+        connectWatchdog?.invalidate()
+        connectWatchdog = nil
+    }
+
+    private func connectTimedOut() {
+        guard state == .connecting else { return }
+        connectAttempts += 1
+        NetLog.shared.record(.fail, "Bracelet stuck connecting — retrying", "attempt \(connectAttempts)")
+        // The link or the service discovery / handshake stalled. Cancel this attempt and
+        // start over with a clean slate (iOS sometimes hands back a half-open connection or
+        // a stale GATT cache; a fresh scan + connect clears it).
+        if let bracelet { central.cancelPeripheralConnection(bracelet) }
+        bracelet = nil
+        resetConnectionState()
+        state = .disconnected
+        // Brief backoff after repeated failures so we don't spin the radio.
+        let delay: TimeInterval = connectAttempts >= 3 ? 3 : 0.5
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+            guard let self, self.state == .disconnected else { return }
+            self.startScanning()
+        }
     }
 
     // MARK: - Public actions
@@ -188,7 +254,7 @@ final class BraceletManager: NSObject, ObservableObject {
         case .waitingToken: sendToken()
         case .waitingAuid:  sendAuid()
         case .connected:
-            state = .connected
+            markConnected()
             if gen == .v3, !v3FeaturesSent {
                 v3FeaturesSent = true
                 enqueue(BondGATT.v3ConnectedWrites)
@@ -249,12 +315,12 @@ extension BraceletManager: CBCentralManagerDelegate {
         bracelet = p
         p.delegate = self
         if p.state == .connected {
-            state = .connecting
             resetConnectionState()
+            enterConnecting()
             p.discoverServices(nil)
         } else {
-            state = .connecting
-            central.connect(p)
+            enterConnecting()
+            central.connect(p, options: [CBConnectPeripheralOptionNotifyOnDisconnectionKey: true])
         }
     }
 
@@ -277,7 +343,9 @@ extension BraceletManager: CBCentralManagerDelegate {
 
     func centralManager(_ central: CBCentralManager, didFailToConnect peripheral: CBPeripheral,
                         error: Error?) {
+        clearConnectWatchdog()
         state = .disconnected
+        startScanning()
     }
 
     func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral,
@@ -286,7 +354,10 @@ extension BraceletManager: CBCentralManagerDelegate {
         resetConnectionState()
         // Reconnect automatically (also in the background): a pending connect completes
         // whenever the bracelet comes back in range.
-        if peripheral == bracelet { state = .connecting; central.connect(peripheral) }
+        if peripheral == bracelet {
+            central.connect(peripheral, options: [CBConnectPeripheralOptionNotifyOnDisconnectionKey: true])
+            enterConnecting()
+        }
         // Keep scanning meanwhile so a bracelet that rebooted into update mode is noticed.
         central.scanForPeripherals(withServices: nil, options: [CBCentralManagerScanOptionAllowDuplicatesKey: false])
     }
@@ -328,7 +399,7 @@ extension BraceletManager: CBPeripheralDelegate {
                 // notifications (waiting for token → token, waiting for AUID → AUID,
                 // connected → feature enables).
                 gen = .v3
-                state = .connected
+                markConnected()
             }
         } else if gen == nil, let apiChar = chars[BondGATT.charApiVer],
                   apiChar.properties.contains(.read) {
@@ -364,7 +435,7 @@ extension BraceletManager: CBPeripheralDelegate {
     private func subscribeV2Base(_ peripheral: CBPeripheral) {
         if let stateChar = chars[BondGATT.charState] { peripheral.setNotifyValue(true, for: stateChar) }
         if let eventChar = chars[BondGATT.charEvent] { peripheral.setNotifyValue(true, for: eventChar) }
-        state = .connected
+        markConnected()
         // Like the original app, the token and AUID are sent only when the bracelet asks
         // for them on its state channel (handled in handle(_ signal:)).
     }
