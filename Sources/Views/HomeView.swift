@@ -122,21 +122,29 @@ struct HomeView: View {
 
     @ViewBuilder private func touchCard(_ touch: TouchMessage) -> some View {
         let mine = touch.senderID == model.myUserID
-        VStack(alignment: mine ? .trailing : .leading, spacing: 6) {
-            HStack(spacing: 0) {
-                if mine { Spacer(minLength: 44) }
-                TouchViz(pattern: touch.pattern, colorRGB: touch.colorRGB)
-                    .padding(.horizontal, 18).padding(.vertical, 14)
-                    .background(mine ? Theme.touchSent : Theme.touchReceived)
-                    .clipShape(RoundedRectangle(cornerRadius: Theme.cardCorner))
-                    .overlay(RoundedRectangle(cornerRadius: Theme.cardCorner)
-                        .stroke(Color.white.opacity(0.06), lineWidth: 1))
-                if !mine { Spacer(minLength: 44) }
+        VStack(alignment: .trailing, spacing: 6) {
+            GlassCard {
+                HStack(spacing: 12) {
+                    TouchViz(pattern: touch.pattern, colorRGB: touch.colorRGB)
+                    Spacer(minLength: 8)
+                    Button { model.bracelet.play(touch) } label: {
+                        Image(systemName: "play.circle")
+                            .font(.system(size: 24))
+                            .foregroundStyle(Theme.subtitle)
+                    }
+                    .buttonStyle(.plain)
+                }
             }
-            Text("\(mine ? "Sent" : "Received") \(touch.sentAt.formatted(date: .omitted, time: .shortened))")
-                .font(.caption2).foregroundStyle(Theme.subtitle)
+            HStack(spacing: 4) {
+                Text("\(mine ? "Last sent" : "Received") \(touch.sentAt.formatted(date: .omitted, time: .shortened))")
+                    .font(.caption2).foregroundStyle(Theme.subtitle)
+                if mine {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.caption2).foregroundStyle(Theme.subtitle)
+                }
+            }
         }
-        .frame(maxWidth: .infinity, alignment: mine ? .trailing : .leading)
+        .frame(maxWidth: .infinity, alignment: .trailing)
     }
 }
 

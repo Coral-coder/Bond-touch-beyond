@@ -21,14 +21,15 @@ struct SettingsView: View {
                 .font(.subheadline).foregroundStyle(Theme.subtitle)
 
                 VStack(spacing: 12) {
-                    row("Personal details", "person.text.rectangle") { PersonalDetailsView() }
-                    row("My Bond Touch Bracelet", "applewatch") { BraceletSettingsView() }
-                    row("Bracelet notifications", "bell.fill") { BraceletNotificationsView() }
-                    row("Do not disturb", "moon.fill") { DoNotDisturbView() }
-                    row("My people", "person.2.fill") { PeopleView().navigationTitle("My people") }
-                    row("Private Space", "lock.fill") { ComingSoonView(title: "Private Space") }
-                    row("Legacy data", "externaldrive.fill") { LegacyDataView() }
-                    row("Help & Support", "questionmark.circle.fill") { HelpView() }
+                    row("Personal details", "") { PersonalDetailsView() }
+                    row("My Bond Touch Bracelet", "") { BraceletSettingsView() }
+                    row("Tutorials", "") { HelpView() }
+                    row("Do not disturb", "") { DoNotDisturbView() }
+                    row("My people", "") { PeopleView().navigationTitle("My people") }
+                    row("Private Space", "") { ComingSoonView(title: "Private Space") }
+                    row("Help & Support", "") { HelpView() }
+                    row("Bracelet notifications", "") { BraceletNotificationsView() }
+                    row("Legacy data", "") { LegacyDataView() }
                     languageRow
                 }
                 Text("Bond Touch Beyond").font(.caption2).foregroundStyle(Theme.subtitle).padding(.top, 8)
@@ -43,9 +44,8 @@ struct SettingsView: View {
         NavigationLink {
             destination().screenBackground().navigationBarTitleDisplayMode(.inline)
         } label: {
-            GlassCard {
+            GlassCard(padding: 20) {
                 HStack(spacing: 14) {
-                    Image(systemName: icon).foregroundStyle(Theme.accent).frame(width: 24)
                     Text(title).foregroundStyle(.white)
                     Spacer()
                     Image(systemName: "chevron.right").foregroundStyle(Theme.subtitle).font(.footnote)
@@ -58,12 +58,11 @@ struct SettingsView: View {
     /// Language is controlled by iOS per-app settings; link straight to them.
     private var languageRow: some View {
         Link(destination: URL(string: UIApplication.openSettingsURLString)!) {
-            GlassCard {
+            GlassCard(padding: 20) {
                 HStack(spacing: 14) {
-                    Image(systemName: "globe").foregroundStyle(Theme.accent).frame(width: 24)
                     Text("Language").foregroundStyle(.white)
                     Spacer()
-                    Image(systemName: "arrow.up.right").foregroundStyle(Theme.subtitle).font(.footnote)
+                    Image(systemName: "chevron.right").foregroundStyle(Theme.subtitle).font(.footnote)
                 }
             }
         }
