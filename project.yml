@@ -57,11 +57,11 @@ targets:
       - package: NordicDFU
     sources:
       - path: Sources
-      # Official bracelet firmware, added at build time by scripts/fetch-bracelet-firmware.sh
-      # (never committed: it isn't ours to publish).
+      # Official bracelet firmware (see Firmware/README.md), for automatic DFU recovery.
       - path: Firmware
-        optional: true
         buildPhase: resources
+        excludes:
+          - README.md
     info:
       path: Sources/App/Info.plist
       properties:

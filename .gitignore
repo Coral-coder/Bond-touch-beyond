@@ -2,4 +2,3 @@ ThirdParty/libsignal-ffi/
 *.xcodeproj/
 build/
 .claude/
-Firmware/
