@@ -1,41 +1,30 @@
+import CloudKit
 import PhotosUI
 import SwiftUI
 
-/// Chat with the selected partner — text bubbles, photos, and touches rendered as glowing
-/// strokes, with a message input bar. With an original-app partner the chat is end-to-end
-/// encrypted through the original backend (opt-in on this phone).
+/// Chat with the selected partner over iCloud — text bubbles, photos, and touches rendered
+/// as glowing strokes. A partner on the original Bond Touch app is invited to (or linked
+/// with) an iCloud bond first; chat with them then runs through it.
 struct ChatView: View {
     @EnvironmentObject var model: AppModel
     @EnvironmentObject var store: LocalStore
     @State private var draft = ""
     @State private var photo: PhotosPickerItem?
-    @State private var enabling = false
+    @State private var inviting = false
+    @State private var showShare = false
 
-    private var messages: [ChatMessage] {
-        guard let id = model.selectedPartnerID else { return [] }
-        return model.messagesByBond[id] ?? []
-    }
-
-    private var isLegacy: Bool { model.selectedPartner?.bond.legacy == true }
-    private var needsSetup: Bool { isLegacy && !store.legacyChatEnabled }
+    private var messages: [ChatMessage] { model.chatMessages(for: model.selectedPartnerID) }
+    private var chatBondID: String? { model.chatBondID(for: model.selectedPartnerID) }
+    private var needsLink: Bool { model.selectedPartner != nil && chatBondID == nil }
 
     var body: some View {
         VStack(spacing: 0) {
             HStack { Spacer(); PartnerBar(); Spacer() }
                 .padding(.horizontal, 20).padding(.top, 8).padding(.bottom, 6)
 
-            if needsSetup {
-                setupCard
-                Spacer()
+            if needsLink {
+                ScrollView { linkCard }
             } else {
-                if isLegacy, !model.legacyChatStatus.isEmpty, model.legacyChatStatus != "Encrypted chat is on." {
-                    Text(model.legacyChatStatus)
-                        .font(.footnote).foregroundStyle(Theme.subtitle)
-                        .padding(10).frame(maxWidth: .infinity, alignment: .leading)
-                        .background(Color.white.opacity(0.06))
-                        .clipShape(RoundedRectangle(cornerRadius: Metric.cornerMedium))
-                        .padding(.horizontal, 16)
-                }
                 ScrollViewReader { proxy in
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: 14) {
@@ -46,13 +35,11 @@ struct ChatView: View {
                     }
                     .onChange(of: messages.count) { _ in
                         withAnimation { proxy.scrollTo("bottom", anchor: .bottom) }
-                        markSeen()
                     }
                 }
                 inputBar
             }
         }
-        .onAppear { markSeen() }
         .onChange(of: photo) { item in
             guard let item else { return }
             Task {
@@ -63,48 +50,65 @@ struct ChatView: View {
                 photo = nil
             }
         }
+        .sheet(isPresented: $showShare) {
+            if let root = model.pendingShareRoot {
+                CloudShareSheet(root: root, container: CKContainer(identifier: AppConfig.cloudContainerID))
+            }
+        }
     }
 
-    private func markSeen() {
-        guard isLegacy, let id = model.selectedPartnerID else { return }
-        Task { await model.markLegacyChatSeen(id) }
-    }
-
-    /// Opt-in for encrypted chat with an original-app partner.
-    private var setupCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Label("Private, end-to-end encrypted chat", systemImage: "lock.fill")
-                .font(.headline).foregroundStyle(.white)
-            Text("Chat with \(model.selectedPartner?.displayName ?? "your partner") uses the same Signal encryption as the original app. Turning it on gives this phone its own chat keys, so:")
+    /// Shown for an original-app partner without an iCloud chat bond yet.
+    private var linkCard: some View {
+        let name = model.selectedPartner?.displayName ?? "your partner"
+        let linkable = model.cloudPartners.filter { !model.chatLinkedCloudIDs.contains($0.id) }
+        return VStack(alignment: .leading, spacing: 12) {
+            Label("Chat goes through iCloud", systemImage: "icloud.fill")
+                .font(Theme.font(17, .heavy)).foregroundStyle(.white)
+            Text("Messages and photos with \(name) are sent privately through iCloud. Invite them to Bond Touch Beyond chat — they open the link on their iPhone — or link the iCloud partner you already share with them.")
+                .font(Theme.font(14)).foregroundStyle(Theme.subtitle)
                 .fixedSize(horizontal: false, vertical: true)
-                .font(.subheadline).foregroundStyle(Theme.subtitle)
-            Text("• Messages sent before today can't be read here (they were encrypted for your old phone's keys).\n• The original app on another phone stops receiving your chat.")
-                .font(.footnote).foregroundStyle(Theme.subtitle)
             Button {
-                enabling = true
-                Task { await model.enableLegacyChat(); enabling = false }
+                guard let id = model.selectedPartnerID else { return }
+                inviting = true
+                Task {
+                    await model.inviteToICloudChat(id)
+                    inviting = false
+                    showShare = model.pendingShareRoot != nil
+                }
             } label: {
                 HStack {
-                    if enabling { ProgressView().tint(Theme.bgBottom) }
-                    Text("Turn on encrypted chat").font(.headline)
+                    if inviting { ProgressView().tint(Theme.onAccent) }
+                    Text("Invite \(name) to iCloud chat")
                 }
-                .frame(maxWidth: .infinity).frame(height: Metric.buttonHeight)
-                .background(Theme.accent).foregroundStyle(Theme.bgBottom)
-                .clipShape(RoundedRectangle(cornerRadius: Metric.cornerMedium))
             }
-            .buttonStyle(.plain).disabled(enabling)
-            if !model.legacyChatStatus.isEmpty {
-                Text(model.legacyChatStatus).font(.footnote).foregroundStyle(Theme.subtitle)
+            .buttonStyle(AccentButtonStyle())
+            .disabled(inviting)
+            if !linkable.isEmpty {
+                Text("Or link an iCloud partner").font(Theme.font(13, .bold)).foregroundStyle(Theme.subtitle)
+                    .padding(.top, 4)
+                ForEach(linkable) { p in
+                    Button {
+                        if let id = model.selectedPartnerID { model.linkChat(id, toCloudBond: p.id) }
+                    } label: {
+                        HStack(spacing: 10) {
+                            AvatarRing(name: p.displayName, ringColor: Color(rgbInt: p.colorRGB), size: 34, ringWidth: 0)
+                            Text(p.displayName).font(Theme.font(15, .bold)).foregroundStyle(.white)
+                            Spacer()
+                            Image(systemName: "link").foregroundStyle(Theme.accent)
+                        }
+                        .padding(10).glass(cornerRadius: 18)
+                    }
+                    .buttonStyle(.plain)
+                }
             }
         }
         .padding(18)
-        .background(Color.white.opacity(0.07))
-        .clipShape(RoundedRectangle(cornerRadius: Metric.cornerLarge))
+        .glass(cornerRadius: 28)
         .padding(16)
     }
 
     @ViewBuilder private func bubble(_ msg: ChatMessage) -> some View {
-        let mine = msg.senderID == model.myUserID || msg.senderID == ChatMessage.legacySelf
+        let mine = msg.senderID == model.myUserID
         VStack(alignment: mine ? .trailing : .leading, spacing: 4) {
             HStack {
                 if mine { Spacer(minLength: 40) }
@@ -153,9 +157,8 @@ struct ChatView: View {
                 Image(systemName: "camera.fill")
                     .foregroundStyle(.white)
                     .frame(width: 44, height: 44)
-                    .background(Circle().fill(Theme.accent.opacity(isLegacy ? 0.9 : 0.3)))
+                    .background(Circle().fill(Theme.accent.opacity(0.9)))
             }
-            .disabled(!isLegacy)
             .accessibilityLabel("Send a photo")
             TextField("", text: $draft, prompt: Text("Message \(model.selectedPartner?.displayName ?? "")…")
                 .foregroundColor(Theme.subtitle))

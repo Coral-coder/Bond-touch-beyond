@@ -186,6 +186,9 @@ final class CloudRelay {
         record["text"] = message.text as CKRecordValue
         record["colorRGB"] = message.colorRGB as CKRecordValue
         record["sentAt"] = message.sentAt as CKRecordValue
+        if message.kind == .image, let file = message.imageFile {
+            record["image"] = CKAsset(fileURL: ChatArchive.imageURL(file))
+        }
         _ = try await db.modifyRecords(saving: [record], deleting: [])
     }
 
@@ -248,10 +251,16 @@ final class CloudRelay {
             case Self.recordTypeMessage:
                 if let id = UUID(uuidString: record.recordID.recordName) {
                     let kind = ChatMessage.Kind(rawValue: record["kind"] as? String ?? "text") ?? .text
+                    var imageFile: String?
+                    if kind == .image, let url = (record["image"] as? CKAsset)?.fileURL,
+                       let data = try? Data(contentsOf: url) {
+                        imageFile = ChatArchive.saveImage(data)
+                    }
                     events.messages.append(ChatMessage(
                         id: id, bondID: bond.id, senderID: sender, kind: kind,
                         text: record["text"] as? String ?? "",
-                        colorRGB: record["colorRGB"] as? Int ?? 0xFF4081, sentAt: sentAt))
+                        colorRGB: record["colorRGB"] as? Int ?? 0xFF4081, sentAt: sentAt,
+                        imageFile: imageFile))
                 }
             case Self.recordTypeHeartbeat:
                 if let bpm = record["bpm"] as? Int, sentAt > newestHeartbeat {

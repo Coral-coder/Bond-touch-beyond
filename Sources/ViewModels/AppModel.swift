@@ -46,8 +46,12 @@ final class AppModel: ObservableObject {
     /// The Apple Watch link (touch bar + meanings on the watch).
     let watch = WatchBridge()
 
-    /// Every partner — iCloud and original backend.
-    var partners: [Partner] { cloudPartners + legacyPartners }
+    /// Every partner — iCloud and original backend. An iCloud bond that only carries chat
+    /// for an original-app partner is not listed separately.
+    var partners: [Partner] {
+        let linked = chatLinkedCloudIDs
+        return cloudPartners.filter { !linked.contains($0.id) } + legacyPartners
+    }
     /// Every invite the user sent that has not been accepted yet.
     var pendingBonds: [Bond] { cloudPending + legacyPending }
     @Published var selectedPartnerID: String?
@@ -208,19 +212,6 @@ final class AppModel: ObservableObject {
         } catch { statusLine = "Send failed: \(error.localizedDescription)" }
     }
 
-    func sendChatText(_ text: String, toBondID: String? = nil) async {
-        guard let bond = bond(for: toBondID), !text.trimmingCharacters(in: .whitespaces).isEmpty else { return }
-        if bond.legacy {
-            await legacySendChat(text, bond: bond)
-            return
-        }
-        let msg = ChatMessage(bondID: bond.id, senderID: myUserID, kind: .text, text: text)
-        do {
-            try await relay.sendChat(msg, bond: bond)
-            messagesByBond[bond.id, default: []].append(msg)
-        } catch { statusLine = "Message failed: \(error.localizedDescription)" }
-    }
-
     private func bond(for id: String?) -> Bond? {
         if let id { return partners.first { $0.id == id }?.bond }
         return activeBond
@@ -248,7 +239,7 @@ final class AppModel: ObservableObject {
             guard index < cloudPartners.count, cloudPartners[index].id == partner.id else { continue }
             history.append(contentsOf: events.touches)
             if !events.messages.isEmpty {
-                messagesByBond[partner.id, default: []].append(contentsOf: events.messages)
+                appendChat(events.messages, bondID: partner.id)
             }
             if let name = events.partnerName { cloudPartners[index].displayName = name }
             if let color = events.partnerColorRGB { cloudPartners[index].colorRGB = color }

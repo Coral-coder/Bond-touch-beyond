@@ -53,6 +53,11 @@ final class LocalStore: ObservableObject {
 
     func photoBackground(for bondID: String) -> Bool { photoBackgrounds[bondID] ?? true }
 
+    /// Original-app partner (bond id) → the iCloud bond that carries chat with them.
+    @Published var chatLinks: [String: String] {
+        didSet { save(chatLinks, for: .chatLinks) }
+    }
+
     /// The user turned on end-to-end encrypted chat with original-app partners on this phone.
     @Published var legacyChatEnabled: Bool {
         didSet { UserDefaults.standard.set(legacyChatEnabled, forKey: Key.legacyChat.rawValue) }
@@ -106,7 +111,7 @@ final class LocalStore: ObservableObject {
         greetings[bondID] = text
     }
 
-    private enum Key: String { case meanings, vibration, dnd, profile, fbEnabled, fbURL, fbToken, greetings, encounters, psPasscode, legacyEmail, legacyRefresh, legacyChat, photoBg, bgSoftness, touchWindow }
+    private enum Key: String { case meanings, vibration, dnd, profile, fbEnabled, fbURL, fbToken, greetings, encounters, psPasscode, legacyEmail, legacyRefresh, legacyChat, photoBg, bgSoftness, touchWindow, chatLinks }
 
     init() {
         self.meanings = LocalStore.load([TouchMeaning].self, for: .meanings) ?? TouchMeaning.starters
@@ -121,6 +126,7 @@ final class LocalStore: ObservableObject {
         self.legacyRefreshToken = UserDefaults.standard.string(forKey: Key.legacyRefresh.rawValue) ?? ""
         self.legacyChatEnabled = UserDefaults.standard.bool(forKey: Key.legacyChat.rawValue)
         self.photoBackgrounds = LocalStore.load([String: Bool].self, for: .photoBg) ?? [:]
+        self.chatLinks = LocalStore.load([String: String].self, for: .chatLinks) ?? [:]
         self.backgroundSoftness = (UserDefaults.standard.object(forKey: Key.bgSoftness.rawValue) as? Double) ?? 18
         self.touchWindowSeconds = (UserDefaults.standard.object(forKey: Key.touchWindow.rawValue) as? Double) ?? 5
         self.greetings = LocalStore.load([String: String].self, for: .greetings) ?? [:]

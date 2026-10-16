@@ -1,179 +1,116 @@
+import CloudKit
 import Foundation
 
-/// End-to-end encrypted chat with original-app partners, through the original backend
-/// (see `BondChat` and docs/CHAT_PROTOCOL.md). Opt-in: turning it on gives this phone its
-/// own Signal identity, so the original app on another phone stops receiving chat.
+/// Chat runs over iCloud for every partner. A partner on the original Bond Touch app is
+/// linked to an iCloud bond (invite them, or link one you already share) and chat with them
+/// goes through it. History (with photos) is kept on this phone.
+///
+/// The original backend's own end-to-end chat (`BondChat`) can't be used: its key exchange
+/// and photos live in Firebase Storage, which only the official app may access (App Check).
 extension AppModel {
-    var legacyChatReady: Bool { legacySignedIn && store.legacyChatEnabled }
+    // MARK: - Which iCloud bond carries chat for a partner
 
-    /// Generates and publishes this phone's chat keys, then opens a session with each partner.
-    func enableLegacyChat() async {
-        legacyChatStatus = "Setting up encrypted chat…"
-        do {
-            let token = try await legacyToken()
-            guard let uid = BondBackend.tokenUID(token) else {
-                throw BondBackend.BackendError(message: "Couldn't read your account id; sign in again.")
-            }
-            try await chat.initKeysIfNeeded(uid: uid, token: token)
-            store.legacyChatEnabled = true
-            await legacyChatSync(token: token)
-            if legacyChatStatus.hasPrefix("Setting up") { legacyChatStatus = "Encrypted chat is on." }
-        } catch {
-            legacyChatStatus = "Chat setup failed: \(error.localizedDescription)"
+    /// The iCloud bond id used for chat with `partnerID`: the partner's own bond for an iCloud
+    /// partner, or the linked bond for an original-app partner.
+    func chatBondID(for partnerID: String?) -> String? {
+        guard let id = partnerID, let partner = partners.first(where: { $0.id == id })
+                ?? cloudPartners.first(where: { $0.id == id }) else { return nil }
+        if !partner.bond.legacy { return partner.id }
+        guard let linked = store.chatLinks[id],
+              cloudPartners.contains(where: { $0.id == linked }) || cloudPending.contains(where: { $0.id == linked })
+        else { return nil }
+        return linked
+    }
+
+    private func chatBond(for partnerID: String?) -> Bond? {
+        guard let id = chatBondID(for: partnerID) else { return nil }
+        return cloudPartners.first { $0.id == id }?.bond ?? cloudPending.first { $0.id == id }
+    }
+
+    /// iCloud bonds that carry chat for an original-app partner (hidden from the partner bar).
+    var chatLinkedCloudIDs: Set<String> { Set(store.chatLinks.values) }
+
+    /// Creates an iCloud bond to invite an original-app partner to chat; it is linked to them
+    /// right away and the share sheet is offered (`pendingShareRoot`).
+    func inviteToICloudChat(_ legacyID: String) async {
+        let before = Set(cloudPending.map(\.id))
+        await createBond()
+        if let new = cloudPending.first(where: { !before.contains($0.id) }) {
+            store.chatLinks[legacyID] = new.id
         }
     }
 
-    func resetLegacyChat() {
-        store.legacyChatEnabled = false
-        chat.store.reset()
-        for key in ChatArchive.load().keys { messagesByBond.removeValue(forKey: key) }
-        ChatArchive.wipe()
-        chatSessionAttempts = [:]
-        legacyChatStatus = ""
+    /// Links an existing iCloud partner as the chat channel for an original-app partner.
+    func linkChat(_ legacyID: String, toCloudBond cloudID: String) {
+        store.chatLinks[legacyID] = cloudID
     }
 
-    private func saveLegacyChat() {
-        let ids = Set(legacyPartners.map(\.id)).union(ChatArchive.load().keys)
-        ChatArchive.save(messagesByBond.filter { ids.contains($0.key) })
+    func unlinkChat(_ legacyID: String) {
+        store.chatLinks.removeValue(forKey: legacyID)
     }
 
-    /// Opens a session with a partner (and announces it) unless one exists. Failures are
-    /// retried at most once a minute.
-    @discardableResult
-    func ensureChatSession(_ bondId: String, token: String, force: Bool = false) async -> Bool {
-        if chat.store.hasSession(bondId) { return true }
-        if !force, let last = chatSessionAttempts[bondId], Date().timeIntervalSince(last) < 60 { return false }
-        chatSessionAttempts[bondId] = Date()
-        guard let account = legacyPartnerAccounts[bondId] else { return false }
-        do {
-            try await chat.createSession(bondId: bondId, partnerUID: account.uid,
-                                         partnerPhone: account.phone, token: token)
-            try await chat.sendNewSession(bondId: bondId, token: token)
-            return true
-        } catch {
-            let name = legacyPartners.first { $0.id == bondId }?.displayName ?? "Partner"
-            legacyChatStatus = "\(name): \(error.localizedDescription)"
-            return false
-        }
+    // MARK: - History
+
+    /// Adds messages (deduplicated by id) and saves the history.
+    func appendChat(_ messages: [ChatMessage], bondID: String) {
+        var list = messagesByBond[bondID] ?? []
+        let known = Set(list.map(\.id))
+        let fresh = messages.filter { !known.contains($0.id) }
+        guard !fresh.isEmpty else { return }
+        list += fresh
+        list.sort { $0.sentAt < $1.sentAt }
+        messagesByBond[bondID] = list
+        ChatArchive.save(messagesByBond)
     }
 
-    /// Pulls new messages (`GET bond/api/v3/bonds/chat`), acknowledges, decrypts and stores
-    /// them, then opens sessions with partners that don't have one yet.
-    func legacyChatSync(token: String) async {
-        guard let uid = BondBackend.tokenUID(token) else { return }
-        if !chatMaintenanceDone {
-            chatMaintenanceDone = true
-            try? await chat.initKeysIfNeeded(uid: uid, token: token)
-            try? await chat.replenishIfNeeded(uid: uid, token: token)
-        }
-        guard let chats = try? await chat.sync(token: token) else { return }
-        var changed = false
-
-        for c in chats {
-            guard let bondId = c["bondId"] as? String else { continue }
-            let msgs = ((c["chatMessages"] as? [[String: Any]]) ?? []).sorted {
-                ((($0["timestamp"] as? NSNumber)?.doubleValue) ?? 0) < ((($1["timestamp"] as? NSNumber)?.doubleValue) ?? 0)
-            }
-            if let newest = msgs.last?["id"] as? String, !newest.isEmpty {
-                await chat.ack(bondId: bondId, messageId: newest, token: token)
-            }
-            var known = Set((messagesByBond[bondId] ?? []).compactMap(\.serverID))
-            let color = legacyPartners.first { $0.id == bondId }?.colorRGB ?? 0xFF4081
-            let account = legacyPartnerAccounts[bondId] ?? (uid: "", phone: "")
-
-            for m in msgs {
-                guard let id = m["id"] as? String, !known.contains(id) else { continue }
-                known.insert(id)
-                let type = (m["type"] as? NSNumber)?.intValue ?? Int((m["type"] as? String) ?? "") ?? 1
-                let content = (m["content"] as? String) ?? ""
-                let ms = (m["timestamp"] as? NSNumber)?.doubleValue ?? Date().timeIntervalSince1970 * 1000
-                let at = Date(timeIntervalSince1970: ms / 1000)
-                let sender = "partner:" + bondId
-
-                switch type {
-                case 1:
-                    guard let data = BondChat.decodeBase64(content),
-                          let plain = try? chat.decrypt(data, bondId: bondId),
-                          let text = String(data: plain, encoding: .utf8) else { continue }
-                    messagesByBond[bondId, default: []].append(
-                        ChatMessage(bondID: bondId, senderID: sender, kind: .text, text: text,
-                                    colorRGB: color, sentAt: at, serverID: id))
-                    changed = true
-                case 6:
-                    // NewSession: decrypting it sets up the partner's new session; the text is discarded.
-                    if let data = BondChat.decodeBase64(content) { _ = try? chat.decrypt(data, bondId: bondId) }
-                case 2, 3:
-                    guard let image = try? await chat.receiveImage(
-                            named: content, secret: type == 3, bondId: bondId,
-                            partnerUID: account.uid, partnerPhone: account.phone, token: token),
-                          let file = ChatArchive.saveImage(image) else { continue }
-                    messagesByBond[bondId, default: []].append(
-                        ChatMessage(bondID: bondId, senderID: sender, kind: .image,
-                                    colorRGB: color, sentAt: at, serverID: id, imageFile: file))
-                    changed = true
-                case 4:
-                    let before = messagesByBond[bondId]?.count ?? 0
-                    messagesByBond[bondId]?.removeAll { $0.serverID == content || $0.serverID == id }
-                    changed = changed || (messagesByBond[bondId]?.count ?? 0) != before
-                default:
-                    continue
-                }
-            }
-        }
-        if changed { saveLegacyChat() }
-
-        for p in legacyPartners where !chat.store.hasSession(p.id) {
-            await ensureChatSession(p.id, token: token)
-        }
+    /// Messages shown for a partner (their chat bond's history).
+    func chatMessages(for partnerID: String?) -> [ChatMessage] {
+        guard let id = chatBondID(for: partnerID) else { return [] }
+        return messagesByBond[id] ?? []
     }
 
     // MARK: - Sending
 
-    func legacySendChat(_ text: String, bond: Bond) async {
-        guard legacyChatReady else { statusLine = "Turn on encrypted chat first."; return }
-        do {
-            let token = try await legacyToken()
-            guard await ensureChatSession(bond.id, token: token, force: true) else { return }
-            let sent = try await chat.sendText(text, bondId: bond.id, token: token)
-            messagesByBond[bond.id, default: []].append(
-                ChatMessage(bondID: bond.id, senderID: ChatMessage.legacySelf, kind: .text, text: text,
-                            colorRGB: store.profile.colorRGB, sentAt: sent.timestamp, serverID: sent.id))
-            saveLegacyChat()
-        } catch {
-            statusLine = "Message failed: \(error.localizedDescription)"
-            legacyChatStatus = statusLine
-        }
-    }
-
-    /// Sends a photo (JPEG) to an original-app partner.
-    func sendChatImage(_ jpeg: Data, toBondID bondID: String? = nil) async {
-        let target = bondID.flatMap { id in partners.first { $0.id == id } } ?? selectedPartner
-        guard let bond = target?.bond, bond.legacy, legacyChatReady else {
-            statusLine = "Photos are available with original-app partners once encrypted chat is on."
+    func sendChatText(_ text: String, toBondID: String? = nil) async {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        guard let bond = chatBond(for: toBondID ?? selectedPartnerID) else {
+            statusLine = "Invite this partner to iCloud chat first."
             return
         }
+        let msg = ChatMessage(bondID: bond.id, senderID: myUserID, kind: .text, text: trimmed,
+                              colorRGB: store.profile.colorRGB)
         do {
-            let token = try await legacyToken()
-            guard let uid = BondBackend.tokenUID(token),
-                  await ensureChatSession(bond.id, token: token, force: true) else { return }
-            let (sent, _) = try await chat.sendImage(jpeg, secret: false, bondId: bond.id, uid: uid, token: token)
-            let file = ChatArchive.saveImage(jpeg)
-            messagesByBond[bond.id, default: []].append(
-                ChatMessage(bondID: bond.id, senderID: ChatMessage.legacySelf, kind: .image,
-                            colorRGB: store.profile.colorRGB, sentAt: sent.timestamp,
-                            serverID: sent.id, imageFile: file))
-            saveLegacyChat()
+            try await relay.sendChat(msg, bond: bond)
+            appendChat([msg], bondID: bond.id)
         } catch {
-            statusLine = "Photo failed: \(error.localizedDescription)"
-            legacyChatStatus = statusLine
+            statusLine = "Message failed: \(error.localizedDescription)"
         }
     }
 
-    /// Marks the newest received message as seen (`PUT …/chatmessages/{id}/seen`).
-    func markLegacyChatSeen(_ bondID: String) async {
-        guard legacyChatReady,
-              let last = messagesByBond[bondID]?.last(where: { $0.senderID != ChatMessage.legacySelf }),
-              let id = last.serverID, let token = try? await legacyToken() else { return }
-        await chat.markSeen(bondId: bondID, messageId: id, token: token)
+    /// Sends a photo (JPEG) over iCloud.
+    func sendChatImage(_ jpeg: Data, toBondID: String? = nil) async {
+        guard let bond = chatBond(for: toBondID ?? selectedPartnerID) else {
+            statusLine = "Invite this partner to iCloud chat first."
+            return
+        }
+        guard let file = ChatArchive.saveImage(jpeg) else { return }
+        let msg = ChatMessage(bondID: bond.id, senderID: myUserID, kind: .image,
+                              colorRGB: store.profile.colorRGB, imageFile: file)
+        do {
+            try await relay.sendChat(msg, bond: bond)
+            appendChat([msg], bondID: bond.id)
+        } catch {
+            statusLine = "Photo failed: \(error.localizedDescription)"
+        }
+    }
+
+    // MARK: - Original-backend encrypted chat (disabled: App Check)
+
+    /// Forgets any keys generated by the disabled original-backend chat.
+    func resetLegacyChat() {
+        store.legacyChatEnabled = false
+        chat.store.reset()
+        legacyChatStatus = ""
     }
 }

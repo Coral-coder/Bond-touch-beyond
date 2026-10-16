@@ -30,10 +30,7 @@ struct DebugView: View {
                         row("ID token present", store.firebaseAuthToken.isEmpty ? "No" : "Yes")
                         row("Bridge enabled", store.useLegacyFirebase ? "Yes" : "No")
                         row("Sync status", model.legacyStatus)
-                        row("Encrypted chat", store.legacyChatEnabled
-                            ? "On · registration \(model.chat.store.state.registrationId) · sessions \(model.chat.store.state.sessions.count)"
-                            : "Off")
-                        if !model.legacyChatStatus.isEmpty { row("Chat status", model.legacyChatStatus) }
+                        row("Chat", "iCloud · \(store.chatLinks.count) original-app partner(s) linked")
                         row("Firebase Storage", FirebaseStorage.appCheckBlocked
                             ? "Blocked by App Check (official app only)" : "No App Check block seen")
                         row("Last sync", model.legacyLastSync?.formatted(date: .omitted, time: .standard) ?? "—")

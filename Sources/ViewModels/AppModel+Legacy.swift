@@ -73,7 +73,6 @@ extension AppModel {
             let token = try await legacyToken()
             let bonds = try await BondBackend.getBonds(bearer: token)
             await apply(bonds, token: token)
-            if store.legacyChatEnabled { await legacyChatSync(token: token) }
             legacyCycle += 1
             // Presence and partner details change slowly; refresh them every few cycles.
             if legacyCycle % 4 == 1 { await legacyRefreshDetails(token: token) }
