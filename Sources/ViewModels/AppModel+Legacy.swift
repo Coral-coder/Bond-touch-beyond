@@ -325,6 +325,18 @@ extension AppModel {
         return store.meanings
     }
 
+    /// A saved meaning whose pattern closely matches this gen-3 touch, if any — so a
+    /// composed touch that's really "Love you" sends in that meaning's colour.
+    func closeMeaning(pattern: [Int], generation: Int) -> TouchMeaning? {
+        guard generation == 3 else { return nil }
+        var best: (TouchMeaning, Double)?
+        for m in currentMeanings where m.touchGeneration == 3 {
+            let score = TouchPattern.similarity(pattern, m.pattern)
+            if score >= 0.85, score > (best?.1 ?? 0) { best = (m, score) }
+        }
+        return best?.0
+    }
+
     func addMeaning(_ meaning: TouchMeaning) async {
         guard let bond = selectedPartner?.bond, bond.legacy else { store.meanings.append(meaning); return }
         do {

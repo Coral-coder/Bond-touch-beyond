@@ -29,16 +29,14 @@ struct HomeView: View {
     var body: some View {
         VStack(spacing: 12) {
             topBar
-            ScrollView(showsIndicators: false) {
-                VStack(alignment: .leading, spacing: 14) {
-                    pairCard
-                    sendTouchButton
-                    meaningChips
-                    feed
-                    Color.clear.frame(height: 96) // room for the floating tab bar
-                }
-                .padding(.horizontal, 18)
+            // Fixed above the feed; only Recent touches scrolls.
+            VStack(alignment: .leading, spacing: 14) {
+                pairCard
+                sendTouchButton
+                meaningChips
             }
+            .padding(.horizontal, 18)
+            feed
         }
         .sheet(isPresented: $showHeart) {
             NavigationStack { HeartView().navigationTitle("Heartbeat") }
@@ -285,26 +283,42 @@ struct HomeView: View {
         return Array(model.history.filter { $0.bondID == id }.suffix(40).reversed())
     }
 
+    /// Recent touches — the only scrolling region on Home. A fixed header, then the list.
     @ViewBuilder private var feed: some View {
         let touches = partnerHistory
-        if !touches.isEmpty {
-            HStack {
-                Text("Recent touches with \(partner?.displayName ?? "partner")")
-                    .font(Theme.font(15, .heavy)).foregroundStyle(Theme.mutedHeadline)
-                Spacer()
-                Label("Swipe to save", systemImage: "hand.draw")
-                    .font(Theme.font(11)).foregroundStyle(Theme.subtitle).labelStyle(.titleAndIcon)
+        VStack(alignment: .leading, spacing: 10) {
+            if partner != nil {
+                HStack {
+                    Text("Recent touches with \(partner?.displayName ?? "partner")")
+                        .font(Theme.font(15, .heavy)).foregroundStyle(Theme.mutedHeadline)
+                    Spacer()
+                    if !touches.isEmpty {
+                        Label("Swipe to save", systemImage: "hand.draw")
+                            .font(Theme.font(11)).foregroundStyle(Theme.subtitle).labelStyle(.titleAndIcon)
+                    }
+                }
+                .padding(.horizontal, 22)
             }
-            .padding(.horizontal, 4).padding(.top, 4)
-            ForEach(touches) { touch in
-                SwipeToSave(onSave: { meaningName = ""; meaningFromTouch = touch }) {
-                    touchRow(touch)
+            if touches.isEmpty {
+                if partner != nil {
+                    Text("No touches yet with \(partner?.displayName ?? "partner"). Send one above.")
+                        .font(Theme.font(13)).foregroundStyle(Theme.subtitle)
+                        .frame(maxWidth: .infinity).padding(.top, 12)
+                }
+                Spacer(minLength: 0)
+            } else {
+                ScrollView(showsIndicators: false) {
+                    VStack(alignment: .leading, spacing: 14) {
+                        ForEach(touches) { touch in
+                            SwipeToSave(onSave: { meaningName = ""; meaningFromTouch = touch }) {
+                                touchRow(touch)
+                            }
+                        }
+                        Color.clear.frame(height: 96) // room for the floating tab bar
+                    }
+                    .padding(.horizontal, 18)
                 }
             }
-        } else if partner != nil {
-            Text("No touches yet with \(partner?.displayName ?? "partner"). Send one above.")
-                .font(Theme.font(13)).foregroundStyle(Theme.subtitle)
-                .frame(maxWidth: .infinity).padding(.top, 12)
         }
     }
 

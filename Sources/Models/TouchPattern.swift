@@ -56,6 +56,28 @@ enum TouchPattern {
         return out
     }
 
+    /// How alike two generation-3 touches are, 0…1: both are resampled to a common length
+    /// and compared position by position (a finger within one bar position counts as a
+    /// match, as does "no finger" on both). Used to spot a touch that matches a saved
+    /// meaning so it sends in that meaning's colour.
+    static func similarity(_ a: [Int], _ b: [Int]) -> Double {
+        let ta = trimmed(a), tb = trimmed(b)
+        guard !ta.isEmpty, !tb.isEmpty else { return 0 }
+        let n = 40
+        func resample(_ s: [Int]) -> [Int] {
+            guard s.count > 1 else { return Array(repeating: s[0], count: n) }
+            return (0..<n).map { i in s[min(s.count - 1, Int((Double(i) / Double(n - 1)) * Double(s.count - 1) + 0.5))] }
+        }
+        let ra = resample(ta), rb = resample(tb)
+        var match = 0
+        for i in 0..<n {
+            let fa = fingers(in: ra[i]).first, fb = fingers(in: rb[i]).first
+            if fa == nil, fb == nil { match += 1 }
+            else if let fa, let fb, abs(fa - fb) <= 1 { match += 1 }
+        }
+        return Double(match) / Double(n)
+    }
+
     /// The finger positions in one sample (empty when no finger is down).
     static func fingers(in sample: Int) -> [Int] {
         let lo = sample & 0x0F, hi = (sample >> 4) & 0x0F

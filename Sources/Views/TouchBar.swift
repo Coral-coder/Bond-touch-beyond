@@ -304,6 +304,9 @@ struct ComposeTouchView: View {
     @StateObject private var recorder = TouchBarRecorder()
     @State private var startColor = Color(rgbInt: 0xFF2E74)
     @State private var endColor = Color(rgbInt: 0xBE5BFF)
+    /// False until the user picks a colour: a plain touch sends in your own colour (or a
+    /// matched meaning's), not a fixed default.
+    @State private var colorCustomized = false
     @State private var lastTouch: [Int] = []
     @State private var saving = false
     @State private var meaningName = ""
@@ -351,8 +354,12 @@ struct ComposeTouchView: View {
                 LinearGradient(colors: [startColor, endColor], startPoint: .leading, endPoint: .trailing)
                     .frame(height: 22).clipShape(Capsule())
                     .overlay(Capsule().stroke(.white.opacity(0.6), lineWidth: 2))
-                ColorPicker("Start colour", selection: $startColor).labelsHidden()
-                ColorPicker("End colour", selection: $endColor).labelsHidden()
+                // The custom setter marks the colour customized only on a real picker edit,
+                // not when onAppear sets the default (which assigns the @State directly).
+                ColorPicker("Start colour", selection: Binding(
+                    get: { startColor }, set: { startColor = $0; colorCustomized = true })).labelsHidden()
+                ColorPicker("End colour", selection: Binding(
+                    get: { endColor }, set: { endColor = $0; colorCustomized = true })).labelsHidden()
             }
             .padding(14).glass(cornerRadius: 22)
 
@@ -368,14 +375,26 @@ struct ComposeTouchView: View {
         .padding(.horizontal, 18).padding(.top, 12).padding(.bottom, 20)
         .background(AppBackground())
         .onAppear {
+            // Default to your own colour (single colour), not a fixed pink/violet.
             startColor = Color(rgbInt: store.profile.colorRGB)
+            endColor = Color(rgbInt: store.profile.colorRGB)
             recorder.windowSeconds = store.touchWindowSeconds
             recorder.onFinish = { samples in
                 lastTouch = samples
                 if mode == .createMeaning { saving = true; return }
+                // Regular touches send in your colour, unless you picked a colour, or the
+                // touch closely matches a saved meaning (then its colour).
+                let colors: (Int, Int)
+                if colorCustomized {
+                    colors = (startColor.rgbInt, endColor.rgbInt)
+                } else if let m = model.closeMeaning(pattern: samples, generation: 3) {
+                    colors = (m.colorRGB, m.endColorRGB)
+                } else {
+                    colors = (store.profile.colorRGB, store.profile.colorRGB)
+                }
                 Task {
                     await model.sendTouch(pattern: samples, generation: 3,
-                                          colorRGB: startColor.rgbInt, endColorRGB: endColor.rgbInt)
+                                          colorRGB: colors.0, endColorRGB: colors.1)
                 }
             }
         }
