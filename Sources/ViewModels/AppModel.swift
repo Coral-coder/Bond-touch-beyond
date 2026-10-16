@@ -28,6 +28,14 @@ final class AppModel: ObservableObject {
     var legacyCycle = 0
     var legacyLastLocationPush = Date.distantPast
 
+    // Encrypted chat with original-app partners (see AppModel+Chat).
+    let chat = BondChat()
+    /// Partner Firebase UID + legacy phone number per bond, for their key files and photos.
+    var legacyPartnerAccounts: [String: (uid: String, phone: String)] = [:]
+    var chatSessionAttempts: [String: Date] = [:]
+    var chatMaintenanceDone = false
+    @Published var legacyChatStatus = ""
+
     /// Every partner — iCloud and original backend.
     var partners: [Partner] { cloudPartners + legacyPartners }
     /// Every invite the user sent that has not been accepted yet.
@@ -55,6 +63,7 @@ final class AppModel: ObservableObject {
     var activeBond: Bond? { selectedPartner?.bond }
 
     init() {
+        messagesByBond = ChatArchive.load()
         bracelet.$state.receive(on: DispatchQueue.main).assign(to: &$braceletState)
         bracelet.$heartbeatActive.receive(on: DispatchQueue.main).assign(to: &$partnerHeartbeatActive)
         heart.onBPM = { [weak self] bpm in Task { @MainActor in await self?.relayHeartbeat(bpm) } }
@@ -189,7 +198,7 @@ final class AppModel: ObservableObject {
     func sendChatText(_ text: String, toBondID: String? = nil) async {
         guard let bond = bond(for: toBondID), !text.trimmingCharacters(in: .whitespaces).isEmpty else { return }
         if bond.legacy {
-            statusLine = Self.legacyChatUnsupported
+            await legacySendChat(text, bond: bond)
             return
         }
         let msg = ChatMessage(bondID: bond.id, senderID: myUserID, kind: .text, text: text)

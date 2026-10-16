@@ -38,6 +38,10 @@ final class LocalStore: ObservableObject {
     @Published var legacyRefreshToken: String {
         didSet { UserDefaults.standard.set(legacyRefreshToken, forKey: Key.legacyRefresh.rawValue) }
     }
+    /// The user turned on end-to-end encrypted chat with original-app partners on this phone.
+    @Published var legacyChatEnabled: Bool {
+        didSet { UserDefaults.standard.set(legacyChatEnabled, forKey: Key.legacyChat.rawValue) }
+    }
     /// Per-partner home greeting ("Hello, this is us"), keyed by bond id.
     @Published var greetings: [String: String] {
         didSet { save(greetings, for: .greetings) }
@@ -87,7 +91,7 @@ final class LocalStore: ObservableObject {
         greetings[bondID] = text
     }
 
-    private enum Key: String { case meanings, vibration, dnd, profile, fbEnabled, fbURL, fbToken, greetings, encounters, psPasscode, legacyEmail, legacyRefresh }
+    private enum Key: String { case meanings, vibration, dnd, profile, fbEnabled, fbURL, fbToken, greetings, encounters, psPasscode, legacyEmail, legacyRefresh, legacyChat }
 
     init() {
         self.meanings = LocalStore.load([TouchMeaning].self, for: .meanings) ?? TouchMeaning.starters
@@ -100,6 +104,7 @@ final class LocalStore: ObservableObject {
         self.firebaseAuthToken = UserDefaults.standard.string(forKey: Key.fbToken.rawValue) ?? ""
         self.legacyEmail = UserDefaults.standard.string(forKey: Key.legacyEmail.rawValue) ?? ""
         self.legacyRefreshToken = UserDefaults.standard.string(forKey: Key.legacyRefresh.rawValue) ?? ""
+        self.legacyChatEnabled = UserDefaults.standard.bool(forKey: Key.legacyChat.rawValue)
         self.greetings = LocalStore.load([String: String].self, for: .greetings) ?? [:]
         self.encounters = LocalStore.load([String: Date].self, for: .encounters) ?? [:]
         self.privateSpacePasscodeHash = UserDefaults.standard.string(forKey: Key.psPasscode.rawValue)

@@ -50,6 +50,17 @@ extension BondBackend {
         return Date(timeIntervalSince1970: exp)
     }
 
+    /// The Firebase UID (`user_id` / `sub` claim) of an ID token.
+    static func tokenUID(_ jwt: String) -> String? {
+        let parts = jwt.split(separator: ".")
+        guard parts.count >= 2 else { return nil }
+        var b64 = String(parts[1]).replacingOccurrences(of: "-", with: "+").replacingOccurrences(of: "_", with: "/")
+        while b64.count % 4 != 0 { b64 += "=" }
+        guard let data = Data(base64Encoded: b64),
+              let j = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else { return nil }
+        return (j["user_id"] as? String) ?? (j["sub"] as? String)
+    }
+
     // MARK: - JSON helpers
 
     private static func call(_ path: String, _ method: String, bearer: String,

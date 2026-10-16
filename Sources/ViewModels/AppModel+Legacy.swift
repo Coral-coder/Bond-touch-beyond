@@ -9,9 +9,6 @@ import Foundation
 /// original app is woken by FCM pushes sent to its own app id, which this app cannot
 /// receive, so it polls instead while in the foreground.
 extension AppModel {
-    static let legacyChatUnsupported =
-        "Chat with a partner on the original app is end-to-end encrypted with the Signal protocol, which isn't supported yet. Touches, Touch Language, greeting, encounters and presence are synced."
-
     private static let pollSeconds: UInt64 = 4
     private static let seenTouchesKey = "LegacySeenTouchIDs"
 
@@ -59,6 +56,7 @@ extension AppModel {
         legacyPrimed = false
         legacyStatus = "Not signed in"
         UserDefaults.standard.removeObject(forKey: Self.seenTouchesKey)
+        resetLegacyChat()
         if let id = selectedPartnerID, !partners.contains(where: { $0.id == id }) {
             selectedPartnerID = partners.first?.id
         }
@@ -75,6 +73,7 @@ extension AppModel {
             let token = try await legacyToken()
             let bonds = try await BondBackend.getBonds(bearer: token)
             await apply(bonds, token: token)
+            if store.legacyChatEnabled { await legacyChatSync(token: token) }
             legacyCycle += 1
             // Presence and partner details change slowly; refresh them every few cycles.
             if legacyCycle % 4 == 1 { await legacyRefreshDetails(token: token) }
@@ -103,6 +102,8 @@ extension AppModel {
             let name = ((profile["name"] as? String).flatMap { $0.isEmpty ? nil : $0 }) ?? email
             let bond = Bond(id: id, partnerName: name.isEmpty ? "Partner" : name, isOwner: false,
                             pending: status != "BONDED", legacy: true)
+            legacyPartnerAccounts[id] = (uid: (b["firebaseId"] as? String) ?? "",
+                                         phone: (b["phoneNumber"] as? String) ?? "")
 
             switch status {
             case "REQUESTED": pending.append(bond); continue
