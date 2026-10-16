@@ -153,6 +153,14 @@ final class CloudRelay {
         return record
     }
 
+    /// Writes a record whose name is reused across updates (presence, heartbeat, profile —
+    /// one per sender, "latest wins"). A plain `save` of a freshly built record with an
+    /// existing name throws `serverRecordChanged`; `.allKeys` overwrites the server copy, so
+    /// repeated updates (every foreground, every heartbeat) actually land.
+    private func upsert(_ record: CKRecord) async throws {
+        _ = try await db.modifyRecords(saving: [record], deleting: [], savePolicy: .allKeys, atomically: true)
+    }
+
     func sendTouch(_ touch: TouchMessage, bond: Bond) async throws {
         let body = TouchPayload(pattern: touch.pattern, generation: touch.generation,
                                 colorRGB: touch.colorRGB, endColorRGB: touch.endColorRGB)
@@ -164,8 +172,8 @@ final class CloudRelay {
 
     func sendHeartbeat(bpm: Int, bond: Bond, senderID: String) async throws {
         guard let payload = BondCrypto.seal(["bpm": bpm], code: bond.id) else { return }
-        _ = try await db.save(newRecord(Self.recordTypeHeartbeat, name: "hb-\(bond.id)-\(senderID)",
-                                        code: bond.id, senderID: senderID, payload: payload))
+        try await upsert(newRecord(Self.recordTypeHeartbeat, name: "hb-\(bond.id)-\(senderID)",
+                                   code: bond.id, senderID: senderID, payload: payload))
     }
 
     func sendChat(_ message: ChatMessage, bond: Bond) async throws {
@@ -184,16 +192,16 @@ final class CloudRelay {
                       latitude: Double? = nil, longitude: Double? = nil) async throws {
         let body = PresencePayload(online: online, lat: latitude, lng: longitude)
         guard let payload = BondCrypto.seal(body, code: bond.id) else { return }
-        _ = try await db.save(newRecord(Self.recordTypePresence, name: "pr-\(bond.id)-\(senderID)",
-                                        code: bond.id, senderID: senderID, payload: payload))
+        try await upsert(newRecord(Self.recordTypePresence, name: "pr-\(bond.id)-\(senderID)",
+                                   code: bond.id, senderID: senderID, payload: payload))
     }
 
     func sendProfile(name: String, colorRGB: Int, photo: URL?, bond: Bond, senderID: String) async throws {
         let photoData = photo.flatMap { try? Data(contentsOf: $0) }
         let body = ProfilePayload(name: name, colorRGB: colorRGB, photo: photoData)
         guard let payload = BondCrypto.seal(body, code: bond.id) else { return }
-        _ = try await db.save(newRecord(Self.recordTypeProfile, name: "pf-\(bond.id)-\(senderID)",
-                                        code: bond.id, senderID: senderID, payload: payload))
+        try await upsert(newRecord(Self.recordTypeProfile, name: "pf-\(bond.id)-\(senderID)",
+                                   code: bond.id, senderID: senderID, payload: payload))
     }
 
     // MARK: - Receiving (decrypt)
