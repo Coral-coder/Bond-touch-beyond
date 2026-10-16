@@ -20,8 +20,18 @@ final class LocalStore: ObservableObject {
     @Published var profile: UserProfile {
         didSet { save(profile, for: .profile) }
     }
+    /// Opt in to the legacy Firebase backend (experimental; see SettingsView footnote).
+    @Published var useLegacyFirebase: Bool {
+        didSet { UserDefaults.standard.set(useLegacyFirebase, forKey: Key.fbEnabled.rawValue) }
+    }
+    @Published var firebaseDatabaseURL: String {
+        didSet { UserDefaults.standard.set(firebaseDatabaseURL, forKey: Key.fbURL.rawValue) }
+    }
+    @Published var firebaseAuthToken: String {
+        didSet { UserDefaults.standard.set(firebaseAuthToken, forKey: Key.fbToken.rawValue) }
+    }
 
-    private enum Key: String { case meanings, vibration, dnd, profile }
+    private enum Key: String { case meanings, vibration, dnd, profile, fbEnabled, fbURL, fbToken }
 
     init() {
         self.meanings = LocalStore.load([TouchMeaning].self, for: .meanings) ?? TouchMeaning.starters
@@ -29,6 +39,15 @@ final class LocalStore: ObservableObject {
         self.vibrationStrength = v ?? 200
         self.doNotDisturb = UserDefaults.standard.bool(forKey: Key.dnd.rawValue)
         self.profile = LocalStore.load(UserProfile.self, for: .profile) ?? .empty
+        self.useLegacyFirebase = UserDefaults.standard.bool(forKey: Key.fbEnabled.rawValue)
+        self.firebaseDatabaseURL = UserDefaults.standard.string(forKey: Key.fbURL.rawValue) ?? ""
+        self.firebaseAuthToken = UserDefaults.standard.string(forKey: Key.fbToken.rawValue) ?? ""
+    }
+
+    var legacyFirebase: LegacyFirebaseClient? {
+        guard useLegacyFirebase, !firebaseDatabaseURL.isEmpty else { return nil }
+        return LegacyFirebaseClient(databaseURL: firebaseDatabaseURL,
+                                    authToken: firebaseAuthToken.isEmpty ? nil : firebaseAuthToken)
     }
 
     private func save<T: Encodable>(_ value: T, for key: Key) {

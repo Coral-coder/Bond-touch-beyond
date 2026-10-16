@@ -35,7 +35,7 @@ struct PairingView: View {
         .padding()
         .sheet(isPresented: $showShare) {
             if let share = model.pendingShare {
-                CloudShareSheet(share: share, container: CKContainer(identifier: "iCloud.com.coralcoder.bondtouchbeyond"))
+                CloudShareSheet(share: share, container: CKContainer(identifier: AppConfig.cloudContainerID))
             }
         }
     }

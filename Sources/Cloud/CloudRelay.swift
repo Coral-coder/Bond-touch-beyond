@@ -35,7 +35,7 @@ final class CloudRelay {
     /// Server change tokens per zone, persisted so we only fetch new touches.
     private var changeTokens: [CKRecordZone.ID: CKServerChangeToken] = [:]
 
-    init(containerIdentifier: String = "iCloud.com.coralcoder.bondtouchbeyond") {
+    init(containerIdentifier: String = AppConfig.cloudContainerID) {
         self.container = CKContainer(identifier: containerIdentifier)
     }
 

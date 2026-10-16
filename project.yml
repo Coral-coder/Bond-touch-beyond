@@ -1,6 +1,6 @@
 name: BondTouchBeyond
 options:
-  bundleIdPrefix: com.coralcoder.bondtouchbeyond
+  bundleIdPrefix: com.lightwave
   deploymentTarget:
     iOS: "16.0"
   createIntermediateGroups: true
@@ -45,4 +45,4 @@ targets:
         com.apple.developer.healthkit.access: []
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.coralcoder.bondtouchbeyond
+        PRODUCT_BUNDLE_IDENTIFIER: com.lightwave.beyond
