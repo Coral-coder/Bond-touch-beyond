@@ -19,6 +19,7 @@ final class BraceletManager: NSObject, ObservableObject {
     /// generation (3 = Bond Touch More position samples, 2 = on/off milliseconds).
     var onLocalTap: (([Int], Int) -> Void)?
     private var v3Recording = BondGATT.V3Recording()
+    private var v3FeaturesSent = false
 
     private var central: CBCentralManager!
     private var bracelet: CBPeripheral?
@@ -120,6 +121,14 @@ final class BraceletManager: NSObject, ObservableObject {
         heartbeatBPM = clamped
         heartbeatActive = true
         let interval = 60.0 / Double(clamped)
+        if gen == .v3 {
+            // The Bond Touch More plays the whole heartbeat itself, light + vibration in sync.
+            enqueue(BondGATT.v3Heartbeat(bpm: clamped, seconds: seconds, rgb: colorRGB))
+            let end = Timer(timeInterval: seconds, repeats: false) { [weak self] _ in self?.stopHeartbeat() }
+            RunLoop.main.add(end, forMode: .common)
+            heartbeatWatchdog = end
+            return
+        }
         if let gen { enqueue(BondGATT.heartbeatPulse(gen, rgb: colorRGB)) }
         let timer = Timer(timeInterval: interval, repeats: true) { [weak self] _ in
             guard let self, let gen = self.gen else { return }
@@ -178,7 +187,12 @@ final class BraceletManager: NSObject, ObservableObject {
         switch signal {
         case .waitingToken: sendToken()
         case .waitingAuid:  sendAuid()
-        case .connected:    state = .connected
+        case .connected:
+            state = .connected
+            if gen == .v3, !v3FeaturesSent {
+                v3FeaturesSent = true
+                enqueue(BondGATT.v3ConnectedWrites)
+            }
         case .other:        break
         }
     }
@@ -279,6 +293,7 @@ extension BraceletManager: CBCentralManagerDelegate {
 
     private func resetConnectionState() {
         gen = nil
+        v3FeaturesSent = false
         chars.removeAll()
         hasV3Service = false
         incoming = []
@@ -309,9 +324,11 @@ extension BraceletManager: CBPeripheralDelegate {
                 peripheral.setNotifyValue(true, for: ffb2)
             }
             if gen == nil, chars[BondGATT.ffb1] != nil {
+                // The original app sends nothing here: it answers the bracelet's own state
+                // notifications (waiting for token → token, waiting for AUID → AUID,
+                // connected → feature enables).
                 gen = .v3
                 state = .connected
-                sendToken(); sendAuid()
             }
         } else if gen == nil, let apiChar = chars[BondGATT.charApiVer],
                   apiChar.properties.contains(.read) {
@@ -348,8 +365,8 @@ extension BraceletManager: CBPeripheralDelegate {
         if let stateChar = chars[BondGATT.charState] { peripheral.setNotifyValue(true, for: stateChar) }
         if let eventChar = chars[BondGATT.charEvent] { peripheral.setNotifyValue(true, for: eventChar) }
         state = .connected
-        // Proactively begin the handshake; the bracelet also prompts via its state channel.
-        sendToken(); sendAuid()
+        // Like the original app, the token and AUID are sent only when the bracelet asks
+        // for them on its state channel (handled in handle(_ signal:)).
     }
 
     func peripheral(_ peripheral: CBPeripheral, didWriteValueFor characteristic: CBCharacteristic,

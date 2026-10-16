@@ -177,8 +177,12 @@ strength. Valid strengths: `{28, 33, 40, 58, 60, 73, 80, 88, 100}`; valid levels
 
 - All app commands written to FFB1 `d3c0ffb1`; touch patterns written to FFB2
   `d3c0ffb2`; both WRITE_NO_RESPONSE.
-- **FFB1 write frame**: `[prefix:u8, cmd:u8, ...args]`. prefix `1` = normal app command,
-  `3` = token ("12345678"), `7` = AUID (device id byte).
+- **FFB1 write frame**: `[prefix:u8, cmd:u8, ...args]`, written at its exact length (not
+  padded). prefix `1` = normal app command, `3` = token: `[3] + "12345678"` (9 bytes), sent
+  only after the bracelet reports `WAITING_TOKEN` (130); `7` = AUID: `[7, id]` — a **single
+  byte**, sent only after `WAITING_AUID` (131). On `CONNECTED` (133) the original app sends
+  `[1,0x19] [1,0x1B] [1,0x41] [1,0x42] [1,0x49,1] [1,0x1C]` once. (Bond Touch Beyond earlier
+  sent the token and a 4-byte AUID padded to 20 bytes unprompted on every connect; fixed.)
   - cmd `0x4B` (75) LED color: `[1, 0x4B, 0x00, displayLed:u8, r:u8, g:u8, b:u8]`
     (DisplayLed ALL = 0, LED_0 = 1); clear with `[1, 0x4B, 0x01]`.
   - cmd `0x48` (72) vibration: `[1, 0x48, 0x00, level, balance, 3]`; variant
