@@ -129,10 +129,20 @@ extension BondBackend {
         _ = try await call("bond/api/v3/bonds/\(id)/message", "PUT", bearer: bearer, body: ["message": message])
     }
 
-    /// `PUT bond/api/v3/bonds/{id}/encounter {timestamp}` — next encounter (ms; 0 clears).
+    /// `PUT bond/api/v3/bonds/{id}/encounter {timestamp}` — next encounter, in Unix SECONDS
+    /// (the original sends `date.getTime() / 1000`); 0 clears.
     static func updateEncounter(_ id: String, date: Date?, bearer: String) async throws {
-        let ms = date.map { Int64($0.timeIntervalSince1970 * 1000) } ?? 0
-        _ = try await call("bond/api/v3/bonds/\(id)/encounter", "PUT", bearer: bearer, body: ["timestamp": ms])
+        let seconds = date.map { Int64($0.timeIntervalSince1970) } ?? 0
+        _ = try await call("bond/api/v3/bonds/\(id)/encounter", "PUT", bearer: bearer, body: ["timestamp": seconds])
+    }
+
+    /// `encounterDateTimestamp` from a bond (Unix seconds). Earlier builds of this app wrote
+    /// milliseconds by mistake; a value that large is read as milliseconds and flagged so it
+    /// can be rewritten correctly.
+    static func encounterDate(fromTimestamp value: Double) -> (date: Date?, wrongUnits: Bool) {
+        guard value > 0 else { return (nil, false) }
+        if value > 100_000_000_000 { return (Date(timeIntervalSince1970: value / 1000), true) }
+        return (Date(timeIntervalSince1970: value), false)
     }
 
     // MARK: - Touches
@@ -231,6 +241,19 @@ extension BondBackend {
         profile["version"] = ((profile["version"] as? NSNumber)?.int64Value ?? 0) + 1
         user["profile"] = profile
         user.removeValue(forKey: "bypassFlags")   // not part of the update body
+        _ = try await call("bond/api/v3/user", "PUT", bearer: bearer, body: user)
+    }
+
+    /// Marks the profile as having (or not having) a photo and bumps its version, as the
+    /// original app does after uploading `images/<uid>/profile`. Only call after the upload
+    /// succeeded, or the official app would show a broken photo.
+    static func setProfileHasImage(_ hasImage: Bool, bearer: String) async throws {
+        guard var user = try await call("bond/api/v3/user", "GET", bearer: bearer) as? [String: Any] else { return }
+        var profile = (user["profile"] as? [String: Any]) ?? [:]
+        profile["hasImage"] = hasImage
+        profile["version"] = ((profile["version"] as? NSNumber)?.int64Value ?? 0) + 1
+        user["profile"] = profile
+        user.removeValue(forKey: "bypassFlags")
         _ = try await call("bond/api/v3/user", "PUT", bearer: bearer, body: user)
     }
 }

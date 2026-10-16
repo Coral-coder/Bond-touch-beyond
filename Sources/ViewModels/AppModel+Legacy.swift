@@ -137,15 +137,25 @@ extension AppModel {
             if let msg = b["dashboardMessage"] as? String, !msg.isEmpty, store.greetings[id] != msg {
                 store.greetings[id] = msg
             }
-            if let ms = (b["encounterDateTimestamp"] as? NSNumber)?.doubleValue {
-                let date: Date? = ms > 0 ? Date(timeIntervalSince1970: ms / 1000) : nil
+            if let raw = (b["encounterDateTimestamp"] as? NSNumber)?.doubleValue {
+                let (date, wrongUnits) = BondBackend.encounterDate(fromTimestamp: raw)
                 if store.encounters[id] != date { store.setNextMeeting(date, for: id) }
+                // Repair a date an earlier build stored in milliseconds (the original app
+                // showed it as millions of days away).
+                if wrongUnits, let date {
+                    Task { try? await BondBackend.updateEncounter(id, date: date, bearer: token) }
+                }
             }
 
             // Received touches. New ones go to the history, play on the bracelet (except on
             // the very first sync after login, which only records what is already there),
             // and are acknowledged so the sender sees them delivered.
-            for t in (b["touches"] as? [[String: Any]]) ?? [] {
+            let incomingTouches = (b["touches"] as? [[String: Any]]) ?? []
+            if !firstSync, !incomingTouches.filter({ !seen.contains(($0["id"] as? String) ?? "") }).isEmpty {
+                let n = incomingTouches.filter { !seen.contains(($0["id"] as? String) ?? "") }.count
+                NetLog.shared.log(.recv, "Received \(n) touch(es) ← \(bond.partnerName) (original Bond API)")
+            }
+            for t in incomingTouches {
                 guard let touchId = t["id"] as? String, !seen.contains(touchId) else { continue }
                 seen.insert(touchId)
                 let msg = (t["message"] as? [String: Any]) ?? [:]

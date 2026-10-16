@@ -57,6 +57,11 @@ targets:
       - package: NordicDFU
     sources:
       - path: Sources
+      # Official bracelet firmware (see Firmware/README.md), for automatic DFU recovery.
+      - path: Firmware
+        buildPhase: resources
+        excludes:
+          - README.md
     info:
       path: Sources/App/Info.plist
       properties:
@@ -110,6 +115,9 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: $(APP_BUNDLE_ID)
+        # The original icon stays selectable in Settings → App icon.
+        ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES: AppIconClassic
+        ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS: YES
         # LibSignalClient imports the SignalFfi C module; the app must see it too, and the
         # final link pulls in the prebuilt Rust core for the SDK/arch being built.
         SWIFT_INCLUDE_PATHS: $(SRCROOT)/ThirdParty/LibSignalClient/SignalFfi

@@ -91,7 +91,8 @@ struct ChatView: View {
                         if let id = model.selectedPartnerID { model.linkChat(id, toCloudBond: p.id) }
                     } label: {
                         HStack(spacing: 10) {
-                            AvatarRing(name: p.displayName, ringColor: Color(rgbInt: p.colorRGB), size: 34, ringWidth: 0)
+                            AvatarRing(name: p.displayName, ringColor: Color(rgbInt: p.colorRGB), size: 34,
+                                       photo: model.photo(forBond: p.id), ringWidth: 0)
                             Text(p.displayName).font(Theme.font(15, .bold)).foregroundStyle(.white)
                             Spacer()
                             Image(systemName: "link").foregroundStyle(Theme.accent)

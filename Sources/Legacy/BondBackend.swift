@@ -114,12 +114,24 @@ enum BondBackend {
         if let bearer { req.setValue("Bearer " + bearer, forHTTPHeaderField: "Authorization") }
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         if let body { req.httpBody = try JSONSerialization.data(withJSONObject: body) }
-        let (data, resp) = try await URLSession.shared.data(for: req)
-        if let http = resp as? HTTPURLResponse, http.statusCode >= 400 {
-            let detail = String(data: data, encoding: .utf8) ?? ""
-            throw BackendError(message: "HTTP \(http.statusCode) at /\(path): \(detail)")
+        // Touch sends are the ones worth tracing; log their result to the debug panel.
+        let isTouch = path.contains("/touches")
+        do {
+            let (data, resp) = try await URLSession.shared.data(for: req)
+            let code = (resp as? HTTPURLResponse)?.statusCode ?? 0
+            if code >= 400 {
+                let detail = String(data: data, encoding: .utf8) ?? ""
+                if isTouch { NetLog.shared.record(.fail, "Touch → Bond API \(method) /\(path)", "HTTP \(code): \(detail)") }
+                throw BackendError(message: "HTTP \(code) at /\(path): \(detail)")
+            }
+            if isTouch { NetLog.shared.record(.ok, "Touch → Bond API \(method) /\(path)", "HTTP \(code) OK") }
+            return data
+        } catch let error as BackendError {
+            throw error
+        } catch {
+            if isTouch { NetLog.shared.record(.fail, "Touch → Bond API \(method) /\(path)", error.localizedDescription) }
+            throw error
         }
-        return data
     }
 
     static func requestPin(email: String, bearer: String? = nil) async throws {

@@ -43,6 +43,8 @@ final class AppModel: ObservableObject {
     @Published var partnerPhotos: [String: UIImage] = [:]
     @Published var myPhoto: UIImage?
     var photoRequests: Set<String> = []
+    /// Cloud bonds this device has already pushed its profile (incl. photo) to this session.
+    var profileSyncedBondIDs: Set<String> = []
     /// The Apple Watch link (touch bar + meanings on the watch).
     let watch = WatchBridge()
     /// Repairs a bracelet stuck in firmware-update mode.
@@ -66,7 +68,8 @@ final class AppModel: ObservableObject {
     @Published var pendingShareRoot: CKRecord?
     @Published var braceletState: BraceletState = .disconnected
     @Published var partnerHeartbeatActive = false
-    @Published var sharingHeartbeat = false
+    /// True for the 10 s while the user's own heartbeat is being sent.
+    @Published var sendingHeartbeat = false
     @Published private(set) var myUserID: String = ""
     @Published private(set) var ready = false
 
@@ -85,7 +88,6 @@ final class AppModel: ObservableObject {
         messagesByBond = ChatArchive.load()
         bracelet.$state.receive(on: DispatchQueue.main).assign(to: &$braceletState)
         bracelet.$heartbeatActive.receive(on: DispatchQueue.main).assign(to: &$partnerHeartbeatActive)
-        heart.onBPM = { [weak self] bpm in Task { @MainActor in await self?.relayHeartbeat(bpm) } }
         location.onUpdate = { [weak self] coord in Task { @MainActor in await self?.broadcastLocation(coord) } }
         // A tap pattern made on the user's own bracelet is a touch for the selected partner.
         bracelet.onLocalTap = { [weak self] pattern, generation in
@@ -134,6 +136,7 @@ final class AppModel: ObservableObject {
     // MARK: - Lifecycle
 
     func bootstrap() async {
+        loadMyPhoto()
         bracelet.startScanning()
         // The original backend works without iCloud, so start it first and independently.
         startLegacySync()
@@ -145,6 +148,7 @@ final class AppModel: ObservableObject {
             myUserID = try await relay.currentUserID()
             let bonds = try await relay.loadBonds()
             cloudPartners = bonds.filter { !$0.pending }.map { Partner(bond: $0) }
+            cloudPartners.forEach { loadCachedPhoto(bondID: $0.id) }
             cloudPending = bonds.filter { $0.pending }
             if selectedPartnerID == nil { selectedPartnerID = partners.first?.id }
             ready = true
@@ -232,14 +236,21 @@ final class AppModel: ObservableObject {
         defer { UIApplication.shared.endBackgroundTask(bg) }
         let touch = TouchMessage(senderID: myUserID, pattern: pattern, generation: generation,
                                  colorRGB: colorRGB, endColorRGB: endColorRGB)
+        let route = bond.legacy ? "original Bond API" : "iCloud"
+        NetLog.shared.log(.send, "Send touch → \(bond.partnerName) (\(route))",
+                          "gen \(generation), \(pattern.count) samples")
         do {
             if bond.legacy {
                 try await legacySendTouch(touch, bond: bond)
             } else {
                 try await relay.sendTouch(touch, bond: bond)
+                NetLog.shared.log(.ok, "Touch → iCloud accepted", "\(bond.partnerName)")
             }
             history.append(touch)
-        } catch { statusLine = "Send failed: \(error.localizedDescription)" }
+        } catch {
+            statusLine = "Send failed: \(error.localizedDescription)"
+            NetLog.shared.log(.fail, "Send touch failed (\(route))", error.localizedDescription)
+        }
     }
 
     private func bond(for id: String?) -> Bond? {
@@ -254,7 +265,8 @@ final class AppModel: ObservableObject {
         guard p.isComplete else { return }
         legacyPublishProfile(name: p.name, colorRGB: p.colorRGB)
         for partner in cloudPartners {
-            try? await relay.sendProfile(name: p.name, colorRGB: p.colorRGB, bond: partner.bond, senderID: myUserID)
+            try? await relay.sendProfile(name: p.name, colorRGB: p.colorRGB, photo: myPhotoFileURL,
+                                         bond: partner.bond, senderID: myUserID)
         }
     }
 
@@ -264,16 +276,31 @@ final class AppModel: ObservableObject {
 
     func refreshAll() async {
         defer { autoLinkPartners() }
+        // Make sure every cloud partner — including one who just accepted an invite — has
+        // this device's current profile (name, colour, photo) at least once per launch.
+        let unsent = cloudPartners.filter { !profileSyncedBondIDs.contains($0.id) }
+        if !unsent.isEmpty {
+            let p = store.profile
+            for partner in unsent {
+                try? await relay.sendProfile(name: p.name, colorRGB: p.colorRGB, photo: myPhotoFileURL,
+                                             bond: partner.bond, senderID: myUserID)
+                profileSyncedBondIDs.insert(partner.id)
+            }
+        }
         for index in cloudPartners.indices {
             let partner = cloudPartners[index]
             guard let events = try? await relay.fetchNewEvents(bond: partner.bond, myUserID: myUserID) else { continue }
             guard index < cloudPartners.count, cloudPartners[index].id == partner.id else { continue }
             history.append(contentsOf: events.touches)
+            if !events.touches.isEmpty {
+                NetLog.shared.log(.recv, "Received \(events.touches.count) touch(es) ← \(partner.displayName) (iCloud)")
+            }
             if !events.messages.isEmpty {
                 appendChat(events.messages, bondID: partner.id)
             }
             if let name = events.partnerName { cloudPartners[index].displayName = name }
             if let color = events.partnerColorRGB { cloudPartners[index].colorRGB = color }
+            if let photo = events.partnerPhoto { setPartnerPhoto(photo, bondID: partner.id) }
             if let online = events.presenceOnline { cloudPartners[index].online = online }
             if let seen = events.presenceLastSeen { cloudPartners[index].lastSeen = seen }
             if let lat = events.presenceLat, let lng = events.presenceLng {
@@ -284,31 +311,47 @@ final class AppModel: ObservableObject {
             // Only the selected partner's touches/heartbeat drive the bracelet.
             if partner.id == selectedPartnerID, !store.doNotDisturb {
                 for touch in events.touches { bracelet.play(touch) }
-                if let bpm = events.latestBPM { bracelet.startHeartbeat(bpm: bpm) }
+                // A heartbeat plays once, for 10 s — and only if it's fresh (not one that was
+                // sent long ago and is only now being fetched).
+                if let bpm = events.latestBPM, let at = events.latestBPMAt,
+                   Date().timeIntervalSince(at) < 60 {
+                    bracelet.playHeartbeat(bpm: bpm)
+                }
             }
         }
     }
 
-    // MARK: - Heartbeat sharing
+    // MARK: - Heartbeat (a button press sends 10 s of your heartbeat)
 
-    func startSharingHeartbeat() async {
+    /// Sends the user's current heartbeat to the selected partner, once: their bracelet
+    /// beats at that rate for 10 seconds. iCloud partners get a heartbeat record; a partner
+    /// on the original app gets it as a touch in the same rhythm.
+    /// Returns the BPM sent, or nil (with `statusLine` explaining why) when it couldn't.
+    @discardableResult
+    func sendHeartbeat() async -> Int? {
+        guard let bond = activeBond else { statusLine = "Choose a partner first."; return nil }
         await heart.requestAuthorization()
         guard heart.authorized else {
-            statusLine = "Allow heart-rate access in Health to share your heartbeat."
-            return
+            statusLine = "Allow heart-rate access in Health to send your heartbeat."
+            return nil
         }
-        heart.start()
-        sharingHeartbeat = true
-    }
-
-    func stopSharingHeartbeat() {
-        heart.stop()
-        sharingHeartbeat = false
-    }
-
-    private func relayHeartbeat(_ bpm: Int) async {
-        // Heartbeat is an iCloud-only feature; the original backend has no heartbeat relay.
-        guard sharingHeartbeat, let bond = activeBond, !bond.legacy else { return }
-        try? await relay.sendHeartbeat(bpm: bpm, bond: bond, senderID: myUserID)
+        guard let bpm = await heart.latestBPM() else {
+            statusLine = "No recent heart rate. Wear your Apple Watch, then try again."
+            return nil
+        }
+        sendingHeartbeat = true
+        defer { Task { @MainActor in try? await Task.sleep(nanoseconds: 10_000_000_000); self.sendingHeartbeat = false } }
+        if bond.legacy {
+            // 10 s of beats as an on/off pattern: a 120 ms press per beat.
+            let period = 60_000 / max(bpm, 30)
+            let beats = max(1, 10_000 / period)
+            var pattern: [Int] = []
+            for i in 0..<beats { pattern.append(120); if i < beats - 1 { pattern.append(max(period - 120, 80)) } }
+            await sendTouch(pattern: pattern, generation: 2, colorRGB: 0xE85D75, toBondID: bond.id)
+        } else {
+            do { try await relay.sendHeartbeat(bpm: bpm, bond: bond, senderID: myUserID) }
+            catch { statusLine = "Heartbeat failed: \(error.localizedDescription)"; return nil }
+        }
+        return bpm
     }
 }

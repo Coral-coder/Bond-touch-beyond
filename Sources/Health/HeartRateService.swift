@@ -1,8 +1,8 @@
 import Foundation
 import HealthKit
 
-/// Reads the user's heart rate from HealthKit (written by Apple Watch) and streams new
-/// BPM values as they arrive. Used to send a live heartbeat to the partner's bracelet.
+/// Reads the user's heart rate from HealthKit (written by Apple Watch). The app reads the
+/// latest sample when the user presses Send my heartbeat; nothing streams in between.
 @MainActor
 final class HeartRateService: ObservableObject {
     @Published private(set) var currentBPM: Int?
@@ -60,5 +60,22 @@ final class HeartRateService: ObservableObject {
 
     func stop() {
         if let q = anchoredQuery { store.stop(q); anchoredQuery = nil }
+    }
+
+    /// The most recent heart rate recorded in the last 15 minutes, or nil.
+    func latestBPM() async -> Int? {
+        guard available else { return nil }
+        let unit = self.unit
+        let since = HKQuery.predicateForSamples(withStart: Date().addingTimeInterval(-15 * 60), end: nil)
+        let bpm: Int? = await withCheckedContinuation { cont in
+            let q = HKSampleQuery(sampleType: hrType, predicate: since, limit: 1,
+                                  sortDescriptors: [NSSortDescriptor(key: HKSampleSortIdentifierEndDate, ascending: false)]) { _, samples, _ in
+                let v = (samples?.first as? HKQuantitySample)?.quantity.doubleValue(for: unit)
+                cont.resume(returning: v.map { Int($0.rounded()) })
+            }
+            store.execute(q)
+        }
+        if let bpm { currentBPM = bpm }
+        return bpm
     }
 }

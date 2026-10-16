@@ -7,7 +7,8 @@ import SwiftUI
 struct HomeView: View {
     @EnvironmentObject var model: AppModel
     @EnvironmentObject var store: LocalStore
-    @StateObject private var recorder = TouchBarRecorder()
+    // Not observed here: only the touch bar card redraws while a touch is recorded.
+    @State private var recorder = TouchBarRecorder()
     @State private var showHeart = false
     @State private var showPeople = false
     @State private var showEncounters = false
@@ -31,7 +32,7 @@ struct HomeView: View {
             ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 14) {
                     pairCard
-                    touchBarCard
+                    HomeTouchBarCard(recorder: recorder, showCompose: $showCompose)
                     meaningChips
                     feed
                     Color.clear.frame(height: 96) // room for the floating tab bar
@@ -204,50 +205,6 @@ struct HomeView: View {
         }
     }
 
-    // MARK: Touch bar
-
-    private var touchBarCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("Touch bar").font(Theme.font(17, .heavy)).foregroundStyle(.white)
-                Spacer()
-                if recorder.recording {
-                    Button("Send now") { recorder.finish() }
-                        .font(Theme.font(13, .heavy)).foregroundStyle(Theme.onAccent)
-                        .padding(.horizontal, 12).frame(height: 30)
-                        .background(Capsule().fill(Theme.accent))
-                    CountdownRing(progress: recorder.progress, remaining: recorder.remaining, size: 34)
-                } else {
-                    Text(model.braceletState == .connected ? "Bracelet connected" : "No bracelet needed")
-                        .font(Theme.font(12, .bold)).foregroundStyle(Theme.subtitle)
-                        .padding(.horizontal, 10).padding(.vertical, 4)
-                        .background(Capsule().fill(.white.opacity(0.14)))
-                    Button { showCompose = true } label: {
-                        Image(systemName: "arrow.up.left.and.arrow.down.right")
-                            .font(.system(size: 14, weight: .bold)).foregroundStyle(.white)
-                            .frame(width: 32, height: 32).background(Circle().fill(.white.opacity(0.14)))
-                    }
-                    .accessibilityLabel("Open the full touch bar")
-                }
-            }
-            TouchBarSurface(recorder: recorder, vertical: false,
-                            startRGB: store.profile.colorRGB, endRGB: store.profile.colorRGB)
-                .frame(height: 72)
-            if recorder.recording {
-                TouchViz(pattern: recorder.samples, generation: 3,
-                         colorRGB: store.profile.colorRGB, height: 34)
-            } else {
-                Text("Touch to start · tap and slide for \(Int(store.touchWindowSeconds)) s · sends when time's up")
-                    .font(Theme.font(12)).foregroundStyle(Theme.subtitle)
-                    .frame(maxWidth: .infinity)
-            }
-        }
-        .padding(16)
-        .glass(cornerRadius: 28)
-        .disabled(partner == nil)
-        .opacity(partner == nil ? 0.5 : 1)
-    }
-
     // MARK: Meanings
 
     @ViewBuilder private var meaningChips: some View {
@@ -296,23 +253,77 @@ struct HomeView: View {
         let mine = touch.senderID == model.myUserID || touch.senderID == ChatMessage.legacySelf
         return HStack(spacing: 12) {
             TouchViz(pattern: touch.pattern, generation: touch.generation,
-                     colorRGB: touch.colorRGB, endColorRGB: touch.endColorRGB, height: 36)
+                     colorRGB: touch.colorRGB, endColorRGB: touch.endColorRGB, height: 64)
+                .frame(maxWidth: .infinity)
             VStack(alignment: .trailing, spacing: 2) {
                 Text(mine ? "You" : (partner?.displayName ?? "Partner"))
                     .font(Theme.font(12, .bold)).foregroundStyle(.white)
                 Text(touch.sentAt.formatted(date: .omitted, time: .shortened))
-                    .font(Theme.font(12)).foregroundStyle(Theme.subtitle)
+                    .font(Theme.font(11)).foregroundStyle(Theme.subtitle)
+                Button { model.bracelet.play(touch) } label: {
+                    Image(systemName: "play.fill").font(.system(size: 12, weight: .bold)).foregroundStyle(.white)
+                        .frame(width: 30, height: 30).background(Circle().fill(.white.opacity(0.14)))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Play on bracelet")
+                .padding(.top, 2)
             }
-            Button { model.bracelet.play(touch) } label: {
-                Image(systemName: "play.fill").font(.system(size: 13, weight: .bold)).foregroundStyle(.white)
-                    .frame(width: 32, height: 32).background(Circle().fill(.white.opacity(0.14)))
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Play on bracelet")
+            .fixedSize()
         }
-        .padding(.horizontal, 14).padding(.vertical, 12)
+        .padding(.horizontal, 14).padding(.vertical, 10)
         .glass(cornerRadius: 22)
     }
+}
+
+/// The Home touch bar, with its countdown and live trace while a touch is recorded.
+private struct HomeTouchBarCard: View {
+    @EnvironmentObject var model: AppModel
+    @EnvironmentObject var store: LocalStore
+    @ObservedObject var recorder: TouchBarRecorder
+    @Binding var showCompose: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            HStack {
+                Text("Touch bar").font(Theme.font(15, .heavy)).foregroundStyle(.white)
+                Spacer()
+                if recorder.recording {
+                    Button("Send now") { recorder.finish() }
+                        .font(Theme.font(13, .heavy)).foregroundStyle(Theme.onAccent)
+                        .padding(.horizontal, 12).frame(height: 28)
+                        .background(Capsule().fill(Theme.accent))
+                    CountdownRing(progress: recorder.progress, remaining: recorder.remaining, size: 30)
+                } else {
+                    Text(model.braceletState == .connected ? "Bracelet connected" : "No bracelet needed")
+                        .font(Theme.font(12, .bold)).foregroundStyle(Theme.subtitle)
+                        .padding(.horizontal, 10).padding(.vertical, 4)
+                        .background(Capsule().fill(.white.opacity(0.14)))
+                    Button { showCompose = true } label: {
+                        Image(systemName: "arrow.up.left.and.arrow.down.right")
+                            .font(.system(size: 14, weight: .bold)).foregroundStyle(.white)
+                            .frame(width: 32, height: 32).background(Circle().fill(.white.opacity(0.14)))
+                    }
+                    .accessibilityLabel("Open the full touch bar")
+                }
+            }
+            TouchBarSurface(recorder: recorder, vertical: false,
+                            startRGB: store.profile.colorRGB, endRGB: store.profile.colorRGB)
+                .frame(height: 46)
+            if recorder.recording {
+                TouchViz(pattern: recorder.samples, generation: 3,
+                         colorRGB: store.profile.colorRGB, height: 40)
+            } else {
+                Text("Touch to start · tap and slide for \(Int(store.touchWindowSeconds)) s · sends when time's up")
+                    .font(Theme.font(11)).foregroundStyle(Theme.subtitle)
+                    .frame(maxWidth: .infinity)
+            }
+        }
+        .padding(14)
+        .glass(cornerRadius: 26)
+        .disabled(model.selectedPartner == nil)
+        .opacity(model.selectedPartner == nil ? 0.5 : 1)
+    }
+
 }
 
 /// A small non-interactive map framing you and your partner.

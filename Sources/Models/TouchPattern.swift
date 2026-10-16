@@ -24,6 +24,38 @@ enum TouchPattern {
         }
     }
 
+    /// A change of the fingers on the bar: `t` seconds after the touch window opened, the
+    /// bar positions (0…8) now touched. Recorded as touch events arrive, independent of any
+    /// timer, so nothing depends on the screen keeping up.
+    struct BarEvent {
+        let t: Double
+        let fingers: [Int]
+    }
+
+    /// Turns finger changes into 50 ms samples. A slot gets the last finger position seen
+    /// during it, so a tap shorter than 50 ms still counts, and a slot with no contact is
+    /// "no finger". `duration` is how much of the window to sample (seconds).
+    static func samples(from events: [BarEvent], duration: Double) -> [Int] {
+        let slot = Double(sampleMs) / 1000
+        let count = min(maxSamples, max(0, Int((duration / slot).rounded(.up))))
+        var out: [Int] = []
+        out.reserveCapacity(count)
+        var state: [Int] = []
+        var i = 0
+        for n in 0..<count {
+            let end = Double(n + 1) * slot
+            var touched = state
+            while i < events.count, events[i].t < end {
+                state = events[i].fingers
+                if !state.isEmpty { touched = state }
+                i += 1
+            }
+            if !state.isEmpty { touched = state }
+            out.append(sample(touched))
+        }
+        return out
+    }
+
     /// The finger positions in one sample (empty when no finger is down).
     static func fingers(in sample: Int) -> [Int] {
         let lo = sample & 0x0F, hi = (sample >> 4) & 0x0F

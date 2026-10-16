@@ -1,8 +1,9 @@
 import SwiftUI
 
-/// The partner selector: one glass pill holding a chip per partner (not yourself), scrolling
-/// sideways when there are more than fit. Tap a chip to select that partner; the selected
-/// one is a bright pill. Tap the bar 5× quickly to open the hidden debug panel.
+/// The partner selector: one glass pill holding each partner's photo (not yourself),
+/// centred, scrolling sideways when there are more than fit. Tap a photo to select that
+/// partner; the selected one gets a bright ring. A partner without a photo shows their
+/// initial. Tap the bar 5× quickly to open the hidden debug panel.
 struct PartnerBar: View {
     @EnvironmentObject var model: AppModel
     @EnvironmentObject var store: LocalStore
@@ -12,18 +13,21 @@ struct PartnerBar: View {
     @State private var showDebug = false
 
     var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 4) {
-                if model.partners.isEmpty {
-                    Text("No partners yet")
-                        .font(Theme.font(14, .semibold)).foregroundStyle(Theme.subtitle)
-                        .padding(.horizontal, 14).frame(height: 40)
+        GeometryReader { geo in
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    if model.partners.isEmpty {
+                        Text("No partners yet")
+                            .font(Theme.font(14, .semibold)).foregroundStyle(Theme.subtitle)
+                            .padding(.horizontal, 14).frame(height: 40)
+                    }
+                    ForEach(model.partners) { partner in
+                        chip(partner)
+                    }
                 }
-                ForEach(model.partners) { partner in
-                    chip(partner)
-                }
+                .padding(.horizontal, 6)
+                .frame(minWidth: geo.size.width, minHeight: geo.size.height)   // centred when they fit
             }
-            .padding(4)
         }
         .frame(height: 48)
         .glass(Capsule())
@@ -37,27 +41,21 @@ struct PartnerBar: View {
         return Button {
             withAnimation(.spring(response: 0.3)) { model.selectedPartnerID = partner.id }
         } label: {
-            HStack(spacing: 6) {
-                ZStack(alignment: .bottomTrailing) {
-                    AvatarRing(name: partner.displayName, ringColor: Color(rgbInt: partner.colorRGB),
-                               size: 32, photo: model.photo(forBond: partner.id), ringWidth: 0)
-                    if partner.online {
-                        Circle().fill(Theme.lime).frame(width: 9, height: 9)
-                            .overlay(Circle().stroke(.white, lineWidth: 1.5))
-                    }
+            ZStack(alignment: .bottomTrailing) {
+                AvatarRing(name: partner.displayName, ringColor: Color(rgbInt: partner.colorRGB),
+                           size: 36, photo: model.photo(forBond: partner.id), ringWidth: 0)
+                    .overlay(Circle().stroke(selected ? Theme.accent : .clear, lineWidth: 2.5).padding(-3))
+                    .opacity(selected ? 1 : 0.75)
+                if partner.online {
+                    Circle().fill(Theme.lime).frame(width: 10, height: 10)
+                        .overlay(Circle().stroke(.white, lineWidth: 1.5))
                 }
-                Text(partner.displayName)
-                    .font(Theme.font(14, selected ? .heavy : .bold))
-                    .lineLimit(1)
             }
-            .padding(.leading, 4).padding(.trailing, 12)
-            .frame(height: 40)
-            .foregroundStyle(selected ? Theme.onAccent : .white)
-            .background(Capsule().fill(selected
-                ? AnyShapeStyle(LinearGradient(colors: [.white, Color(rgbInt: 0xDDEFF5)], startPoint: .top, endPoint: .bottom))
-                : AnyShapeStyle(Color.clear)))
+            .frame(width: 42, height: 42)
+            .scaleEffect(selected ? 1.05 : 1)
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(partner.displayName)
         .accessibilityAddTraits(selected ? .isSelected : [])
     }
 

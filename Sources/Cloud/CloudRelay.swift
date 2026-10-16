@@ -22,12 +22,15 @@ final class CloudRelay {
         var touches: [TouchMessage] = []
         var messages: [ChatMessage] = []
         var latestBPM: Int?
+        var latestBPMAt: Date?
         var presenceOnline: Bool?
         var presenceLastSeen: Date?
         var presenceLat: Double?
         var presenceLng: Double?
         var partnerName: String?
         var partnerColorRGB: Int?
+        /// The partner's profile photo (JPEG), when their profile carries one.
+        var partnerPhoto: Data?
     }
 
     private let container: CKContainer
@@ -159,8 +162,8 @@ final class CloudRelay {
         _ = try await db.modifyRecords(saving: [record], deleting: [])
     }
 
-    /// Streams the current user's heartbeat to the partner. One stable record per sender,
-    /// overwritten each update, so the partner always reads the latest BPM.
+    /// Sends one heartbeat (a button press) to the partner: one stable record per sender,
+    /// overwritten each time, carrying the BPM and when it was sent.
     func sendHeartbeat(bpm: Int, bond: Bond, senderID: String) async throws {
         let db = bond.isOwner ? privateDB : sharedDB
         let zoneID = try await zoneID(forBond: bond, in: db)
@@ -209,8 +212,8 @@ final class CloudRelay {
         _ = try await db.modifyRecords(saving: [record], deleting: [], savePolicy: .changedKeys)
     }
 
-    /// Publishes the user's profile (name + colour) into the bond so the partner sees it.
-    func sendProfile(name: String, colorRGB: Int, bond: Bond, senderID: String) async throws {
+    /// Publishes the user's profile (name, colour, photo) into the bond so the partner sees it.
+    func sendProfile(name: String, colorRGB: Int, photo: URL?, bond: Bond, senderID: String) async throws {
         let db = bond.isOwner ? privateDB : sharedDB
         let zoneID = try await zoneID(forBond: bond, in: db)
         let record = CKRecord(recordType: Self.recordTypeProfile,
@@ -218,8 +221,9 @@ final class CloudRelay {
         record["senderID"] = senderID as CKRecordValue
         record["name"] = name as CKRecordValue
         record["colorRGB"] = colorRGB as CKRecordValue
+        record["photo"] = photo.map { CKAsset(fileURL: $0) }
         record["sentAt"] = Date() as CKRecordValue
-        _ = try await db.modifyRecords(saving: [record], deleting: [], savePolicy: .changedKeys)
+        _ = try await db.modifyRecords(saving: [record], deleting: [], savePolicy: .allKeys)
     }
 
     /// Fetches touches and the partner's latest heartbeat since our last change token.
@@ -266,6 +270,7 @@ final class CloudRelay {
                 if let bpm = record["bpm"] as? Int, sentAt > newestHeartbeat {
                     newestHeartbeat = sentAt
                     events.latestBPM = bpm
+                    events.latestBPMAt = sentAt
                 }
             case Self.recordTypePresence:
                 if sentAt > newestPresence {
@@ -280,6 +285,9 @@ final class CloudRelay {
                     newestProfile = sentAt
                     events.partnerName = record["name"] as? String
                     events.partnerColorRGB = record["colorRGB"] as? Int
+                    if let url = (record["photo"] as? CKAsset)?.fileURL {
+                        events.partnerPhoto = try? Data(contentsOf: url)
+                    }
                 }
             default:
                 break

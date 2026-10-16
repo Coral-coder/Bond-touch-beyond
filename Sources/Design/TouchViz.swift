@@ -44,10 +44,13 @@ struct TouchViz: View {
         let n = max(samples.count, 1)
         return Canvas { ctx, size in
             let r = max(min(size.height * 0.11, 5), 2.5)
-            let usableW = max(size.width - r * 2, 1), usableH = max(size.height - r * 2, 1)
+            // Leave room for the dot and its glow so the top (position 8) and bottom
+            // (position 0) of a slide are never clipped at the canvas edge.
+            let inset = r + 4
+            let usableW = max(size.width - inset * 2, 1), usableH = max(size.height - inset * 2, 1)
             func point(_ i: Int, _ pos: Int) -> CGPoint {
-                CGPoint(x: r + usableW * (n > 1 ? Double(i) / Double(n - 1) : 0.5),
-                        y: r + usableH * (1 - Double(pos) / Double(TouchPattern.positions - 1)))
+                CGPoint(x: inset + usableW * (n > 1 ? Double(i) / Double(n - 1) : 0.5),
+                        y: inset + usableH * (1 - Double(pos) / Double(TouchPattern.positions - 1)))
             }
             var glow = ctx
             glow.addFilter(.shadow(color: color(at: 0.5).opacity(0.8), radius: 6))

@@ -99,7 +99,9 @@ enum BondGATT {
     static func tokenWrites(_ gen: BondGeneration) -> [(CBUUID, Data)] {
         switch gen {
         case .v3:
-            return [(ffb1, pad(pfx(3) + token, to: 20))]
+            // Exactly as the original app: [3] + "12345678", unpadded, and only when the
+            // bracelet reports it is waiting for the token.
+            return [(ffb1, Data(pfx(3) + token))]
         case .v1:
             return [(charToken, Data(token))]
         default:
@@ -111,7 +113,11 @@ enum BondGATT {
     static func auidWrites(_ gen: BondGeneration, auid: UInt32) -> [(CBUUID, Data)] {
         switch gen {
         case .v3:
-            return [(ffb1, pad(pfx(7) + u32le(auid), to: 20))]
+            // The Bond Touch More takes a single-byte AUID: [7, id], unpadded (original
+            // app). Sending a 4-byte id padded to 20 bytes, as before, is not what its
+            // firmware expects.
+            let id = UInt8(truncatingIfNeeded: auid)
+            return [(ffb1, Data([7, id == 0 ? 1 : id]))]
         default:
             return [(charAuid, Data(u32le(auid)))]
         }
@@ -127,9 +133,10 @@ enum BondGATT {
         let (r, g, b) = rgbBytes(rgb)
         switch gen {
         case .v3:
+            // FFB1 commands are written at their exact length, as the original app does.
             let color = pfx(1) + [0x4B, 0x00, 0x00, r, g, b]
             let vib   = pfx(1) + [0x48, 0x00, vibLevel(strength), 0x00, 0x03]
-            return [(ffb1, pad(color, to: 20)), (ffb1, pad(vib, to: 20))]
+            return [(ffb1, Data(color)), (ffb1, Data(vib))]
         case .v1:
             // FF06 ColorCommand (0x21) then LgtVibCommand (0x26).
             let color = u16le(0x21) + u16le(0) + u32le(UInt32(rgb & 0xFFFFFF)) + [100]
@@ -145,6 +152,27 @@ enum BondGATT {
             f += u16le(holdMs)  // execute
             return [(charAppCmd, pad(f, to: 20))]
         }
+    }
+
+    /// What the original app sends once a Bond Touch More reports CONNECTED: enables its
+    /// touch and event features (0x19, 0x1B, 0x41, 0x42, [0x49, 1], 0x1C).
+    static let v3ConnectedWrites: [(CBUUID, Data)] = [
+        [1, 0x19], [1, 0x1B], [1, 0x41], [1, 0x42], [1, 0x49, 0x01], [1, 0x1C]
+    ].map { (ffb1, Data($0)) }
+
+    /// A whole heartbeat for a Bond Touch More as ONE touch message: for each beat the full
+    /// bar lights and both motors buzz together for 150 ms; at most 10 s (200 samples). The
+    /// bracelet renders light and vibration in sync, with a single short Bluetooth burst.
+    static func v3Heartbeat(bpm: Int, seconds: Double, rgb: Int) -> [(CBUUID, Data)] {
+        let period = max(3, Int((60.0 / Double(max(bpm, 30))) * 1000) / TouchPattern.sampleMs)
+        let total = min(TouchPattern.maxSamples, Int(seconds * 1000) / TouchPattern.sampleMs)
+        let fullBar = (8 << 4) | 0   // two "fingers" at 0 and 8: the whole bar
+        var samples: [Int] = []
+        while samples.count < total {
+            samples += [fullBar, fullBar, fullBar]
+            samples += Array(repeating: TouchPattern.none, count: period - 3)
+        }
+        return v3TouchFrames(samples: Array(samples.prefix(total)), startRGB: rgb, endRGB: rgb)
     }
 
     /// One heartbeat pulse: a short firm buzz + glow.

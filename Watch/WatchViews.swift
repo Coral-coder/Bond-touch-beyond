@@ -31,100 +31,138 @@ struct WatchRootView: View {
     }
 }
 
-/// Records a touch like the Bond Touch More bar: the first touch opens the window, one
-/// sample every 50 ms of where the finger is on the bar's 9 positions, sent when it ends.
+/// Records a touch like the Bond Touch More bar: the first touch opens the window, the bar
+/// is sampled every 50 ms for where the finger is on its 9 positions, sent when it ends.
+/// Finger changes are logged with their time and sampled from the log, so short taps count.
 final class WatchRecorder: ObservableObject {
     @Published var position: CGFloat?
-    @Published private(set) var samples: [Int] = []
     @Published private(set) var recording = false
     @Published private(set) var remaining: Double = 0
     var windowSeconds: Double = 5
     var onFinish: (([Int]) -> Void)?
     private var timer: Timer?
-    private var started = Date()
+    private var started: TimeInterval = 0
+    private var events: [TouchPattern.BarEvent] = []
+    private var current: [Int] = []
+
+    private var now: TimeInterval { ProcessInfo.processInfo.systemUptime }
+    private var window: Double { min(windowSeconds, Double(TouchPattern.maxSamples * TouchPattern.sampleMs) / 1000) }
 
     func touch(_ f: CGFloat?) {
         if position == nil, f != nil { WKInterfaceDevice.current().play(.click) }
         position = f
         if f != nil, !recording { start() }
+        guard recording else { return }
+        let bar = f.map { [Int(($0 * CGFloat(TouchPattern.positions - 1)).rounded())] } ?? []
+        guard bar != current else { return }
+        current = bar
+        events.append(.init(t: max(0, now - started), fingers: bar))
     }
 
     private func start() {
-        samples = []; recording = true; started = Date(); remaining = windowSeconds
-        timer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] _ in self?.tick() }
+        events = []; current = []
+        recording = true; started = now; remaining = window
+        let t = Timer(timeInterval: 0.1, repeats: true) { [weak self] _ in self?.tick() }
+        RunLoop.main.add(t, forMode: .common)
+        timer = t
     }
 
     private func tick() {
-        let fingers = position.map { [Int(($0 * CGFloat(TouchPattern.positions - 1)).rounded())] } ?? []
-        samples.append(TouchPattern.sample(fingers))
-        remaining = max(0, windowSeconds - Date().timeIntervalSince(started))
-        if remaining <= 0 || samples.count >= TouchPattern.maxSamples { finish() }
+        remaining = max(0, window - (now - started))
+        if remaining <= 0 { finish() }
     }
 
     func finish() {
         guard recording else { return }
+        let samples = TouchPattern.samples(from: events, duration: min(window, now - started))
         timer?.invalidate(); timer = nil
         recording = false; remaining = 0
+        events = []; current = []
         let touch = TouchPattern.trimmed(samples)
         if !touch.isEmpty { onFinish?(touch) }
     }
 }
 
+/// The watch touch bar. Idle, it is a bar between the partner name and the status line; the
+/// moment you touch it, it fills the whole screen until the touch is sent, so you can see
+/// exactly where your finger is. Positions are measured against the full screen from the
+/// first touch, so nothing jumps when it expands.
 struct WatchTouchBarView: View {
     @EnvironmentObject var link: PhoneLink
     @StateObject private var recorder = WatchRecorder()
     @State private var picking = false
 
     private var color: Color { Color(rgb: link.selected?.colorRGB ?? 0xFF2E74) }
+    private var expanded: Bool { recorder.recording || recorder.position != nil }
 
     var body: some View {
-        VStack(spacing: 6) {
-            Button { picking = true } label: {
-                HStack(spacing: 4) {
-                    Circle().fill(link.selected?.online == true ? Color(rgb: 0xAEE63C) : .gray).frame(width: 6, height: 6)
-                    Text(link.selected?.name ?? "Partner").font(.system(.footnote, design: .rounded).weight(.heavy))
-                    Image(systemName: "chevron.down").font(.caption2)
+        GeometryReader { root in
+            let full = root.size
+            let pad = min(full.width, full.height) * 0.12
+            ZStack {
+                VStack(spacing: 6) {
+                    Button { picking = true } label: {
+                        HStack(spacing: 4) {
+                            Circle().fill(link.selected?.online == true ? Color(rgb: 0xAEE63C) : .gray).frame(width: 6, height: 6)
+                            Text(link.selected?.name ?? "Partner").font(.system(.footnote, design: .rounded).weight(.heavy))
+                            Image(systemName: "chevron.down").font(.caption2)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    Spacer()
+                    Text(link.lastSent.map { "Sent " + $0.formatted(date: .omitted, time: .shortened) } ?? "Touch to start")
+                        .font(.caption2).foregroundStyle(.secondary)
                 }
-            }
-            .buttonStyle(.plain)
+                .padding(.vertical, 22)
+                .opacity(expanded ? 0 : 1)
+                .allowsHitTesting(!expanded)
 
-            GeometryReader { geo in
-                ZStack {
-                    Capsule()
-                        .fill(LinearGradient(colors: [.white.opacity(0.18), .black.opacity(0.35)],
-                                             startPoint: .leading, endPoint: .trailing))
-                        .overlay(Capsule().stroke(.white.opacity(0.35), lineWidth: 1))
+                RoundedRectangle(cornerRadius: expanded ? 34 : 29, style: .continuous)
+                    .fill(LinearGradient(colors: [.white.opacity(0.18), .black.opacity(0.35)],
+                                         startPoint: .leading, endPoint: .trailing))
+                    .overlay(RoundedRectangle(cornerRadius: expanded ? 34 : 29, style: .continuous)
+                        .stroke(.white.opacity(0.35), lineWidth: 1))
+                    .frame(width: expanded ? full.width : 58, height: expanded ? full.height : full.height * 0.58)
+                    .contentShape(Rectangle())
+                    // High priority so page swipes don't steal a slide along the bar.
+                    .highPriorityGesture(DragGesture(minimumDistance: 0, coordinateSpace: .named("screen"))
+                        .onChanged { v in
+                            let f = 1 - (v.location.y - pad) / max(full.height - pad * 2, 1)
+                            recorder.touch(min(max(f, 0), 1))
+                        }
+                        .onEnded { _ in recorder.touch(nil) })
+
+                if expanded {
+                    // The bar's 9 positions, and the glow under the finger.
+                    ForEach(0..<TouchPattern.positions, id: \.self) { i in
+                        Circle().fill(.white.opacity(0.25)).frame(width: 4, height: 4)
+                            .position(x: full.width / 2, y: y(CGFloat(i) / 8, full.height, pad))
+                    }
+                    .allowsHitTesting(false)
                     if let p = recorder.position {
                         Circle()
                             .fill(RadialGradient(colors: [.white, color, color.opacity(0)], center: .center,
-                                                 startRadius: 2, endRadius: geo.size.width * 0.7))
-                            .frame(width: geo.size.width * 1.3, height: geo.size.width * 1.3)
-                            .position(x: geo.size.width / 2,
-                                      y: geo.size.width / 2 + (geo.size.height - geo.size.width) * (1 - p))
+                                                 startRadius: 2, endRadius: full.width * 0.45))
+                            .frame(width: full.width * 0.9, height: full.width * 0.9)
+                            .position(x: full.width / 2, y: y(p, full.height, pad))
+                            .allowsHitTesting(false)
                     }
-                }
-                .clipShape(Capsule())
-                .contentShape(Capsule())
-                .gesture(DragGesture(minimumDistance: 0)
-                    .onChanged { v in
-                        let h = max(geo.size.height - geo.size.width, 1)
-                        recorder.touch(min(max(1 - (v.location.y - geo.size.width / 2) / h, 0), 1))
+                    VStack(spacing: 2) {
+                        ProgressView(value: 1 - recorder.remaining / max(recorder.windowSeconds, 0.1))
+                            .tint(accent).frame(width: full.width * 0.4)
+                        Text(String(format: "%.0f s", recorder.remaining.rounded(.up)))
+                            .font(.caption2.weight(.heavy)).monospacedDigit().foregroundStyle(.white.opacity(0.7))
                     }
-                    .onEnded { _ in recorder.touch(nil) })
-            }
-            .frame(width: 58)
-
-            if recorder.recording {
-                HStack(spacing: 6) {
-                    ProgressView(value: 1 - recorder.remaining / max(recorder.windowSeconds, 0.1))
-                        .tint(accent).frame(width: 50)
-                    Button("Send") { recorder.finish() }.font(.caption2.weight(.heavy)).tint(accent)
+                    .padding(.top, 6)
+                    .frame(maxHeight: .infinity, alignment: .top)
+                    .allowsHitTesting(false)
                 }
-            } else {
-                Text(link.lastSent.map { "Sent " + $0.formatted(date: .omitted, time: .shortened) } ?? "Touch to start")
-                    .font(.caption2).foregroundStyle(.secondary)
             }
+            .frame(width: full.width, height: full.height)
+            .coordinateSpace(name: "screen")
+            .animation(.easeOut(duration: 0.15), value: expanded)
         }
+        .ignoresSafeArea()
         .onAppear {
             recorder.windowSeconds = link.windowSeconds
             recorder.onFinish = { samples in
@@ -134,6 +172,11 @@ struct WatchTouchBarView: View {
         }
         .onChange(of: link.windowSeconds) { recorder.windowSeconds = $0 }
         .sheet(isPresented: $picking) { WatchPartnerPicker() }
+    }
+
+    /// Screen y for bar position f (0 bottom … 1 top).
+    private func y(_ f: CGFloat, _ height: CGFloat, _ pad: CGFloat) -> CGFloat {
+        height - pad - (height - pad * 2) * f
     }
 }
 
