@@ -17,9 +17,14 @@ struct TouchMeaning: Identifiable, Codable, Equatable {
     /// The meaning's id on the original Bond backend, for meanings synced with an
     /// original-app partner (nil for iCloud-only meanings).
     var serverID: String? = nil
+    /// Pattern format: 3 = 50 ms position samples (touch bar), nil/2 = on/off milliseconds.
+    var generation: Int? = nil
+
+    var touchGeneration: Int { generation == 3 ? 3 : 2 }
 
     init(id: UUID = UUID(), label: String, emoji: String, colorRGB: Int,
-         endColorRGB: Int? = nil, pattern: [Int], isNew: Bool = false, serverID: String? = nil) {
+         endColorRGB: Int? = nil, pattern: [Int], isNew: Bool = false, serverID: String? = nil,
+         generation: Int? = nil) {
         self.id = id
         self.label = label
         self.emoji = emoji
@@ -28,6 +33,7 @@ struct TouchMeaning: Identifiable, Codable, Equatable {
         self.pattern = pattern
         self.isNew = isNew
         self.serverID = serverID
+        self.generation = generation
     }
 
     /// The original app's library starts empty; meanings come from the partner adding them

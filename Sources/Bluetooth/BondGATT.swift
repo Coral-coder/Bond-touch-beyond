@@ -140,15 +140,16 @@ enum BondGATT {
 
     // MARK: - Sending a touch (replay the tap rhythm)
 
-    /// Replays an on/off millisecond pattern as a touch in `rgb`.
-    /// v2-base: a queue-pause marker, one 0x33 "send-message" step per on-segment, then a
-    /// resume marker. v3: a single FFB2 frame carrying the duration bytes.
-    static func touchSend(_ gen: BondGeneration, pattern: [Int],
-                          startRGB: Int, endRGB: Int) -> [(CBUUID, Data)] {
-        let onOff = pattern.isEmpty ? [200] : pattern
+    /// Plays a touch on the bracelet.
+    /// v3 (Bond Touch More): the 50 ms position samples on FFB2 — the bar lights and the
+    /// vibration pans along the positions. v2-base: a queue-pause marker, one 0x33
+    /// "send-message" step per on-segment, then a resume marker.
+    static func touchSend(_ gen: BondGeneration, touch: TouchMessage) -> [(CBUUID, Data)] {
+        let onOff = touch.onOffMs.isEmpty ? [200] : touch.onOffMs
+        let startRGB = touch.colorRGB, endRGB = touch.endColorRGB
         switch gen {
         case .v3:
-            return v3TouchFrames(onOff: onOff, startRGB: startRGB, endRGB: endRGB)
+            return v3TouchFrames(samples: touch.samples, startRGB: startRGB, endRGB: endRGB)
         case .v1:
             // v1 has no segmented send; fall back to a colour + buzz.
             return ledMotor(.v1, rgb: startRGB)
@@ -168,18 +169,49 @@ enum BondGATT {
         }
     }
 
-    private static func v3TouchFrames(onOff: [Int], startRGB: Int, endRGB: Int) -> [(CBUUID, Data)] {
-        // Duration bytes (10 ms units, clamped to a byte), chunked 20 per packet.
-        let durations = onOff.map { UInt8(clamping: $0 / 10) }
-        let header: [UInt8] = [0x01, UInt8(clamping: durations.count), 0x01] + be3(startRGB) + be3(endRGB) + [0xFF]
-        var frames: [(CBUUID, Data)] = [(ffb2, pad(header, to: 20))]
+    /// FFB2 playback: header `[slot 1, n, ceil(n/20), colour1 RGB, colour2 RGB, replyMenu 0]`
+    /// padded with 0xFF, then the sample bytes 20 per packet, padded with 0xFF. The
+    /// firmware accepts 1…10 packets, so at most 200 samples.
+    private static func v3TouchFrames(samples raw: [Int], startRGB: Int, endRGB: Int) -> [(CBUUID, Data)] {
+        var samples = TouchPattern.trimmed(raw).map { UInt8(clamping: $0) }
+        if samples.isEmpty { samples = [0xF4, 0xF4, 0xF4, 0xF4] }   // a short centre tap
+        let chunks = (samples.count + 19) / 20
+        let header: [UInt8] = [0x01, UInt8(samples.count), UInt8(chunks)] + be3(startRGB) + be3(endRGB) + [0x00]
+        var frames: [(CBUUID, Data)] = [(ffb2, padFF(header))]
         var idx = 0
-        while idx < durations.count {
-            let chunk = Array(durations[idx..<min(idx + 20, durations.count)])
-            frames.append((ffb2, pad(chunk, to: 20)))
+        while idx < samples.count {
+            frames.append((ffb2, padFF(Array(samples[idx..<min(idx + 20, samples.count)]))))
             idx += 20
         }
         return frames
+    }
+
+    private static func padFF(_ bytes: [UInt8]) -> Data {
+        Data(bytes + Array(repeating: 0xFF, count: max(0, 20 - bytes.count)))
+    }
+
+    /// Reassembles a touch recorded on the Bond Touch More bar from FFB2 notifications:
+    /// a header `[slot 1…3, n, packets, …]` then `packets` × 20 sample bytes.
+    struct V3Recording {
+        private var expected = 0
+        private var bytes: [Int] = []
+
+        /// Feeds one FFB2 notification; returns the trimmed samples when complete.
+        mutating func feed(_ data: Data) -> [Int]? {
+            let b = [UInt8](data)
+            if expected == 0 {
+                guard b.count >= 3, (1...3).contains(b[0]), (1...10).contains(b[2]) else { return nil }
+                expected = Int(b[2]); bytes = []
+                return nil
+            }
+            guard b.count >= 20 else { expected = 0; bytes = []; return nil }
+            bytes += b.prefix(20).map(Int.init)
+            expected -= 1
+            guard expected == 0 else { return nil }
+            let out = TouchPattern.trimmed(bytes)
+            bytes = []
+            return out.isEmpty ? nil : out
+        }
     }
 
     // MARK: - Incoming

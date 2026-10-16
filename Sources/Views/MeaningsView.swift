@@ -66,13 +66,14 @@ struct MeaningsView: View {
                         Text(meaning.label).font(.headline).foregroundStyle(.white)
                         if meaning.isNew { newBadge }
                     }
-                    TouchViz(pattern: meaning.pattern,
+                    TouchViz(pattern: meaning.pattern, generation: meaning.touchGeneration,
                              colorRGB: meaning.colorRGB, endColorRGB: meaning.endColorRGB)
                 }
                 Spacer()
                 Button {
                     Task {
                         await model.sendTouch(pattern: meaning.pattern,
+                                              generation: meaning.touchGeneration,
                                               colorRGB: meaning.colorRGB,
                                               endColorRGB: meaning.endColorRGB)
                     }

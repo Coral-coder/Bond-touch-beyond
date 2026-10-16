@@ -15,8 +15,10 @@ enum BraceletState: Equatable {
 /// using the per-generation wire format in `BondGATT`. Writes are serialised.
 final class BraceletManager: NSObject, ObservableObject {
     @Published private(set) var state: BraceletState = .disconnected
-    /// Delivered when a touch arrives from the partner via the bracelet.
-    var onLocalTap: (([Int]) -> Void)?
+    /// Delivered when the user makes a touch on their own bracelet: the pattern and its
+    /// generation (3 = Bond Touch More position samples, 2 = on/off milliseconds).
+    var onLocalTap: (([Int], Int) -> Void)?
+    private var v3Recording = BondGATT.V3Recording()
 
     private var central: CBCentralManager!
     private var bracelet: CBPeripheral?
@@ -91,9 +93,10 @@ final class BraceletManager: NSObject, ObservableObject {
     /// Plays a received touch: replays the rhythm and glows/buzzes in its colour.
     func play(_ touch: TouchMessage) {
         guard let gen else { return }
-        enqueue(BondGATT.touchSend(gen, pattern: touch.pattern,
-                                   startRGB: touch.colorRGB, endRGB: touch.endColorRGB))
-        enqueue(BondGATT.ledMotor(gen, rgb: touch.colorRGB))
+        enqueue(BondGATT.touchSend(gen, touch: touch))
+        // The Bond Touch More renders the touch itself (LEDs + panned vibration); older
+        // bracelets also get a glow + buzz in the touch's colour.
+        if gen != .v3 { enqueue(BondGATT.ledMotor(gen, rgb: touch.colorRGB)) }
     }
 
     /// Beats the bracelet at `bpm` (one pulse per beat) until `stopHeartbeat()` or ~15s
@@ -180,12 +183,12 @@ final class BraceletManager: NSObject, ObservableObject {
             if stop {
                 let pattern = incoming
                 incoming = []
-                if !pattern.isEmpty { onLocalTap?(pattern) }
+                if !pattern.isEmpty { onLocalTap?(pattern, 2) }
             }
         case .tap:
-            onLocalTap?([120])
+            onLocalTap?([120], 2)
         case .doubleTap:
-            onLocalTap?([120, 120, 120])
+            onLocalTap?([120, 120, 120], 2)
         case .ignored:
             break
         }
@@ -286,6 +289,10 @@ extension BraceletManager: CBPeripheralDelegate {
         }
 
         guard let gen else { return }
+        if gen == .v3, characteristic.uuid == BondGATT.ffb2 {
+            if let samples = v3Recording.feed(data) { onLocalTap?(samples, 3) }
+            return
+        }
         handle(BondGATT.signal(gen, uuid: characteristic.uuid, data: data))
         handle(BondGATT.touchEvent(gen, uuid: characteristic.uuid, data: data))
     }

@@ -80,6 +80,12 @@ extension BondBackend {
         Int(Int32(bitPattern: 0xFF00_0000 | UInt32(rgb & 0xFFFFFF)))
     }
 
+    /// `generation` serialises as "2" / "3" (or a number); anything else is 2.
+    static func generation(_ value: Any?) -> Int {
+        if let s = value as? String { return s == "3" ? 3 : 2 }
+        return (value as? NSNumber)?.intValue == 3 ? 3 : 2
+    }
+
     static func pattern(_ value: Any?) -> [Int] {
         ((value as? [Any]) ?? []).compactMap { ($0 as? NSNumber)?.intValue }
     }
@@ -126,13 +132,14 @@ extension BondBackend {
     // MARK: - Touches
 
     /// `POST bond/api/v3/bonds/{bondId}/touches {timestamp, pattern, generation}` → touch id.
+    /// Generation 3 patterns are position samples (≤ 200); generation 2 on/off ms.
     @discardableResult
-    static func sendTouch(bondId: String, pattern: [Int], thirdGeneration: Bool,
+    static func sendTouch(bondId: String, pattern: [Int], generation: Int,
                           bearer: String) async throws -> String? {
         let body: [String: Any] = [
             "timestamp": Int64(Date().timeIntervalSince1970 * 1000),
-            "pattern": pattern.isEmpty ? [200] : pattern,
-            "generation": thirdGeneration ? "3" : "2"
+            "pattern": generation == 3 ? Array(TouchPattern.trimmed(pattern)) : (pattern.isEmpty ? [200] : pattern),
+            "generation": generation == 3 ? "3" : "2"
         ]
         let j = try await call("bond/api/v3/bonds/\(bondId)/touches", "POST", bearer: bearer, body: body)
         return (j as? [String: Any])?["id"] as? String
@@ -145,30 +152,29 @@ extension BondBackend {
 
     // MARK: - Touch meanings
 
-    private static func meaningBody(_ m: TouchMeaning, thirdGeneration: Bool) -> [String: Any] {
+    private static func meaningBody(_ m: TouchMeaning) -> [String: Any] {
         [
             "name": m.label,
-            "pattern": m.pattern.isEmpty ? [200] : m.pattern,
+            "pattern": m.touchGeneration == 3 ? TouchPattern.trimmed(m.pattern) : (m.pattern.isEmpty ? [200] : m.pattern),
             "startColor": androidColor(fromRGB: m.colorRGB),
             "endColor": androidColor(fromRGB: m.endColorRGB),
-            "generation": thirdGeneration ? "3" : "2",
+            "generation": m.touchGeneration == 3 ? "3" : "2",
             "favourite": false
         ]
     }
 
     /// `POST bond/api/v3/bonds/{bondId}/meanings` → the created meaning's server id.
-    static func createMeaning(bondId: String, _ m: TouchMeaning, thirdGeneration: Bool,
-                              bearer: String) async throws -> String? {
+    static func createMeaning(bondId: String, _ m: TouchMeaning, bearer: String) async throws -> String? {
         let j = try await call("bond/api/v3/bonds/\(bondId)/meanings", "POST", bearer: bearer,
-                               body: meaningBody(m, thirdGeneration: thirdGeneration))
+                               body: meaningBody(m))
         return (j as? [String: Any])?["id"] as? String
     }
 
     /// `PUT bond/api/v3/bonds/{bondId}/meanings/{meaningId}`.
     static func updateMeaning(bondId: String, meaningId: String, _ m: TouchMeaning,
-                              thirdGeneration: Bool, bearer: String) async throws {
+                              bearer: String) async throws {
         _ = try await call("bond/api/v3/bonds/\(bondId)/meanings/\(meaningId)", "PUT", bearer: bearer,
-                           body: meaningBody(m, thirdGeneration: thirdGeneration))
+                           body: meaningBody(m))
     }
 
     /// `DELETE bond/api/v3/bonds/{bondId}/meanings/{meaningId}`.
@@ -182,7 +188,8 @@ extension BondBackend {
         let start = rgb(fromAndroid: j["startColor"]) ?? 0xFF2E74
         return TouchMeaning(label: (j["name"] as? String) ?? "Touch", emoji: "",
                             colorRGB: start, endColorRGB: rgb(fromAndroid: j["endColor"]) ?? start,
-                            pattern: pattern(j["pattern"]), serverID: id)
+                            pattern: pattern(j["pattern"]), serverID: id,
+                            generation: generation(j["generation"]))
     }
 
     // MARK: - User / presence

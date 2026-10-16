@@ -144,6 +144,7 @@ extension AppModel {
                 let meaning = meanings.first { $0.label == meaningName }
                 let touch = TouchMessage(senderID: (b["firebaseId"] as? String) ?? id,
                                          pattern: BondBackend.pattern(msg["pattern"]),
+                                         generation: BondBackend.generation(msg["generation"]),
                                          colorRGB: meaning?.colorRGB ?? color,
                                          endColorRGB: meaning?.endColorRGB ?? color,
                                          sentAt: Date(timeIntervalSince1970: ms / 1000))
@@ -214,10 +215,10 @@ extension AppModel {
 
     // MARK: - Touches
 
-    func legacySendTouch(pattern: [Int], bond: Bond) async throws {
+    func legacySendTouch(_ touch: TouchMessage, bond: Bond) async throws {
         let token = try await legacyToken()
-        try await BondBackend.sendTouch(bondId: bond.id, pattern: pattern,
-                                        thirdGeneration: bracelet.isThirdGeneration, bearer: token)
+        try await BondBackend.sendTouch(bondId: bond.id, pattern: touch.pattern,
+                                        generation: touch.generation, bearer: token)
     }
 
     // MARK: - Bonds / invites
@@ -292,8 +293,7 @@ extension AppModel {
         guard let bond = selectedPartner?.bond, bond.legacy else { store.meanings.append(meaning); return }
         do {
             let token = try await legacyToken()
-            let id = try await BondBackend.createMeaning(bondId: bond.id, meaning,
-                                                         thirdGeneration: bracelet.isThirdGeneration, bearer: token)
+            let id = try await BondBackend.createMeaning(bondId: bond.id, meaning, bearer: token)
             var saved = meaning
             saved.serverID = id
             legacyMeanings[bond.id, default: []].append(saved)

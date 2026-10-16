@@ -152,6 +152,7 @@ final class CloudRelay {
         )
         record["senderID"] = touch.senderID as CKRecordValue
         record["pattern"] = touch.pattern as CKRecordValue
+        record["generation"] = touch.generation as CKRecordValue
         record["colorRGB"] = touch.colorRGB as CKRecordValue
         record["endColorRGB"] = touch.endColorRGB as CKRecordValue
         record["sentAt"] = touch.sentAt as CKRecordValue
@@ -241,6 +242,7 @@ final class CloudRelay {
                    let id = UUID(uuidString: record.recordID.recordName) {
                     let endColor = record["endColorRGB"] as? Int ?? color
                     events.touches.append(TouchMessage(id: id, senderID: sender, pattern: pattern,
+                                                       generation: record["generation"] as? Int ?? 2,
                                                        colorRGB: color, endColorRGB: endColor, sentAt: sentAt))
                 }
             case Self.recordTypeMessage:

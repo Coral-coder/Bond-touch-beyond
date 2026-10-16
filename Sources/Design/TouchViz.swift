@@ -1,19 +1,22 @@
 import SwiftUI
 
-/// Renders a touch as a glowing timeline: the pattern is the on/off millisecond list the
-/// bracelet and server use (even indices = finger down, odd = finger up). Each "on" becomes
-/// a neon stroke whose length is its duration (short presses read as dots), and the gaps
-/// keep their proportions. The whole touch is scaled to the available width, so any
-/// pattern length fits — it never pushes the layout wider. The colour runs as the touch's
-/// start → end gradient.
+/// Renders a touch, scaled to the available width so any length fits (it never pushes the
+/// layout wider), coloured along its start → end gradient.
+/// - Generation 3 (touch bar / Bond Touch More): a 2D trace — time to the right, finger
+///   position on the bar up and down (position 8 at the top). Taps read as dots, slides as
+///   strokes that follow the finger.
+/// - Generation 2: a timeline of presses (on/off milliseconds), each press a stroke whose
+///   length is its duration.
 struct TouchViz: View {
     let pattern: [Int]
+    let generation: Int
     let startColorRGB: Int
     let endColorRGB: Int
     var height: CGFloat = 26
 
-    init(pattern: [Int], colorRGB: Int, endColorRGB: Int? = nil, height: CGFloat = 26) {
+    init(pattern: [Int], generation: Int = 2, colorRGB: Int, endColorRGB: Int? = nil, height: CGFloat = 26) {
         self.pattern = pattern
+        self.generation = generation
         self.startColorRGB = colorRGB
         self.endColorRGB = endColorRGB ?? colorRGB
         self.height = height
@@ -32,6 +35,48 @@ struct TouchViz: View {
     }
 
     var body: some View {
+        if generation == 3 { trace } else { timeline }
+    }
+
+    /// Generation 3: the 2D time × position trace.
+    private var trace: some View {
+        let samples = TouchPattern.trimmed(pattern)
+        let n = max(samples.count, 1)
+        return Canvas { ctx, size in
+            let r = max(min(size.height * 0.11, 5), 2.5)
+            let usableW = max(size.width - r * 2, 1), usableH = max(size.height - r * 2, 1)
+            func point(_ i: Int, _ pos: Int) -> CGPoint {
+                CGPoint(x: r + usableW * (n > 1 ? Double(i) / Double(n - 1) : 0.5),
+                        y: r + usableH * (1 - Double(pos) / Double(TouchPattern.positions - 1)))
+            }
+            var glow = ctx
+            glow.addFilter(.shadow(color: color(at: 0.5).opacity(0.8), radius: 6))
+            var previous: [Int] = []
+            for (i, s) in samples.enumerated() {
+                let fingers = TouchPattern.fingers(in: s)
+                let tint = color(at: Double(i) / Double(n))
+                for (k, pos) in fingers.enumerated() {
+                    let p = point(i, pos)
+                    if k < previous.count {
+                        var line = Path()
+                        line.move(to: point(i - 1, previous[k]))
+                        line.addLine(to: p)
+                        glow.stroke(line, with: .color(tint), style: StrokeStyle(lineWidth: r * 2, lineCap: .round))
+                    } else {
+                        glow.fill(Path(ellipseIn: CGRect(x: p.x - r, y: p.y - r, width: r * 2, height: r * 2)),
+                                  with: .color(tint))
+                    }
+                }
+                previous = fingers
+            }
+        }
+        .frame(maxWidth: .infinity, minHeight: height, maxHeight: height)
+        .accessibilityLabel(String(format: "Touch on the bar, %.1f seconds",
+                                   Double(samples.count * TouchPattern.sampleMs) / 1000))
+    }
+
+    /// Generation 2: the press timeline.
+    @ViewBuilder private var timeline: some View {
         let items = presses
         let total = max(items.last.map { $0.start + $0.length } ?? 1, 1)
         Canvas { ctx, size in

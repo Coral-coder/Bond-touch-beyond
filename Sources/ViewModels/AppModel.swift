@@ -69,10 +69,11 @@ final class AppModel: ObservableObject {
         heart.onBPM = { [weak self] bpm in Task { @MainActor in await self?.relayHeartbeat(bpm) } }
         location.onUpdate = { [weak self] coord in Task { @MainActor in await self?.broadcastLocation(coord) } }
         // A tap pattern made on the user's own bracelet is a touch for the selected partner.
-        bracelet.onLocalTap = { [weak self] pattern in
+        bracelet.onLocalTap = { [weak self] pattern, generation in
             Task { @MainActor in
                 guard let self else { return }
-                await self.sendTouch(pattern: pattern, colorRGB: self.store.profile.colorRGB)
+                await self.sendTouch(pattern: pattern, generation: generation,
+                                     colorRGB: self.store.profile.colorRGB)
             }
         }
     }
@@ -181,13 +182,14 @@ final class AppModel: ObservableObject {
 
     // MARK: - Sending
 
-    func sendTouch(pattern: [Int], colorRGB: Int, endColorRGB: Int? = nil, toBondID: String? = nil) async {
+    func sendTouch(pattern: [Int], generation: Int = 2, colorRGB: Int, endColorRGB: Int? = nil,
+                   toBondID: String? = nil) async {
         guard let bond = bond(for: toBondID) else { return }
-        let touch = TouchMessage(senderID: myUserID, pattern: pattern,
+        let touch = TouchMessage(senderID: myUserID, pattern: pattern, generation: generation,
                                  colorRGB: colorRGB, endColorRGB: endColorRGB)
         do {
             if bond.legacy {
-                try await legacySendTouch(pattern: pattern, bond: bond)
+                try await legacySendTouch(touch, bond: bond)
             } else {
                 try await relay.sendTouch(touch, bond: bond)
             }
