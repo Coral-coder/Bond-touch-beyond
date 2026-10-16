@@ -28,6 +28,7 @@ targets:
         # CoreBluetooth usage strings are required or the app is rejected / crashes on first scan.
         NSBluetoothAlwaysUsageDescription: Bond Touch Beyond uses Bluetooth to talk to your bracelet.
         NSBluetoothPeripheralUsageDescription: Bond Touch Beyond uses Bluetooth to talk to your bracelet.
+        NSHealthShareUsageDescription: Bond Touch Beyond reads your heart rate so you can send your live heartbeat to your partner's bracelet.
         UIBackgroundModes:
           - bluetooth-central
           - remote-notification
@@ -40,6 +41,8 @@ targets:
           - CloudKit
         com.apple.developer.ubiquity-kvstore-identifier: $(TeamIdentifierPrefix)$(CFBundleIdentifier)
         aps-environment: production
+        com.apple.developer.healthkit: true
+        com.apple.developer.healthkit.access: []
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.coralcoder.bondtouchbeyond

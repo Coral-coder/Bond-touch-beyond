@@ -69,6 +69,13 @@ enum BondGATT {
         return Data(f.prefix(20))
     }
 
+    /// A single heartbeat pulse: a short, firm buzz with a brief glow. Sent once per beat
+    /// by the heartbeat player to make the bracelet feel like a pulse.
+    static func encodeHeartbeatPulse(colorRGB: Int) -> Data {
+        encodeLedAndMotor(colorRGB: colorRGB, vibrationStrength: 220, vibrationMs: 130,
+                          brightness: 255, holdMs: 130)
+    }
+
     // MARK: - Incoming
 
     /// Parses an FFB2 notification into a received touch rhythm, or nil if it's not a

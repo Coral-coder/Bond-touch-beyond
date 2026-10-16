@@ -34,9 +34,11 @@ client. This tracks every feature area, its iOS mapping, and build status.
 - History (`history/`, `HistoryMessage`) — log of sent/received touches & messages.
 - Touch "test" / delivery status (`TestMessage`, `SentMessage`, `ReceivedMessage`).
 
-### Heartbeat sharing (`heartble/`, `heartcommon/`, `ecg.dat`)
-- Feel the partner's live heartbeat; the SSJ (`umontreal`) lib does signal processing.
-- iOS: a second BLE characteristic stream + Core Haptics playback. (Later phase — needs a capture to confirm the heart characteristic.)
+### Heartbeat sharing (`heartble/`, `heartcommon/`, `ecg.dat`)  ✅ HealthKit-based
+- Original derived BPM from camera PPG (`HeartBeatFrameAnalyzer`, RR intervals) + a heart BLE device.
+- iOS rebuild reads BPM from **HealthKit** (Apple Watch), relays it over CloudKit, and the
+  partner's device beats their bracelet at that BPM via the 0x26 motor command.
+  `HeartRateService`, `CloudRelay.sendHeartbeat`, `BraceletManager.startHeartbeat`, `HeartView`.
 
 ### Presence (`presence/`, `ui/compose/presence/`, `encounters/`)
 - Presence+ (was a subscription — now free): live online/near presence, "encounters" when partners are close, partner map.
@@ -63,7 +65,7 @@ client. This tracks every feature area, its iOS mapping, and build status.
 3. Partner chat (text + touch) over CloudKit.
 4. Bracelet pairing/connect flow + firmware-update gate (Nordic DFU → iOS DFU lib).
 5. Presence / encounters / map (MapKit).
-6. Heartbeat sharing (needs a BLE capture to confirm the heart stream).
+6. ✅ Heartbeat sharing via HealthKit → partner's bracelet.
 7. Private Space (E2E gallery/chat).
 8. WidgetKit, then Apple Watch app.
 

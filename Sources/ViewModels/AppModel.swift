@@ -11,15 +11,45 @@ final class AppModel: ObservableObject {
     @Published var statusLine: String = "Starting…"
     @Published var pendingShare: CKShare?
     @Published var braceletState: BraceletState = .disconnected
+    @Published var partnerHeartbeatActive = false
+    @Published var sharingHeartbeat = false
     @Published private(set) var myUserID: String = ""
 
     let bracelet = BraceletManager()
     let store = LocalStore()
+    let heart = HeartRateService()
     private let relay = CloudRelay()
 
     init() {
-        // Re-publish the nested bracelet's state so SwiftUI views observing AppModel update.
+        // Re-publish nested objects' state so SwiftUI views observing AppModel update.
         bracelet.$state.receive(on: DispatchQueue.main).assign(to: &$braceletState)
+        bracelet.$heartbeatActive.receive(on: DispatchQueue.main).assign(to: &$partnerHeartbeatActive)
+        // Relay each new heart-rate reading to the partner while sharing is on.
+        heart.onBPM = { [weak self] bpm in
+            Task { @MainActor in await self?.relayHeartbeat(bpm) }
+        }
+    }
+
+    // MARK: - Heartbeat sharing
+
+    func startSharingHeartbeat() async {
+        await heart.requestAuthorization()
+        guard heart.authorized else {
+            statusLine = "Allow heart-rate access in Health to share your heartbeat."
+            return
+        }
+        heart.start()
+        sharingHeartbeat = true
+    }
+
+    func stopSharingHeartbeat() {
+        heart.stop()
+        sharingHeartbeat = false
+    }
+
+    private func relayHeartbeat(_ bpm: Int) async {
+        guard sharingHeartbeat, let bond else { return }
+        try? await relay.sendHeartbeat(bpm: bpm, bond: bond, senderID: myUserID)
     }
 
     func bootstrap() async {
@@ -71,10 +101,11 @@ final class AppModel: ObservableObject {
     func handleRemoteNotification() async {
         guard let bond else { return }
         do {
-            let touches = try await relay.fetchNewTouches(bond: bond, myUserID: myUserID)
-            history.append(contentsOf: touches)
+            let events = try await relay.fetchNewEvents(bond: bond, myUserID: myUserID)
+            history.append(contentsOf: events.touches)
             if !store.doNotDisturb {
-                for touch in touches { bracelet.play(touch) }
+                for touch in events.touches { bracelet.play(touch) }
+                if let bpm = events.latestBPM { bracelet.startHeartbeat(bpm: bpm) }
             }
         } catch {
             statusLine = "Fetch failed: \(error.localizedDescription)"

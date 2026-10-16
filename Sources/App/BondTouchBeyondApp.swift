@@ -12,6 +12,7 @@ struct BondTouchBeyondApp: App {
             RootView()
                 .environmentObject(model)
                 .environmentObject(model.store)
+                .environmentObject(model.heart)
                 .task { await model.bootstrap() }
                 .onAppear { appDelegate.model = model }
         }

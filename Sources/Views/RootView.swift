@@ -15,6 +15,8 @@ struct RootView: View {
                         .tabItem { Label("Touch", systemImage: "hand.tap.fill") }
                     NavigationStack { MeaningsView().navigationTitle("Meanings") }
                         .tabItem { Label("Meanings", systemImage: "heart.text.square.fill") }
+                    NavigationStack { HeartView().navigationTitle("Heartbeat") }
+                        .tabItem { Label("Heartbeat", systemImage: "waveform.path.ecg") }
                     NavigationStack { HistoryView().navigationTitle("History") }
                         .tabItem { Label("History", systemImage: "clock.fill") }
                     NavigationStack { SettingsView().navigationTitle("Settings") }

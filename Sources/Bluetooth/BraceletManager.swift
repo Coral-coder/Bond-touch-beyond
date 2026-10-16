@@ -26,6 +26,12 @@ final class BraceletManager: NSObject, ObservableObject {
     private var writeQueue: [Data] = []
     private var writing = false
 
+    private var heartbeatTimer: Timer?
+    private var heartbeatWatchdog: Timer?
+    private var heartbeatBPM = 0
+    /// True while the partner's heartbeat is beating on this bracelet.
+    @Published private(set) var heartbeatActive = false
+
     override init() {
         super.init()
         central = CBCentralManager(delegate: self, queue: .main)
@@ -41,6 +47,41 @@ final class BraceletManager: NSObject, ObservableObject {
     func play(_ touch: TouchMessage) {
         enqueue(BondGATT.encodeTouch(touch), to: ffb2)
         enqueue(BondGATT.encodeLedAndMotor(colorRGB: touch.colorRGB), to: ffb1)
+    }
+
+    // MARK: - Heartbeat playback
+
+    /// Beats the bracelet at the given BPM (one firm pulse per beat) until `stopHeartbeat()`
+    /// or ~15s pass with no refresh. Call again with a new BPM to retune live.
+    func startHeartbeat(bpm: Int, colorRGB: Int = 0xF44336) {
+        let clamped = min(max(bpm, 30), 220)
+        resetHeartbeatWatchdog()
+        guard clamped != heartbeatBPM || heartbeatTimer == nil else { return }
+        heartbeatBPM = clamped
+        heartbeatTimer?.invalidate()
+        heartbeatActive = true
+        let interval = 60.0 / Double(clamped)
+        let timer = Timer(timeInterval: interval, repeats: true) { [weak self] _ in
+            guard let self, let bracelet = self.bracelet, let ffb1 = self.ffb1 else { return }
+            self.writeQueue.append(BondGATT.encodeHeartbeatPulse(colorRGB: colorRGB))
+            self.pumpQueue(characteristic: ffb1, peripheral: bracelet)
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        heartbeatTimer = timer
+    }
+
+    func stopHeartbeat() {
+        heartbeatTimer?.invalidate(); heartbeatTimer = nil
+        heartbeatWatchdog?.invalidate(); heartbeatWatchdog = nil
+        heartbeatBPM = 0
+        heartbeatActive = false
+    }
+
+    private func resetHeartbeatWatchdog() {
+        heartbeatWatchdog?.invalidate()
+        let w = Timer(timeInterval: 15, repeats: false) { [weak self] _ in self?.stopHeartbeat() }
+        RunLoop.main.add(w, forMode: .common)
+        heartbeatWatchdog = w
     }
 
     private func enqueue(_ data: Data, to characteristic: CBCharacteristic?) {

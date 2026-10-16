@@ -11,7 +11,14 @@ import Foundation
 final class CloudRelay {
     static let recordTypeTouch = "Touch"
     static let recordTypeBond = "Bond"
+    static let recordTypeHeartbeat = "Heartbeat"
     static let subscriptionID = "bond-zone-changes"
+
+    /// What a fetch pulled since the last change token.
+    struct RelayEvents {
+        var touches: [TouchMessage] = []
+        var latestBPM: Int?
+    }
 
     private let container: CKContainer
     private var privateDB: CKDatabase { container.privateCloudDatabase }
@@ -88,27 +95,55 @@ final class CloudRelay {
         _ = try await db.modifyRecords(saving: [record], deleting: [])
     }
 
-    /// Fetches touches written since our last change token for the given bond.
-    /// Returns only touches *not* sent by us, so we don't echo our own taps.
-    func fetchNewTouches(bond: Bond, myUserID: String) async throws -> [TouchMessage] {
+    /// Streams the current user's heartbeat to the partner. One stable record per sender,
+    /// overwritten each update, so the partner always reads the latest BPM.
+    func sendHeartbeat(bpm: Int, bond: Bond, senderID: String) async throws {
         let db = bond.isOwner ? privateDB : sharedDB
         let zoneID = try await zoneID(forBond: bond, in: db)
-        var touches: [TouchMessage] = []
+        let record = CKRecord(
+            recordType: Self.recordTypeHeartbeat,
+            recordID: CKRecord.ID(recordName: "heartbeat-\(senderID)", zoneID: zoneID)
+        )
+        record["senderID"] = senderID as CKRecordValue
+        record["bpm"] = bpm as CKRecordValue
+        record["sentAt"] = Date() as CKRecordValue
+        _ = try await db.modifyRecords(saving: [record], deleting: [], savePolicy: .changedKeys)
+    }
+
+    /// Fetches touches and the partner's latest heartbeat since our last change token.
+    /// Ignores anything we sent ourselves, so we don't echo our own taps/heartbeat.
+    func fetchNewEvents(bond: Bond, myUserID: String) async throws -> RelayEvents {
+        let db = bond.isOwner ? privateDB : sharedDB
+        let zoneID = try await zoneID(forBond: bond, in: db)
+        var events = RelayEvents()
+        var newestHeartbeat: Date = .distantPast
 
         let changes = try await db.recordZoneChanges(inZoneWith: zoneID, since: changeTokens[zoneID])
         for modification in changes.modificationResultsByID.values {
             guard let record = try? modification.get().record,
-                  record.recordType == Self.recordTypeTouch,
                   let sender = record["senderID"] as? String, sender != myUserID,
-                  let pattern = record["pattern"] as? [Int],
-                  let color = record["colorRGB"] as? Int,
-                  let sentAt = record["sentAt"] as? Date,
-                  let id = UUID(uuidString: record.recordID.recordName)
+                  let sentAt = record["sentAt"] as? Date
             else { continue }
-            touches.append(TouchMessage(id: id, senderID: sender, pattern: pattern, colorRGB: color, sentAt: sentAt))
+            switch record.recordType {
+            case Self.recordTypeTouch:
+                if let pattern = record["pattern"] as? [Int],
+                   let color = record["colorRGB"] as? Int,
+                   let id = UUID(uuidString: record.recordID.recordName) {
+                    events.touches.append(TouchMessage(id: id, senderID: sender, pattern: pattern,
+                                                       colorRGB: color, sentAt: sentAt))
+                }
+            case Self.recordTypeHeartbeat:
+                if let bpm = record["bpm"] as? Int, sentAt > newestHeartbeat {
+                    newestHeartbeat = sentAt
+                    events.latestBPM = bpm
+                }
+            default:
+                break
+            }
         }
         changeTokens[zoneID] = changes.changeToken
-        return touches.sorted { $0.sentAt < $1.sentAt }
+        events.touches.sort { $0.sentAt < $1.sentAt }
+        return events
     }
 
     // MARK: - Plumbing
