@@ -253,6 +253,35 @@ final class AppModel: ObservableObject {
         }
     }
 
+    /// Sends a saved meaning. For a partner on the original app, send it by the meaning's id
+    /// (`/touches/basic`) so their app plays it as that meaning and its colour lights their
+    /// bracelet; a raw pattern would only buzz. iCloud carries the colour, so it goes as a
+    /// normal touch there.
+    func sendMeaning(_ meaning: TouchMeaning, toBondID: String? = nil) async {
+        guard let bond = bond(for: toBondID) else { return }
+        if bond.legacy, let serverID = meaning.serverID {
+            let bg = UIApplication.shared.beginBackgroundTask(withName: "send-meaning")
+            defer { UIApplication.shared.endBackgroundTask(bg) }
+            let touch = TouchMessage(bondID: bond.id, senderID: myUserID, pattern: meaning.pattern,
+                                     generation: meaning.touchGeneration, colorRGB: meaning.colorRGB,
+                                     endColorRGB: meaning.endColorRGB)
+            NetLog.shared.log(.send, "Send meaning \"\(meaning.label)\" → \(bond.partnerName) (original Bond API)",
+                              "meaningId \(serverID)")
+            do {
+                try await BondBackend.sendMeaningTouch(bondId: bond.id, meaningId: serverID,
+                                                       bearer: try await legacyToken())
+                history.append(touch)
+            } catch {
+                statusLine = "Send failed: \(error.localizedDescription)"
+                NetLog.shared.log(.fail, "Send meaning failed", error.localizedDescription)
+            }
+            return
+        }
+        // iCloud, or a legacy meaning without a server id: send the pattern and colour.
+        await sendTouch(pattern: meaning.pattern, generation: meaning.touchGeneration,
+                        colorRGB: meaning.colorRGB, endColorRGB: meaning.endColorRGB, toBondID: toBondID)
+    }
+
     private func bond(for id: String?) -> Bond? {
         if let id { return partners.first { $0.id == id }?.bond }
         return activeBond

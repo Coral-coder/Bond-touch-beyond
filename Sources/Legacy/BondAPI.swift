@@ -161,6 +161,20 @@ extension BondBackend {
         return (j as? [String: Any])?["id"] as? String
     }
 
+    /// `POST bond/api/v3/bonds/{bondId}/touches/basic {timestamp, meaningId}` — sends a saved
+    /// meaning by its id, so the partner's app plays it as that meaning (its colour lights
+    /// their bracelet). The original app uses this for Touch Language sends, not the raw
+    /// pattern endpoint.
+    @discardableResult
+    static func sendMeaningTouch(bondId: String, meaningId: String, bearer: String) async throws -> String? {
+        let body: [String: Any] = [
+            "timestamp": Int64(Date().timeIntervalSince1970 * 1000),
+            "meaningId": meaningId
+        ]
+        let j = try await call("bond/api/v3/bonds/\(bondId)/touches/basic", "POST", bearer: bearer, body: body)
+        return (j as? [String: Any])?["id"] as? String
+    }
+
     /// `PUT bond/api/v3/bonds/{bondId}/touches/{id}/acknowledge`.
     static func ackTouch(bondId: String, touchId: String, bearer: String) async throws {
         _ = try await call("bond/api/v3/bonds/\(bondId)/touches/\(touchId)/acknowledge", "PUT", bearer: bearer)

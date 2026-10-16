@@ -30,6 +30,8 @@ struct WatchMeaning: Identifiable, Equatable {
     let generation: Int
     let startRGB: Int
     let endRGB: Int
+    /// The meaning's id on the original backend (so it lights the partner's bracelet).
+    var serverID: String? = nil
 }
 
 /// The watch's side of the phone link: receives partners, the selection and meanings in
@@ -60,6 +62,17 @@ final class PhoneLink: NSObject, ObservableObject, WCSessionDelegate {
         WKInterfaceDevice.current().play(.success)
     }
 
+    /// Sends a saved meaning (by id when it has one, so the partner's bracelet lights up).
+    func sendMeaning(_ m: WatchMeaning) {
+        guard let bond = selected?.id else { return }
+        var msg: [String: Any] = ["type": "touch", "bond": bond, "pattern": m.pattern,
+                                  "gen": m.generation, "start": m.startRGB, "end": m.endRGB]
+        if let sid = m.serverID { msg["meaningId"] = sid }
+        send(msg)
+        lastSent = Date()
+        WKInterfaceDevice.current().play(.success)
+    }
+
     func select(_ id: String) {
         selectedID = id
         send(["type": "select", "bond": id])
@@ -86,7 +99,8 @@ final class PhoneLink: NSObject, ObservableObject, WCSessionDelegate {
             meanings[bond] = list.compactMap { m in
                 guard let name = m["name"] as? String, let pattern = m["pattern"] as? [Int] else { return nil }
                 return WatchMeaning(name: name, pattern: pattern, generation: (m["gen"] as? Int) ?? 2,
-                                    startRGB: (m["start"] as? Int) ?? 0xFF2E74, endRGB: (m["end"] as? Int) ?? 0xBE5BFF)
+                                    startRGB: (m["start"] as? Int) ?? 0xFF2E74, endRGB: (m["end"] as? Int) ?? 0xBE5BFF,
+                                    serverID: m["meaningId"] as? String)
             }
         }
         DispatchQueue.main.async {

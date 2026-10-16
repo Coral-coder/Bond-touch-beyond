@@ -252,10 +252,7 @@ struct HomeView: View {
                 HStack(spacing: 8) {
                     ForEach(meanings) { m in
                         Button {
-                            Task {
-                                await model.sendTouch(pattern: m.pattern, generation: m.touchGeneration,
-                                                      colorRGB: m.colorRGB, endColorRGB: m.endColorRGB)
-                            }
+                            Task { await model.sendMeaning(m) }
                         } label: {
                             HStack(spacing: 6) {
                                 Circle().fill(LinearGradient(colors: [Color(rgbInt: m.colorRGB), Color(rgbInt: m.endColorRGB)],
