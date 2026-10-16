@@ -6,4 +6,4 @@ Android XAPK: Actions → Download Bond Touch XAPK → Run workflow fetches `com
 
 ## iOS app (Bond Touch Beyond)
 
-A clean-room SwiftUI port: paired bracelets, touches relayed through **iCloud/CloudKit** (no Firebase, no server), and **no telemetry**. CoreBluetooth drives the bracelet once its BLE protocol is filled into `Sources/Bluetooth/BondGATT.swift`. See `docs/PORT_NOTES.md` for status and how to capture the protocol. `ios-build-check.yml` compiles it for the simulator on every push.
+A clean-room SwiftUI port: paired bracelets, touches relayed through **iCloud/CloudKit** (no Firebase, no server), and **no telemetry**. CoreBluetooth drives the bracelet using the reverse-engineered v3 protocol (`docs/BLE_PROTOCOL.md`). See `docs/PORT_NOTES.md` for status and how to capture the protocol. `ios-build-check.yml` compiles it for the simulator on every push.

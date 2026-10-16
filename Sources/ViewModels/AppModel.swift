@@ -28,9 +28,8 @@ final class AppModel: ObservableObject {
         }
         do {
             myUserID = try await relay.currentUserID()
-            statusLine = BondGATT.isResolved
-                ? "Ready."
-                : "Bracelet protocol not yet configured — relay works, hardware is pending."
+            statusLine = "Ready."
+            bracelet.startScanning()
         } catch {
             statusLine = "iCloud error: \(error.localizedDescription)"
         }
@@ -71,7 +70,7 @@ final class AppModel: ObservableObject {
         do {
             let touches = try await relay.fetchNewTouches(bond: bond, myUserID: myUserID)
             incoming.append(contentsOf: touches)
-            for touch in touches { try? bracelet.play(touch) }
+            for touch in touches { bracelet.play(touch) }
         } catch {
             statusLine = "Fetch failed: \(error.localizedDescription)"
         }

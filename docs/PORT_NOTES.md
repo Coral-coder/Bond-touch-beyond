@@ -22,17 +22,22 @@ this repo.
   re-check: do not bring across Firebase Analytics, Crashlytics, or any `logEvent`
   calls.)
 - **Bluetooth layer** (`Sources/Bluetooth/`) — a complete CoreBluetooth central
-  with one deliberate gap: the vendor GATT UUIDs and the touch wire-format.
+  implementing the **reverse-engineered v3 protocol** (see `docs/BLE_PROTOCOL.md`):
+  real service/characteristic UUIDs, touch frames on FFB2, buzz/glow on FFB1.
 
-## What's blocked / still needed: the bracelet protocol
+## The bracelet protocol — reverse-engineered ✅
 
-`Sources/Bluetooth/BondGATT.swift` holds the device-specific values and is
-**unresolved on purpose** — every field is `nil` and the encode/decode functions
-throw. The manager stays in `.unsupportedUntilProtocolResolved` rather than shipping
-invented UUIDs that would never match a real bracelet. The relay half of the app is
-fully functional without this; only talking to physical hardware needs it.
+The v3 BLE protocol was recovered from the official app with jadx and is documented in
+`docs/BLE_PROTOCOL.md` and implemented in `Sources/Bluetooth/BondGATT.swift`:
+service `d3c00003-…`, write char FFB1 (LED/motor), write+notify char FFB2 (touches),
+the `0x26` LED+motor frame and the FFB2 touch frame. `BondGATT.isResolved` is now `true`
+and `BraceletManager` scans for and drives real hardware.
 
-There is no published Bond Touch BLE specification, so these must be captured:
+What still benefits from a real-device check (not blocking the build):
+- Confirm the exact field split of the incoming `0x19` FFB2 notification against a
+  `btsnoop_hci.log` capture (we know it's a touch event ≥14 bytes; the per-tap byte
+  layout is inferred).
+- Confirm vibration/LED timing defaults feel right on hardware.
 
 ### Option A — sniff a real bracelet (preferred, cleanest)
 1. On an Android phone, enable Developer Options → **Enable Bluetooth HCI snoop log**.

@@ -3,16 +3,16 @@ import Foundation
 
 enum BraceletState: Equatable {
     case bluetoothOff
-    case unsupportedUntilProtocolResolved
     case scanning
     case connecting
     case connected
     case disconnected
 }
 
-/// CoreBluetooth central that talks to the bracelet. The actual commands it sends
-/// come from `BondGATT`; until that's resolved this manager stays in
-/// `.unsupportedUntilProtocolResolved` and never fabricates a connection.
+/// CoreBluetooth central that talks to a Bond Touch bracelet using the reverse-engineered
+/// v3 protocol in `BondGATT`. Scans for the vendor service, connects, enables FFB2
+/// notifications, and sends touches (FFB2) plus buzz/glow (FFB1). Writes are serialised:
+/// the next write waits for the previous write's response, which the bracelet requires.
 final class BraceletManager: NSObject, ObservableObject {
     @Published private(set) var state: BraceletState = .disconnected
     /// Delivered when the wearer taps their own bracelet (to relay to the partner).
@@ -20,7 +20,11 @@ final class BraceletManager: NSObject, ObservableObject {
 
     private var central: CBCentralManager!
     private var bracelet: CBPeripheral?
-    private var writeChar: CBCharacteristic?
+    private var ffb1: CBCharacteristic?   // LED / motor
+    private var ffb2: CBCharacteristic?   // touch write + notify
+
+    private var writeQueue: [Data] = []
+    private var writing = false
 
     override init() {
         super.init()
@@ -28,20 +32,28 @@ final class BraceletManager: NSObject, ObservableObject {
     }
 
     func startScanning() {
-        guard BondGATT.isResolved, let service = BondGATT.service else {
-            state = .unsupportedUntilProtocolResolved
-            return
-        }
         guard central.state == .poweredOn else { state = .bluetoothOff; return }
         state = .scanning
-        central.scanForPeripherals(withServices: [service])
+        central.scanForPeripherals(withServices: [BondGATT.service])
     }
 
-    /// Plays a touch on the connected bracelet.
-    func play(_ touch: TouchMessage) throws {
-        guard let bracelet, let writeChar else { throw BondGATTError.protocolNotResolved }
-        let frame = try BondGATT.encode(touch)
-        bracelet.writeValue(frame, for: writeChar, type: .withResponse)
+    /// Plays a touch: send the rhythm on FFB2 and a matching buzz/glow on FFB1.
+    func play(_ touch: TouchMessage) {
+        enqueue(BondGATT.encodeTouch(touch), to: ffb2)
+        enqueue(BondGATT.encodeLedAndMotor(colorRGB: touch.colorRGB), to: ffb1)
+    }
+
+    private func enqueue(_ data: Data, to characteristic: CBCharacteristic?) {
+        guard let characteristic, let bracelet else { return }
+        writeQueue.append(data)
+        pumpQueue(characteristic: characteristic, peripheral: bracelet)
+    }
+
+    private func pumpQueue(characteristic: CBCharacteristic, peripheral: CBPeripheral) {
+        guard !writing, !writeQueue.isEmpty else { return }
+        writing = true
+        let next = writeQueue.removeFirst()
+        peripheral.writeValue(next, for: characteristic, type: .withResponse)
     }
 }
 
@@ -49,20 +61,16 @@ extension BraceletManager: CBCentralManagerDelegate {
     func centralManagerDidUpdateState(_ central: CBCentralManager) {
         switch central.state {
         case .poweredOn:
-            if BondGATT.isResolved { /* ready; UI triggers scan */ }
-            else { state = .unsupportedUntilProtocolResolved }
-        case .poweredOff:
-            state = .bluetoothOff
-        default:
-            state = .disconnected
+            if state == .disconnected || state == .bluetoothOff { startScanning() }
+        case .poweredOff: state = .bluetoothOff
+        default: state = .disconnected
         }
     }
 
     func centralManager(_ central: CBCentralManager, didDiscover peripheral: CBPeripheral,
                         advertisementData: [String: Any], rssi RSSI: NSNumber) {
-        // Optional extra filter on advertised name once we know the prefix.
-        if let prefix = BondGATT.advertisedNamePrefix,
-           let name = peripheral.name, !name.hasPrefix(prefix) { return }
+        let advName = advertisementData[CBAdvertisementDataLocalNameKey] as? String ?? peripheral.name
+        guard BondGATT.isBondName(advName) else { return }
         bracelet = peripheral
         peripheral.delegate = self
         state = .connecting
@@ -71,38 +79,47 @@ extension BraceletManager: CBCentralManagerDelegate {
     }
 
     func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
-        if let service = BondGATT.service { peripheral.discoverServices([service]) }
+        peripheral.discoverServices([BondGATT.service])
     }
 
     func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral,
                         error: Error?) {
         state = .disconnected
+        ffb1 = nil; ffb2 = nil
+        writeQueue.removeAll(); writing = false
     }
 }
 
 extension BraceletManager: CBPeripheralDelegate {
     func peripheral(_ peripheral: CBPeripheral, didDiscoverServices error: Error?) {
-        guard let service = peripheral.services?.first else { return }
-        var chars: [CBUUID] = []
-        if let w = BondGATT.touchWrite { chars.append(w) }
-        if let n = BondGATT.touchNotify { chars.append(n) }
-        peripheral.discoverCharacteristics(chars.isEmpty ? nil : chars, for: service)
+        guard let service = peripheral.services?.first(where: { $0.uuid == BondGATT.service }) else { return }
+        peripheral.discoverCharacteristics([BondGATT.ffb1, BondGATT.ffb2], for: service)
     }
 
     func peripheral(_ peripheral: CBPeripheral, didDiscoverCharacteristicsFor service: CBService,
                     error: Error?) {
         for char in service.characteristics ?? [] {
-            if char.uuid == BondGATT.touchWrite { writeChar = char }
-            if char.uuid == BondGATT.touchNotify { peripheral.setNotifyValue(true, for: char) }
+            if char.uuid == BondGATT.ffb1 { ffb1 = char }
+            if char.uuid == BondGATT.ffb2 {
+                ffb2 = char
+                peripheral.setNotifyValue(true, for: char)
+            }
         }
         state = .connected
     }
 
+    func peripheral(_ peripheral: CBPeripheral, didWriteValueFor characteristic: CBCharacteristic,
+                    error: Error?) {
+        writing = false
+        // Continue draining whichever characteristic still has queued writes.
+        if let next = ffb2 ?? ffb1 { pumpQueue(characteristic: next, peripheral: peripheral) }
+    }
+
     func peripheral(_ peripheral: CBPeripheral, didUpdateValueFor characteristic: CBCharacteristic,
                     error: Error?) {
-        guard characteristic.uuid == BondGATT.touchNotify,
+        guard characteristic.uuid == BondGATT.ffb2,
               let data = characteristic.value,
-              let pattern = try? BondGATT.decodeTap(data) else { return }
+              let pattern = BondGATT.decodeTap(data) else { return }
         onLocalTap?(pattern)
     }
 }

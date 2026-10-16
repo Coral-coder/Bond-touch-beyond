@@ -68,8 +68,6 @@ struct BondView: View {
             case .connected: return ("Bracelet connected", "antenna.radiowaves.left.and.right", .green)
             case .scanning, .connecting: return ("Looking for bracelet…", "dot.radiowaves.left.and.right", .orange)
             case .bluetoothOff: return ("Bluetooth off", "antenna.radiowaves.left.and.right.slash", .red)
-            case .unsupportedUntilProtocolResolved:
-                return ("Bracelet link pending protocol", "wrench.and.screwdriver", .gray)
             case .disconnected: return ("Bracelet not connected", "antenna.radiowaves.left.and.right.slash", .gray)
             }
         }()
