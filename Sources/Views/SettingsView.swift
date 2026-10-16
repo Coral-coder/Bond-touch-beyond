@@ -31,6 +31,15 @@ struct SettingsView: View {
                     row("Bracelet notifications", "") { BraceletNotificationsView() }
                     row("Bond Touch account (beta)", "") { LegacyLoginView() }
                     languageRow
+                    GlassCard(padding: 20) {
+                        Stepper(value: $store.touchWindowSeconds, in: 5...10, step: 1) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Touch window: \(Int(store.touchWindowSeconds)) s").foregroundStyle(.white)
+                                Text("Time to tap and slide on the touch bar before it sends")
+                                    .font(.caption).foregroundStyle(Theme.subtitle)
+                            }
+                        }
+                    }
                 }
                 Text("Bond Touch Beyond").font(.caption2).foregroundStyle(Theme.subtitle).padding(.top, 8)
                 Color.clear.frame(height: 90)

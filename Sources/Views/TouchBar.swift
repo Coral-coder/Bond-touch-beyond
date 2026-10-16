@@ -201,6 +201,11 @@ struct CountdownRing: View {
 /// Full-screen touch composer: a tall bar, a live 2D preview, the colour gradient, and
 /// Send now / Save as meaning.
 struct ComposeTouchView: View {
+    /// `.send`: the touch goes to the partner when the window ends. `.createMeaning`:
+    /// nothing is sent; the recorded touch is saved to the Touch Language.
+    enum Mode { case send, createMeaning }
+    var mode: Mode = .send
+
     @EnvironmentObject var model: AppModel
     @EnvironmentObject var store: LocalStore
     @Environment(\.dismiss) private var dismiss
@@ -218,14 +223,15 @@ struct ComposeTouchView: View {
                     .font(Theme.font(16, .bold)).foregroundStyle(.white)
                     .padding(.horizontal, 16).frame(height: 40).glass(Capsule())
                 Spacer()
-                Text("To \(model.selectedPartner?.displayName ?? "partner")")
+                Text(mode == .send ? "To \(model.selectedPartner?.displayName ?? "partner")" : "New touch")
                     .font(Theme.font(17, .heavy)).foregroundStyle(.white)
                 Spacer()
                 Color.clear.frame(width: 80, height: 40)
             }
 
             VStack(spacing: 10) {
-                Text(recorder.recording ? "Recording…" : (lastTouch.isEmpty ? "Touch the bar to start" : "Sent"))
+                Text(recorder.recording ? "Recording…"
+                     : (lastTouch.isEmpty ? "Touch the bar to start" : (mode == .send ? "Sent" : "Recorded — save it below")))
                     .font(Theme.font(14, .semibold)).foregroundStyle(Theme.subtitle)
                 TouchViz(pattern: recorder.recording ? recorder.samples : lastTouch, generation: 3,
                          colorRGB: startColor.rgbInt, endColorRGB: endColor.rgbInt, height: 90)
@@ -262,7 +268,7 @@ struct ComposeTouchView: View {
                 Button("Save as meaning") { saving = true }
                     .buttonStyle(GlassButtonStyle(height: 54))
                     .disabled(recorder.samples.isEmpty && lastTouch.isEmpty)
-                Button("Send now") { recorder.finish() }
+                Button(mode == .send ? "Send now" : "Done") { recorder.finish() }
                     .buttonStyle(AccentButtonStyle(height: 54))
                     .disabled(!recorder.recording)
             }
@@ -274,6 +280,7 @@ struct ComposeTouchView: View {
             recorder.windowSeconds = store.touchWindowSeconds
             recorder.onFinish = { samples in
                 lastTouch = samples
+                if mode == .createMeaning { saving = true; return }
                 Task {
                     await model.sendTouch(pattern: samples, generation: 3,
                                           colorRGB: startColor.rgbInt, endColorRGB: endColor.rgbInt)
@@ -290,6 +297,7 @@ struct ComposeTouchView: View {
                                      pattern: pattern, isNew: true, generation: 3)
                 Task { await model.addMeaning(m) }
                 meaningName = ""
+                if mode == .createMeaning { dismiss() }
             }
             Button("Cancel", role: .cancel) {}
         }

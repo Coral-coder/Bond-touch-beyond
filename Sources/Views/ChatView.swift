@@ -123,11 +123,20 @@ struct ChatView: View {
                             .clipShape(RoundedRectangle(cornerRadius: 18))
                     }
                 case .text:
-                    Text(msg.text)
-                        .foregroundStyle(mine ? .white : .white.opacity(0.95))
-                        .padding(.horizontal, 14).padding(.vertical, 10)
-                        .background(mine ? Theme.accent.opacity(0.22) : Color.white.opacity(0.08))
-                        .clipShape(RoundedRectangle(cornerRadius: 18))
+                    if mine {
+                        Text(msg.text)
+                            .font(Theme.font(16)).foregroundStyle(.white)
+                            .padding(.horizontal, 14).padding(.vertical, 10)
+                            .background(LinearGradient(colors: [Theme.accent.opacity(0.55), Theme.accentDeep.opacity(0.35)],
+                                                       startPoint: .top, endPoint: .bottom))
+                            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                            .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(.white.opacity(0.4), lineWidth: 1))
+                    } else {
+                        Text(msg.text)
+                            .font(Theme.font(16)).foregroundStyle(.white)
+                            .padding(.horizontal, 14).padding(.vertical, 10)
+                            .glass(cornerRadius: 20)
+                    }
                 }
                 if !mine { Spacer(minLength: 40) }
             }
@@ -165,7 +174,8 @@ struct ChatView: View {
             .disabled(draft.trimmingCharacters(in: .whitespaces).isEmpty)
             .accessibilityLabel("Send")
         }
-        .padding(.horizontal, 16).padding(.vertical, 10)
-        .background(.ultraThinMaterial)
+        .padding(8)
+        .glass(cornerRadius: 30)
+        .padding(.horizontal, 12).padding(.bottom, 90)
     }
 }

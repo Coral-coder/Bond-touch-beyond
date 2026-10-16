@@ -19,15 +19,15 @@ struct MeaningsView: View {
                 VStack(alignment: .leading, spacing: 16) {
                     HStack {
                         Text("Touch Language")
-                            .font(.system(size: 34, weight: .heavy, design: .rounded))
+                            .font(Theme.font(32, .heavy))
                             .foregroundStyle(.white)
                         Spacer()
                         Button { showAdd = true } label: {
                             Image(systemName: "plus")
                                 .font(.system(size: 18, weight: .bold))
                                 .foregroundStyle(Theme.accent)
-                                .frame(width: 44, height: 44)
-                                .background(Circle().fill(Color.white.opacity(0.06)))
+                                .frame(width: 46, height: 46)
+                                .glass(Circle())
                         }
                     }
                     .padding(.top, 8)
@@ -52,9 +52,7 @@ struct MeaningsView: View {
                 .padding(.horizontal, 20)
             }
         }
-        .sheet(isPresented: $showAdd) {
-            AddMeaningView { meaning in Task { await model.addMeaning(meaning) } }
-        }
+        .fullScreenCover(isPresented: $showAdd) { ComposeTouchView(mode: .createMeaning) }
     }
 
     @ViewBuilder private func meaningCard(_ meaning: TouchMeaning) -> some View {
@@ -79,7 +77,9 @@ struct MeaningsView: View {
                     }
                     clearNew(meaning)
                 } label: {
-                    Text("Send").font(.headline.weight(.bold)).foregroundStyle(.white)
+                    Text("Send").font(Theme.font(15, .heavy)).foregroundStyle(Theme.onAccent)
+                        .padding(.horizontal, 16).frame(height: 36)
+                        .background(Capsule().fill(Theme.accent))
                 }
                 .buttonStyle(.plain)
             }
@@ -97,56 +97,5 @@ struct MeaningsView: View {
     private func clearNew(_ meaning: TouchMeaning) {
         guard let i = store.meanings.firstIndex(where: { $0.id == meaning.id }), store.meanings[i].isNew else { return }
         store.meanings[i].isNew = false
-    }
-}
-
-private struct AddMeaningView: View {
-    @Environment(\.dismiss) private var dismiss
-    let onSave: (TouchMeaning) -> Void
-    @State private var label = ""
-    @State private var startColor = Color(rgbInt: 0xFF2E74)
-    @State private var endColor = Color(rgbInt: 0xAEE63C)
-    @State private var taps = 2
-
-    /// On/off milliseconds for `taps` quick taps: 150 ms press, 220 ms gap.
-    static func pattern(taps: Int) -> [Int] {
-        (0..<max(taps, 1)).flatMap { i in i == 0 ? [150] : [220, 150] }
-    }
-
-    var body: some View {
-        NavigationStack {
-            Form {
-                Section("Name") {
-                    TextField("e.g. I love you", text: $label)
-                        .onChange(of: label) { if $0.count > 20 { label = String($0.prefix(20)) } }
-                }
-                Section("Colour (start → end)") {
-                    ColorPicker("Start colour", selection: $startColor)
-                    ColorPicker("End colour", selection: $endColor)
-                    TouchViz(pattern: Self.pattern(taps: taps),
-                             colorRGB: startColor.rgbInt, endColorRGB: endColor.rgbInt)
-                        .frame(height: 30)
-                }
-                Section("Rhythm") {
-                    Stepper("Taps: \(taps)", value: $taps, in: 1...10)
-                }
-            }
-            .navigationTitle("New touch")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") {
-                        let pattern = Self.pattern(taps: taps)
-                        onSave(TouchMeaning(label: label.isEmpty ? "Touch" : label,
-                                            emoji: "",
-                                            colorRGB: startColor.rgbInt,
-                                            endColorRGB: endColor.rgbInt,
-                                            pattern: pattern, isNew: true))
-                        dismiss()
-                    }
-                }
-            }
-        }
     }
 }
