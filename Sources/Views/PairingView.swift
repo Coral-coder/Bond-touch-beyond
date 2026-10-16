@@ -6,6 +6,7 @@ import SwiftUI
 struct PairingView: View {
     @EnvironmentObject var model: AppModel
     @State private var showShare = false
+    @State private var shareError: String?
     @State private var inviteEmail = ""
     @State private var inviting = false
     @State private var inviteResult: String?
@@ -42,9 +43,13 @@ struct PairingView: View {
         }
         .sheet(isPresented: $showShare) {
             if let root = model.pendingShareRoot {
-                CloudShareSheet(root: root, container: CKContainer(identifier: AppConfig.cloudContainerID))
+                CloudShareSheet(root: root, container: CKContainer(identifier: AppConfig.cloudContainerID),
+                                onError: { msg in showShare = false; shareError = msg })
             }
         }
+        .alert("Can't invite", isPresented: Binding(get: { shareError != nil }, set: { if !$0 { shareError = nil } })) {
+            Button("OK", role: .cancel) { shareError = nil }
+        } message: { Text(shareError ?? "") }
     }
 
     /// Invite someone who uses the original Bond Touch app, by their account email
