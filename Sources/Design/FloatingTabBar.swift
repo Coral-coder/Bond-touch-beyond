@@ -26,7 +26,7 @@ struct FloatingTabBar: View {
                 } label: {
                     Image(systemName: tab.icon)
                         .font(.system(size: 20, weight: .semibold))
-                        .foregroundStyle(selection == tab ? Theme.teal : .white)
+                        .foregroundStyle(selection == tab ? Theme.accent : .white)
                         .frame(maxWidth: .infinity)
                         .frame(height: 44)
                         .background(

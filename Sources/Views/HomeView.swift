@@ -64,7 +64,7 @@ struct HomeView: View {
             Button { showHeart = true } label: {
                 Image(systemName: "heart")
                     .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(Theme.teal)
+                    .foregroundStyle(Theme.accent)
                     .frame(width: 44, height: 44)
                     .background(Circle().fill(Color.white.opacity(0.06)))
             }
@@ -74,7 +74,7 @@ struct HomeView: View {
             Button { showPeople = true } label: {
                 Image(systemName: "person.2")
                     .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(Theme.teal)
+                    .foregroundStyle(Theme.accent)
                     .frame(width: 44, height: 44)
                     .background(Circle().fill(Color.white.opacity(0.06)))
             }
@@ -95,7 +95,7 @@ struct HomeView: View {
             .frame(maxWidth: .infinity)
 
             Image(systemName: "heart.text.square")
-                .font(.system(size: 26)).foregroundStyle(Theme.teal)
+                .font(.system(size: 26)).foregroundStyle(Theme.accent)
                 .padding(.top, 44)
 
             VStack(spacing: 8) {
