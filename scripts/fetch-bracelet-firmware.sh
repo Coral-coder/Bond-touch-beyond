@@ -58,7 +58,9 @@ if [ -z "$ok" ]; then
     "https://api.pureapk.com/m/v3/cms/app_version?hl=en-US&package_name=${PACKAGE}" || true
   while read -r link; do
     fetch "$link" && { ok=1; break; }
-  done < <(grep -aoE 'https?://[A-Za-z0-9.-]+/b/(XAPK|APK)/[^[:space:][:cntrl:]"]+' "$work/versions.bin" 2>/dev/null | awk '!seen[$0]++')
+  # The answer is protobuf: pick the download links out of it as plain strings, using only
+  # URL characters (byte mode, so protobuf length bytes never stick to a link).
+  done < <(LC_ALL=C grep -aoE "https?://[A-Za-z0-9.-]+/b/(XAPK|APK)/[A-Za-z0-9._~:/?#@!\$&'()*+,;=%-]+" "$work/versions.bin" 2>/dev/null | awk '!seen[$0]++')
 fi
 if [ -z "$ok" ]; then
   echo "::warning::Couldn't download the official Bond Touch package; building without bundled bracelet firmware."
