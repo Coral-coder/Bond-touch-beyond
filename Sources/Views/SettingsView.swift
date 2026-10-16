@@ -23,11 +23,13 @@ struct SettingsView: View {
                 VStack(spacing: 12) {
                     row("Personal details", "person.text.rectangle") { PersonalDetailsView() }
                     row("My Bond Touch Bracelet", "applewatch") { BraceletSettingsView() }
+                    row("Bracelet notifications", "bell.fill") { BraceletNotificationsView() }
                     row("Do not disturb", "moon.fill") { DoNotDisturbView() }
                     row("My people", "person.2.fill") { PeopleView().navigationTitle("My people") }
                     row("Private Space", "lock.fill") { ComingSoonView(title: "Private Space") }
                     row("Legacy data", "externaldrive.fill") { LegacyDataView() }
-                    row("Help & Support", "questionmark.circle.fill") { ComingSoonView(title: "Help & Support") }
+                    row("Help & Support", "questionmark.circle.fill") { HelpView() }
+                    languageRow
                 }
                 Text("Bond Touch Beyond").font(.caption2).foregroundStyle(Theme.subtitle).padding(.top, 8)
                 Color.clear.frame(height: 90)
@@ -43,10 +45,25 @@ struct SettingsView: View {
         } label: {
             GlassCard {
                 HStack(spacing: 14) {
-                    Image(systemName: icon).foregroundStyle(Theme.teal).frame(width: 24)
+                    Image(systemName: icon).foregroundStyle(Theme.accent).frame(width: 24)
                     Text(title).foregroundStyle(.white)
                     Spacer()
                     Image(systemName: "chevron.right").foregroundStyle(Theme.subtitle).font(.footnote)
+                }
+            }
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// Language is controlled by iOS per-app settings; link straight to them.
+    private var languageRow: some View {
+        Link(destination: URL(string: UIApplication.openSettingsURLString)!) {
+            GlassCard {
+                HStack(spacing: 14) {
+                    Image(systemName: "globe").foregroundStyle(Theme.accent).frame(width: 24)
+                    Text("Language").foregroundStyle(.white)
+                    Spacer()
+                    Image(systemName: "arrow.up.right").foregroundStyle(Theme.subtitle).font(.footnote)
                 }
             }
         }
@@ -89,8 +106,18 @@ private struct BraceletSettingsView: View {
                 GlassCard {
                     VStack(alignment: .leading, spacing: 10) {
                         Text("Vibration strength: \(Int(store.vibrationStrength))").foregroundStyle(.white)
-                        Slider(value: $store.vibrationStrength, in: 0...255, step: 5)
+                        Slider(value: $store.vibrationStrength, in: 0...255, step: 5).tint(Theme.accent)
                     }
+                }
+                Button(role: .destructive) {
+                    model.bracelet.disconnect()
+                } label: {
+                    Text("Disconnect bracelet")
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .background(Theme.danger.opacity(0.18))
+                        .foregroundStyle(Theme.danger)
+                        .clipShape(RoundedRectangle(cornerRadius: Theme.cardCorner))
                 }
             }
             .padding(20)
@@ -99,12 +126,46 @@ private struct BraceletSettingsView: View {
     }
 }
 
+/// Toggles whether the bracelet buzzes for app notifications (ANCS in the original).
+private struct BraceletNotificationsView: View {
+    @AppStorage("braceletNotifications") private var enabled = true
+    var body: some View {
+        VStack(spacing: 16) {
+            GlassCard {
+                Toggle("Buzz for notifications", isOn: $enabled)
+                    .foregroundStyle(.white).tint(Theme.accent)
+            }
+            Text("When on, your bracelet buzzes for incoming touches and messages.")
+                .font(.footnote).foregroundStyle(Theme.subtitle)
+            Spacer()
+        }
+        .padding(20).navigationTitle("Bracelet notifications")
+    }
+}
+
+private struct HelpView: View {
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                Text("Pairing").font(.headline).foregroundStyle(.white)
+                Text("Open My Bond Touch Bracelet and tap Connect with the bracelet awake and nearby. The app pairs with BOND, Bond More, BOND 4 and BOND MINI bracelets.")
+                    .foregroundStyle(Theme.subtitle)
+                Text("Sending a touch").font(.headline).foregroundStyle(.white)
+                Text("Tap the rhythm on your bracelet, or send a saved Touch Language meaning. Your partner feels it on theirs.")
+                    .foregroundStyle(Theme.subtitle)
+            }
+            .padding(20)
+        }
+        .navigationTitle("Help & Support")
+    }
+}
+
 private struct DoNotDisturbView: View {
     @EnvironmentObject var store: LocalStore
     var body: some View {
         VStack(spacing: 16) {
             GlassCard {
-                Toggle("Do not disturb", isOn: $store.doNotDisturb).foregroundStyle(.white).tint(Theme.teal)
+                Toggle("Do not disturb", isOn: $store.doNotDisturb).foregroundStyle(.white).tint(Theme.accent)
             }
             Text("When on, incoming touches won't buzz your bracelet.")
                 .font(.footnote).foregroundStyle(Theme.subtitle)
