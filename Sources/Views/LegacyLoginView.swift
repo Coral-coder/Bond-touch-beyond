@@ -6,10 +6,10 @@ import SwiftUI
 struct LegacyLoginView: View {
     @EnvironmentObject var store: LocalStore
 
-    enum Stage { case email, pin, done }
+    enum Stage { case email, link, done }
     @State private var stage: Stage = .email
     @State private var email = ""
-    @State private var pin = ""
+    @State private var linkText = ""
     @State private var busy = false
     @State private var error: String?
 
@@ -18,7 +18,7 @@ struct LegacyLoginView: View {
             VStack(alignment: .leading, spacing: 18) {
                 switch stage {
                 case .email: emailStep
-                case .pin:   pinStep
+                case .link:  linkStep
                 case .done:  doneStep
                 }
                 if let error {
@@ -50,21 +50,20 @@ struct LegacyLoginView: View {
         }
     }
 
-    private var pinStep: some View {
+    private var linkStep: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("Enter your pin").font(.title2.bold()).foregroundStyle(.white)
-            Text("We sent a 6-digit code to\n\(email)\nto confirm your email address.")
+            Text("Check your email").font(.title2.bold()).foregroundStyle(.white)
+            Text("We emailed a sign-in link to\n\(email).\nOpen that email, copy the sign-in link, and paste it here.")
                 .font(.subheadline).foregroundStyle(Theme.subtitle)
-            TextField("------", text: $pin)
-                .keyboardType(.numberPad).multilineTextAlignment(.center)
-                .font(.title.monospaced()).foregroundStyle(.white)
+            TextField("Paste the sign-in link", text: $linkText, axis: .vertical)
+                .lineLimit(2...4).textInputAutocapitalization(.never).autocorrectionDisabled()
+                .font(.footnote.monospaced()).foregroundStyle(.white)
                 .padding(14).background(Color.white.opacity(0.08))
                 .clipShape(RoundedRectangle(cornerRadius: Metric.cornerMedium))
-                .onChange(of: pin) { if $0.count > 6 { pin = String($0.prefix(6)) } }
-            primaryButton("Confirm", enabled: pin.count == 6 && !busy) {
+            primaryButton("Sign in", enabled: linkText.contains("oobCode") && !busy) {
                 Task { await completeLogin() }
             }
-            Button("Resend pin") { Task { await beginLogin() } }
+            Button("Resend the email") { Task { await beginLogin() } }
                 .font(.footnote).foregroundStyle(Theme.accent).disabled(busy)
         }
     }
@@ -79,7 +78,7 @@ struct LegacyLoginView: View {
             Button(role: .destructive) {
                 store.legacyEmail = ""; store.legacyRefreshToken = ""; store.firebaseAuthToken = ""
                 store.useLegacyFirebase = false
-                stage = .email; email = ""; pin = ""
+                stage = .email; email = ""; linkText = ""
             } label: { Text("Log out").foregroundStyle(Theme.danger) }
         }
     }
@@ -102,7 +101,7 @@ struct LegacyLoginView: View {
         busy = true; error = nil
         do {
             try await BondBackend.beginEmailLogin(email: email.trimmingCharacters(in: .whitespaces))
-            stage = .pin
+            stage = .link
         } catch {
             self.error = error.localizedDescription
         }
@@ -113,7 +112,7 @@ struct LegacyLoginView: View {
         busy = true; error = nil
         do {
             let session = try await BondBackend.completeEmailLogin(
-                email: email.trimmingCharacters(in: .whitespaces), pin: pin)
+                email: email.trimmingCharacters(in: .whitespaces), link: linkText)
             store.firebaseAuthToken = session.idToken
             store.legacyRefreshToken = session.refreshToken
             let fetchedEmail = (try? await BondBackend.currentUserEmail(bearer: session.idToken)) ?? ""

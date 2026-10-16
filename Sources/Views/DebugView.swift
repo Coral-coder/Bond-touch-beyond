@@ -29,8 +29,7 @@ struct DebugView: View {
                         row("REST API", BondBackend.apiBase.absoluteString)
                         row("Storage bucket", BondBackend.storageBucket)
                         row("Firebase API key", BondBackend.apiKey)
-                        row("Impersonated app", BondBackend.androidPackage)
-                        row("Cert (X-Android-Cert)", BondBackend.androidCert)
+                        row("iOS bundle id (X-Ios-Bundle-Identifier)", BondBackend.iosBundleId)
                     }
 
                     section("Partners (\(model.partners.count))") {

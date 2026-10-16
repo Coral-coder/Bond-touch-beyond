@@ -4,26 +4,27 @@ import Foundation
 /// `api.bond-touch.com` — used as a bridge so you can sign in with your existing account
 /// until the CloudKit move is complete.
 ///
-/// Reverse-engineered from the app's `request-pin` / `validate-pin` flow:
-///  1. sign in to Firebase anonymously to get a bearer token and a uid (`firebaseId`),
-///  2. `POST bond/api/v3/auth/request-pin {email}` — the backend emails a 6-digit PIN,
-///  3. `POST bond/api/v3/auth/validate-pin {email, firebaseId, pin}` → `{token}` (a Firebase
-///     custom token),
-///  4. `signInWithCustomToken` → the real account's ID token,
-///  5. call the Bond API (`bond/api/v3/user`, …) with `Authorization: Bearer <idToken>`.
+/// Auth matches the real iOS app (recovered from the IPA: Firebase Email Link sign-in):
+///  1. `POST accounts:sendOobCode {requestType: EMAIL_SIGNIN, email, continueUrl}` — Firebase
+///     emails a sign-in link; the user opens it and pastes the link back,
+///  2. `POST accounts:signInWithEmailLink {email, oobCode}` → the account's ID token,
+///  3. call the Bond API (`bond/api/v3/user`, …) with `Authorization: Bearer <idToken>`.
 ///
-/// The Firebase API key is restricted to the original Android app, so the identity requests
-/// send that app's `X-Android-Package` / `X-Android-Cert` identity, exactly as the app does.
+/// The Firebase key is the iOS key, authorised with the `X-Ios-Bundle-Identifier` header
+/// (`com.impossible.bondtouch`) — the same identity the iOS app presents.
 enum BondBackend {
-    static let apiKey = "AIzaSyAdRp2UpcN345BkLVEIt6VjnIZS1ysEsL0"
+    // iOS Firebase config (from the real iOS app's GoogleService-Info.plist). The iOS app
+    // authenticates with Firebase Email Link sign-in, authorising the key with the iOS
+    // bundle-identifier header (not the Android package/cert).
+    static let apiKey = "AIzaSyBKWjCliQP5HvvM6QtTQfFaGTvD27847_c"
+    static let iosBundleId = "com.impossible.bondtouch"
     static let apiBase = URL(string: "https://api.bond-touch.com/")!
-    static let androidPackage = "com.impossible.bondtouch"
-    static let androidCert = "23460F11B7C87B163329E7ECF3B6D6D89A139E33"
-    // Original Firebase project config (from the app's google-services values).
     static let projectId = "bond-touch"
     static let rtdbURL = "https://bond-touch.firebaseio.com"
     static let storageBucket = "bond-touch.appspot.com"
     static let senderId = "625752440215"
+    /// Where the email-link lands; the oobCode is read from the link the user pastes back.
+    static let continueURL = "https://bond-touch.firebaseapp.com/"
     private static let identityBase = "https://identitytoolkit.googleapis.com/v1/"
 
     struct Session: Equatable {
@@ -43,8 +44,7 @@ enum BondBackend {
         var req = URLRequest(url: URL(string: identityBase + method + "?key=" + apiKey)!)
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        req.setValue(androidPackage, forHTTPHeaderField: "X-Android-Package")
-        req.setValue(androidCert, forHTTPHeaderField: "X-Android-Cert")
+        req.setValue(iosBundleId, forHTTPHeaderField: "X-Ios-Bundle-Identifier")
         req.httpBody = try JSONSerialization.data(withJSONObject: body)
         let (data, resp) = try await URLSession.shared.data(for: req)
         let json = ((try? JSONSerialization.jsonObject(with: data)) as? [String: Any]) ?? [:]
@@ -53,6 +53,38 @@ enum BondBackend {
             throw BackendError(message: msg)
         }
         return json
+    }
+
+    // MARK: - Firebase Email Link sign-in (the real iOS flow)
+
+    /// Sends a Firebase email sign-in link to `email` (identitytoolkit `sendOobCode`,
+    /// requestType EMAIL_SIGNIN). The user opens the email and pastes the link back.
+    static func sendEmailSignInLink(email: String) async throws {
+        _ = try await identity("accounts:sendOobCode", body: [
+            "requestType": "EMAIL_SIGNIN",
+            "email": email,
+            "continueUrl": continueURL,
+            "canHandleCodeInApp": true
+        ])
+    }
+
+    /// Completes email-link sign-in with the `oobCode` extracted from the pasted link.
+    static func signInWithEmailLink(email: String, oobCode: String) async throws -> Session {
+        try session(from: try await identity("accounts:signInWithEmailLink",
+                                             body: ["email": email, "oobCode": oobCode]))
+    }
+
+    /// Pulls the Firebase oobCode out of a pasted sign-in link (handles plain and
+    /// Dynamic-Link–wrapped URLs).
+    static func oobCode(fromLink link: String) -> String? {
+        guard let comps = URLComponents(string: link.trimmingCharacters(in: .whitespacesAndNewlines)) else { return nil }
+        if let code = comps.queryItems?.first(where: { $0.name == "oobCode" })?.value { return code }
+        // Dynamic Link wraps the real URL in a `link=` query item.
+        if let inner = comps.queryItems?.first(where: { $0.name == "link" })?.value,
+           let innerComps = URLComponents(string: inner) {
+            return innerComps.queryItems?.first(where: { $0.name == "oobCode" })?.value
+        }
+        return nil
     }
 
     private static func session(from j: [String: Any]) throws -> Session {
@@ -250,16 +282,16 @@ enum BondBackend {
 
     // MARK: - Two-step login
 
-    /// Step 1: ask the backend to email a 6-digit PIN. Public endpoint — no Firebase
-    /// anonymous sign-in (that provider is disabled on the project: "admin only").
+    /// Step 1: send the Firebase email sign-in link (the real iOS flow).
     static func beginEmailLogin(email: String) async throws {
-        try await requestPin(email: email)
+        try await sendEmailSignInLink(email: email)
     }
 
-    /// Step 2: validate the PIN for a Firebase custom token, then sign in with it.
-    static func completeEmailLogin(email: String, pin: String) async throws -> Session {
-        let firebaseId = UUID().uuidString
-        let customToken = try await validatePin(email: email, firebaseId: firebaseId, pin: pin)
-        return try await signIn(customToken: customToken)
+    /// Step 2: the user pastes the link from the email; sign in with its oobCode.
+    static func completeEmailLogin(email: String, link: String) async throws -> Session {
+        guard let code = oobCode(fromLink: link) else {
+            throw BackendError(message: "Couldn't find the sign-in code in that link. Paste the whole link from the email.")
+        }
+        return try await signInWithEmailLink(email: email, oobCode: code)
     }
 }
