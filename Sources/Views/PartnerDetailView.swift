@@ -16,6 +16,7 @@ struct PartnerDetailView: View {
     @State private var showEncounters = false
     @State private var confirmUnbond = false
     @State private var showShare = false
+    @State private var shareError: String?
     @State private var inviting = false
 
     private var partner: Partner? { model.partners.first { $0.id == partnerID } }
@@ -130,9 +131,13 @@ struct PartnerDetailView: View {
         .sheet(isPresented: $showEncounters) { EncountersView(bondID: partnerID) }
         .sheet(isPresented: $showShare) {
             if let root = model.pendingShareRoot {
-                CloudShareSheet(root: root, container: CKContainer(identifier: AppConfig.cloudContainerID))
+                CloudShareSheet(root: root, container: CKContainer(identifier: AppConfig.cloudContainerID),
+                                onError: { msg in showShare = false; shareError = msg })
             }
         }
+        .alert("Can't invite", isPresented: Binding(get: { shareError != nil }, set: { if !$0 { shareError = nil } })) {
+            Button("OK", role: .cancel) { shareError = nil }
+        } message: { Text(shareError ?? "") }
         .confirmationDialog("Unbond from \(partner?.displayName ?? "this partner")?",
                             isPresented: $confirmUnbond, titleVisibility: .visible) {
             Button("Unbond", role: .destructive) {

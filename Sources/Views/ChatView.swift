@@ -12,6 +12,7 @@ struct ChatView: View {
     @State private var photo: PhotosPickerItem?
     @State private var inviting = false
     @State private var showShare = false
+    @State private var shareError: String?
 
     private var messages: [ChatMessage] { model.chatMessages(for: model.selectedPartnerID) }
     private var chatBondID: String? { model.chatBondID(for: model.selectedPartnerID) }
@@ -52,9 +53,13 @@ struct ChatView: View {
         }
         .sheet(isPresented: $showShare) {
             if let root = model.pendingShareRoot {
-                CloudShareSheet(root: root, container: CKContainer(identifier: AppConfig.cloudContainerID))
+                CloudShareSheet(root: root, container: CKContainer(identifier: AppConfig.cloudContainerID),
+                                onError: { msg in showShare = false; shareError = msg })
             }
         }
+        .alert("Can't invite", isPresented: Binding(get: { shareError != nil }, set: { if !$0 { shareError = nil } })) {
+            Button("OK", role: .cancel) { shareError = nil }
+        } message: { Text(shareError ?? "") }
     }
 
     /// Shown for an original-app partner without an iCloud chat bond yet.

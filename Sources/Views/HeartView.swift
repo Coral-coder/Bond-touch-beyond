@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// Send your heartbeat: one press reads your current heart rate (Apple Watch / Health) and
-/// sends 10 seconds of it to your partner's bracelet, which beats in time and then stops.
+/// sends 5 seconds of it to your partner's bracelet, which beats in time and then stops.
 struct HeartView: View {
     @EnvironmentObject var model: AppModel
     @EnvironmentObject var heart: HeartRateService
@@ -43,8 +43,8 @@ struct HeartView: View {
             .onChange(of: model.sendingHeartbeat) { on in if on { beatStart = Date() } }
 
             Text(model.sendingHeartbeat
-                 ? "\(partnerName)'s bracelet is beating with your heart for 10 seconds."
-                 : "Press to send 10 seconds of your heartbeat to \(partnerName).")
+                 ? "\(partnerName)'s bracelet is beating with your heart for 5 seconds."
+                 : "Press to send 5 seconds of your heartbeat to \(partnerName).")
                 .font(Theme.font(15)).foregroundStyle(Theme.subtitle)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 24)
@@ -68,11 +68,17 @@ struct HeartView: View {
         .screenBackground()
     }
 
-    /// A heartbeat-shaped size: a quick swell at the start of each beat, then rest.
+    /// A heartbeat-shaped size: a big "lub" swell, then a smaller "dub" swell, then rest —
+    /// like a real heart.
     private func pulse(at date: Date) -> CGFloat {
         let phase = date.timeIntervalSince(beatStart).truncatingRemainder(dividingBy: beatInterval) / beatInterval
-        let swell = phase < 0.3 ? sin(phase / 0.3 * .pi) : 0
-        return 1 + 0.08 * CGFloat(swell)
+        func bump(_ start: Double, _ width: Double) -> Double {
+            guard phase >= start, phase < start + width else { return 0 }
+            return sin((phase - start) / width * .pi)
+        }
+        let lub = bump(0, 0.18) * 0.10
+        let dub = bump(0.26, 0.15) * 0.05
+        return 1 + CGFloat(lub + dub)
     }
 
     private var beatInterval: Double {

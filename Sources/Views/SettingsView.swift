@@ -135,6 +135,20 @@ private struct BraceletSettingsView: View {
                         Slider(value: $store.vibrationStrength, in: 0...255, step: 5).tint(Theme.accent)
                     }
                 }
+                Button {
+                    model.bracelet.reconnect()
+                } label: {
+                    Label(model.braceletState == .connected ? "Reconnect" : "Reconnect now",
+                          systemImage: "arrow.clockwise")
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .background(Theme.accent.opacity(0.18))
+                        .foregroundStyle(Theme.accent)
+                        .clipShape(RoundedRectangle(cornerRadius: Theme.cardCorner))
+                }
+                Text("If it's stuck on \"Connecting\", tap Reconnect with the bracelet awake and nearby.")
+                    .font(.caption).foregroundStyle(Theme.subtitle)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 Button(role: .destructive) {
                     model.bracelet.disconnect()
                 } label: {

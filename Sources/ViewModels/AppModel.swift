@@ -68,7 +68,7 @@ final class AppModel: ObservableObject {
     @Published var pendingShareRoot: CKRecord?
     @Published var braceletState: BraceletState = .disconnected
     @Published var partnerHeartbeatActive = false
-    /// True for the 10 s while the user's own heartbeat is being sent.
+    /// True for the 5 s while the user's own heartbeat is being sent.
     @Published var sendingHeartbeat = false
     @Published private(set) var myUserID: String = ""
     @Published private(set) var ready = false
@@ -311,7 +311,7 @@ final class AppModel: ObservableObject {
             // Only the selected partner's touches/heartbeat drive the bracelet.
             if partner.id == selectedPartnerID, !store.doNotDisturb {
                 for touch in events.touches { bracelet.play(touch) }
-                // A heartbeat plays once, for 10 s — and only if it's fresh (not one that was
+                // A heartbeat plays once, for 5 s — and only if it's fresh (not one that was
                 // sent long ago and is only now being fetched).
                 if let bpm = events.latestBPM, let at = events.latestBPMAt,
                    Date().timeIntervalSince(at) < 60 {
@@ -321,10 +321,10 @@ final class AppModel: ObservableObject {
         }
     }
 
-    // MARK: - Heartbeat (a button press sends 10 s of your heartbeat)
+    // MARK: - Heartbeat (a button press sends 5 s of your heartbeat)
 
     /// Sends the user's current heartbeat to the selected partner, once: their bracelet
-    /// beats at that rate for 10 seconds. iCloud partners get a heartbeat record; a partner
+    /// beats at that rate for 5 seconds. iCloud partners get a heartbeat record; a partner
     /// on the original app gets it as a touch in the same rhythm.
     /// Returns the BPM sent, or nil (with `statusLine` explaining why) when it couldn't.
     @discardableResult
@@ -340,13 +340,25 @@ final class AppModel: ObservableObject {
             return nil
         }
         sendingHeartbeat = true
-        defer { Task { @MainActor in try? await Task.sleep(nanoseconds: 10_000_000_000); self.sendingHeartbeat = false } }
+        defer { Task { @MainActor in try? await Task.sleep(nanoseconds: 5_000_000_000); self.sendingHeartbeat = false } }
         if bond.legacy {
-            // 10 s of beats as an on/off pattern: a 120 ms press per beat.
+            // 5 s of heartbeats as an on/off pattern, shaped like a real heart: each beat is
+            // a big "lub" press (150 ms), a short gap, a smaller "dub" press (90 ms), then a
+            // rest to the next beat. On the partner's bracelet it buzzes lub-dub, lub-dub.
             let period = 60_000 / max(bpm, 30)
-            let beats = max(1, 10_000 / period)
+            let beats = max(1, 5_000 / period)
             var pattern: [Int] = []
-            for i in 0..<beats { pattern.append(120); if i < beats - 1 { pattern.append(max(period - 120, 80)) } }
+            let lubDub = period >= 150 + 150 + 90 + 80
+            for i in 0..<beats {
+                pattern.append(150)                                   // lub (on)
+                if lubDub {
+                    pattern.append(150)                               // gap (off)
+                    pattern.append(90)                                // dub (on)
+                    if i < beats - 1 { pattern.append(max(period - 390, 80)) }  // rest (off)
+                } else if i < beats - 1 {
+                    pattern.append(max(period - 150, 80))             // rest (off)
+                }
+            }
             await sendTouch(pattern: pattern, generation: 2, colorRGB: 0xE85D75, toBondID: bond.id)
         } else {
             do { try await relay.sendHeartbeat(bpm: bpm, bond: bond, senderID: myUserID) }
