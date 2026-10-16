@@ -211,7 +211,9 @@ final class CloudRelay {
         let record = CKRecord(recordType: Self.recordTypeTouch,
                               recordID: CKRecord.ID(recordName: touch.id.uuidString, zoneID: zone))
         record["senderID"] = touch.senderID as CKRecordValue
-        record["pattern"] = touch.pattern as CKRecordValue
+        // Stored as bytes, not an Int list: CloudKit's schema import can't declare a list
+        // field, so the pattern is JSON-encoded into a BYTES field.
+        record["pattern"] = (try? JSONEncoder().encode(touch.pattern)) as CKRecordValue? ?? (Data() as CKRecordValue)
         record["generation"] = touch.generation as CKRecordValue
         record["colorRGB"] = touch.colorRGB as CKRecordValue
         record["endColorRGB"] = touch.endColorRGB as CKRecordValue
@@ -293,7 +295,9 @@ final class CloudRelay {
                   let sentAt = record["sentAt"] as? Date else { continue }
             switch record.recordType {
             case Self.recordTypeTouch:
-                if let pattern = record["pattern"] as? [Int], let color = record["colorRGB"] as? Int,
+                let pattern: [Int]? = (record["pattern"] as? Data).flatMap { try? JSONDecoder().decode([Int].self, from: $0) }
+                    ?? (record["pattern"] as? [Int])   // tolerate any older list-typed records
+                if let pattern, let color = record["colorRGB"] as? Int,
                    let id = UUID(uuidString: record.recordID.recordName) {
                     let endColor = record["endColorRGB"] as? Int ?? color
                     events.touches.append(TouchMessage(id: id, bondID: bond.id, senderID: sender, pattern: pattern,

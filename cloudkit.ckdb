@@ -9,7 +9,7 @@ DEFINE SCHEMA
 
     RECORD TYPE Touch (
         senderID    STRING,
-        pattern     INT64 LIST,
+        pattern     BYTES,
         generation  INT64,
         colorRGB    INT64,
         endColorRGB INT64,
