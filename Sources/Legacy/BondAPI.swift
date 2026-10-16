@@ -118,6 +118,12 @@ extension BondBackend {
         _ = try await call("bond/api/v3/bonds/\(id)", "DELETE", bearer: bearer)
     }
 
+    /// `PUT bond/api/v3/bonds/{id}/settings {color, icon}` — your colour for this partner.
+    static func updatePartnerSettings(_ id: String, colorRGB: Int, icon: String, bearer: String) async throws {
+        _ = try await call("bond/api/v3/bonds/\(id)/settings", "PUT", bearer: bearer,
+                           body: ["color": androidColor(fromRGB: colorRGB), "icon": icon])
+    }
+
     /// `PUT bond/api/v3/bonds/{id}/message {message}` — the dashboard greeting.
     static func updatePartnerMessage(_ id: String, message: String, bearer: String) async throws {
         _ = try await call("bond/api/v3/bonds/\(id)/message", "PUT", bearer: bearer, body: ["message": message])

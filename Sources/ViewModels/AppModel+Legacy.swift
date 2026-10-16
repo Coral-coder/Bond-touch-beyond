@@ -103,6 +103,7 @@ extension AppModel {
             let name = ((profile["name"] as? String).flatMap { $0.isEmpty ? nil : $0 }) ?? email
             let bond = Bond(id: id, partnerName: name.isEmpty ? "Partner" : name, isOwner: false,
                             pending: status != "BONDED", legacy: true)
+            legacyPartnerIcons[id] = (settings["icon"] as? String) ?? ""
             legacyPartnerAccounts[id] = (uid: (b["firebaseId"] as? String) ?? "",
                                          phone: (b["phoneNumber"] as? String) ?? "")
 
@@ -277,6 +278,20 @@ extension AppModel {
         Task {
             guard let token = try? await legacyToken() else { return }
             try? await BondBackend.updateEncounter(bond.id, date: date, bearer: token)
+        }
+    }
+
+    /// Your colour for a partner (original backend: `PUT bonds/{id}/settings`).
+    func setPartnerColor(_ rgb: Int, for bondID: String) {
+        if let i = legacyPartners.firstIndex(where: { $0.id == bondID }) {
+            legacyPartners[i].colorRGB = rgb
+            let icon = legacyPartnerIcons[bondID] ?? ""
+            Task {
+                guard let token = try? await legacyToken() else { return }
+                try? await BondBackend.updatePartnerSettings(bondID, colorRGB: rgb, icon: icon, bearer: token)
+            }
+        } else if let i = cloudPartners.firstIndex(where: { $0.id == bondID }) {
+            cloudPartners[i].colorRGB = rgb
         }
     }
 

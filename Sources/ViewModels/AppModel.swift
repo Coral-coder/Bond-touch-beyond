@@ -34,6 +34,8 @@ final class AppModel: ObservableObject {
     /// Partner Firebase UID + legacy phone number per bond, for their key files and photos.
     var legacyPartnerAccounts: [String: (uid: String, phone: String)] = [:]
     var chatSessionAttempts: [String: Date] = [:]
+    /// Partner icon from the bond's settings (kept when updating the colour).
+    var legacyPartnerIcons: [String: String] = [:]
     var chatMaintenanceDone = false
     @Published var legacyChatStatus = ""
 
