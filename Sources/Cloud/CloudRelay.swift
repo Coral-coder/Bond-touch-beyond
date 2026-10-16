@@ -57,7 +57,11 @@ final class CloudRelay {
 
     /// Creates a new bond: a dedicated zone plus a root record, and returns a
     /// `CKShare` to hand to the system share sheet so a partner can join.
-    func createBond(displayName: String) async throws -> (Bond, CKShare) {
+    /// Creates the bond zone and its root record and returns the root. The `CKShare` is
+    /// created and saved later, inside `UICloudSharingController`'s preparation handler, so
+    /// that the controller hands the system share sheet a share whose server URL is ready
+    /// (otherwise the invite link preview spins forever).
+    func createBond(displayName: String) async throws -> (Bond, CKRecord) {
         let zoneID = CKRecordZone.ID(zoneName: "bond-\(UUID().uuidString)", ownerName: CKCurrentUserDefaultName)
         let zone = CKRecordZone(zoneID: zoneID)
         _ = try await privateDB.modifyRecordZones(saving: [zone], deleting: [])
@@ -65,16 +69,11 @@ final class CloudRelay {
         let rootID = CKRecord.ID(recordName: "root", zoneID: zoneID)
         let root = CKRecord(recordType: Self.recordTypeBond, recordID: rootID)
         root["ownerName"] = displayName as CKRecordValue
-
-        let share = CKShare(rootRecord: root)
-        share[CKShare.SystemFieldKey.title] = "Bond Touch Beyond" as CKRecordValue
-        share.publicPermission = .none
-
-        _ = try await privateDB.modifyRecords(saving: [root, share], deleting: [])
+        _ = try await privateDB.modifyRecords(saving: [root], deleting: [])
         try await installZoneSubscription(in: privateDB, zoneID: zoneID)
 
         let bond = Bond(id: zoneID.zoneName, partnerName: "Pending…", isOwner: true, pending: true)
-        return (bond, share)
+        return (bond, root)
     }
 
     /// Deletes a bond: an owner's invite/zone is removed from the private DB; a bond shared

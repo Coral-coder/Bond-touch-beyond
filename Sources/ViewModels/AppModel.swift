@@ -15,7 +15,7 @@ final class AppModel: ObservableObject {
     @Published var history: [TouchMessage] = []                  // sent + received touches
     @Published var messagesByBond: [String: [ChatMessage]] = [:] // chat per bond
     @Published var statusLine: String = "Starting…"
-    @Published var pendingShare: CKShare?
+    @Published var pendingShareRoot: CKRecord?
     @Published var braceletState: BraceletState = .disconnected
     @Published var partnerHeartbeatActive = false
     @Published var sharingHeartbeat = false
@@ -94,10 +94,10 @@ final class AppModel: ObservableObject {
 
     func createBond() async {
         do {
-            let (bond, share) = try await relay.createBond(displayName: store.profile.name.isEmpty ? "Me" : store.profile.name)
+            let (bond, root) = try await relay.createBond(displayName: store.profile.name.isEmpty ? "Me" : store.profile.name)
             // A created invite is pending until the partner accepts — it is not a partner yet.
             pendingBonds.append(bond)
-            pendingShare = share
+            pendingShareRoot = root
         } catch {
             statusLine = "Couldn't create bond: \(error.localizedDescription)"
         }

@@ -19,7 +19,7 @@ struct PairingView: View {
             Button {
                 Task {
                     await model.createBond()
-                    showShare = model.pendingShare != nil
+                    showShare = model.pendingShareRoot != nil
                 }
             } label: {
                 Label("Create a bond & invite", systemImage: "square.and.arrow.up")
@@ -34,8 +34,8 @@ struct PairingView: View {
         }
         .padding()
         .sheet(isPresented: $showShare) {
-            if let share = model.pendingShare {
-                CloudShareSheet(share: share, container: CKContainer(identifier: AppConfig.cloudContainerID))
+            if let root = model.pendingShareRoot {
+                CloudShareSheet(root: root, container: CKContainer(identifier: AppConfig.cloudContainerID))
             }
         }
     }
