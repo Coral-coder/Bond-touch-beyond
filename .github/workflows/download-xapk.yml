@@ -82,28 +82,37 @@ jobs:
               if fetch "https://${host}/b/${kind}/${PACKAGE}?${query}"; then ok=$kind; break 2; fi
             done
           done
-          # 2. Ask the app's API for the version list and take the matching download link from it.
-          #    The answer is protobuf, so the links are picked out of it as plain strings.
+          # 2. Ask the app's API for the version list and fetch a download link from it. The answer
+          #    is protobuf, so the links are picked out of it as plain strings.
           if [ -z "$ok" ]; then
             echo "::group::APKPure app API"
-            curl -sS -L --retry 2 -A "okhttp/4.9.3" -H "x-cv: 3172501" -H "x-sv: ${SDK:-29}" \
+            curl -sS -L --compressed --retry 2 -A "okhttp/4.9.3" -H "x-cv: 3172501" -H "x-sv: ${SDK:-29}" \
               -H "x-abis: ${ABI:-arm64-v8a,armeabi-v7a,armeabi}" -H "x-gp: 1" \
               -o out/versions.bin -w 'HTTP %{http_code}\n' \
               "https://api.pureapk.com/m/v3/cms/app_version?hl=en-US&package_name=${PACKAGE}" || true
-            grep -aoE "https?://[A-Za-z0-9.-]+/b/(XAPK|APK)/${PACKAGE//./\\.}\?[A-Za-z0-9=&_.%-]+" \
-              out/versions.bin 2>/dev/null | awk '!seen[$0]++' > out/links.txt || true
-            echo "$(wc -l < out/links.txt) links found:"; head -20 out/links.txt
+            echo "Readable strings in the answer:"
+            strings -n 6 out/versions.bin 2>/dev/null | head -150 || true
+            grep -aoE 'https?://[A-Za-z0-9.-]+/b/(XAPK|APK)/[^[:space:][:cntrl:]"]+' out/versions.bin \
+              2>/dev/null | awk '!seen[$0]++' > out/links.txt || true
+            echo "$(wc -l < out/links.txt) links found:"; head -40 out/links.txt
             echo "::endgroup::"
+            # Links that name the wanted versionCode go first; the rest are checked against the
+            # version_code in each XAPK's manifest.json (at most 15 of them).
             if [ -n "$VERSION_CODE" ]; then
-              grep -E "[?&]versionCode=${VERSION_CODE}(&|$)" out/links.txt > out/pick.txt || true
+              { grep -E "[?&]versionCode=${VERSION_CODE}(&|$)" out/links.txt || true
+                grep -vE "[?&]versionCode=" out/links.txt || true; } | head -15 > out/pick.txt
             else
-              cp out/links.txt out/pick.txt
+              head -1 out/links.txt > out/pick.txt
             fi
             while read -r link; do
-              if fetch "$link"; then
-                case "$link" in */b/XAPK/*) ok=XAPK ;; *) ok=APK ;; esac
-                break
+              fetch "$link" || continue
+              case "$link" in */b/XAPK/*) kind=XAPK ;; *) kind=APK ;; esac
+              if [ -n "$VERSION_CODE" ]; then
+                got=$(unzip -p out/download manifest.json 2>/dev/null | jq -r '.version_code // empty' || true)
+                echo "versionCode in package: ${got:-unknown}"
+                [ "$got" = "$VERSION_CODE" ] || continue
               fi
+              ok=$kind; break
             done < out/pick.txt
           fi
           if [ -z "$ok" ]; then
@@ -142,6 +151,17 @@ jobs:
             cat out/SHA256SUMS
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload API answer for debugging
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: apkpure-debug
+          path: |
+            out/versions.bin
+            out/links.txt
+            out/download
+          if-no-files-found: ignore
 
       - name: Upload package
         uses: actions/upload-artifact@v4
