@@ -89,17 +89,35 @@ final class FirmwareRecovery: NSObject, ObservableObject {
         reloadInstalled()
     }
 
-    /// Reflashes a bracelet found in update mode (at most 3 tries per bracelet).
+    /// Official firmware bundled in the app at build time (scripts/fetch-bracelet-firmware.sh),
+    /// in the order to try. The Bond Touch had two hardware revisions; its bootloader
+    /// rejects the wrong one safely, so both are tried.
+    static func bundledFirmware(for model: BraceletModel) -> [URL] {
+        let names = model == .bondTouch ? ["bondTouch", "bondTouch-hw203"] : [model.rawValue]
+        return names.compactMap { Bundle.main.url(forResource: $0, withExtension: "zip") }
+    }
+
+    func hasBuiltIn(_ model: BraceletModel) -> Bool { !Self.bundledFirmware(for: model).isEmpty }
+
+    /// Firmware files to try for a model: an imported one first, then the built-in ones.
+    private func candidates(for model: BraceletModel) -> [URL] {
+        (installed[model] != nil ? [Self.url(for: model)] : []) + Self.bundledFirmware(for: model)
+    }
+
+    /// Reflashes a bracelet found in update mode — automatically, with the firmware that
+    /// matches its model. Each retry moves to the next candidate file.
     func recover(_ device: BraceletManager.DFUCandidate) {
         if case .flashing = phase { return }
-        guard installed[device.model] != nil,
-              let data = try? Data(contentsOf: Self.url(for: device.model)),
+        let files = candidates(for: device.model)
+        guard !files.isEmpty else { phase = .needsFirmware(device.model); return }
+        let attempt = attempts[device.id, default: 0]
+        guard attempt < max(3, files.count * 2) else { return }
+        attempts[device.id] = attempt + 1
+        guard let data = try? Data(contentsOf: files[attempt % files.count]),
               let firmware = try? DFUFirmware(zipFile: data) else {
-            phase = .needsFirmware(device.model)
+            phase = .failed(device.model, "The firmware file couldn't be read.")
             return
         }
-        guard attempts[device.id, default: 0] < 3 else { return }
-        attempts[device.id, default: 0] += 1
         bracelet?.pauseScanning()
         phase = .flashing(device.model, progress: 0)
         let initiator = DFUServiceInitiator(queue: .main).with(firmware: firmware)
@@ -107,6 +125,13 @@ final class FirmwareRecovery: NSObject, ObservableObject {
         initiator.progressDelegate = self
         initiator.alternativeAdvertisingNameEnabled = false
         controller = initiator.start(targetWithIdentifier: device.id)
+    }
+
+    /// After a failed try: rescan; the bracelet reappears in update mode and the next
+    /// candidate firmware is tried automatically.
+    func retrySoon() {
+        bracelet?.dfuDevice = nil
+        bracelet?.resumeAfterRecovery()
     }
 
     func dismiss() {
@@ -134,7 +159,7 @@ extension FirmwareRecovery: DFUServiceDelegate, DFUProgressDelegate {
             case .aborted:
                 self.phase = .failed(model, "The update was stopped.")
                 self.controller = nil
-                self.bracelet?.resumeAfterRecovery()
+                self.retrySoon()
             default:
                 break
             }
@@ -146,7 +171,7 @@ extension FirmwareRecovery: DFUServiceDelegate, DFUProgressDelegate {
             guard let model = self.currentModel else { return }
             self.phase = .failed(model, message)
             self.controller = nil
-            self.bracelet?.resumeAfterRecovery()
+            self.retrySoon()
         }
     }
 

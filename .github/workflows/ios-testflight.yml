@@ -145,6 +145,15 @@ jobs:
           sudo xcode-select -s "$xcode/Contents/Developer"
           xcodebuild -version
 
+      - name: Cache bracelet firmware
+        uses: actions/cache@v4
+        with:
+          path: Firmware
+          key: bracelet-firmware-490-${{ hashFiles('scripts/fetch-bracelet-firmware.sh') }}
+
+      - name: Bundle official bracelet firmware
+        run: scripts/fetch-bracelet-firmware.sh
+
       - name: Fetch libsignal_ffi (Signal protocol core)
         run: scripts/fetch-libsignal-ffi.sh
 

@@ -57,6 +57,11 @@ targets:
       - package: NordicDFU
     sources:
       - path: Sources
+      # Official bracelet firmware, added at build time by scripts/fetch-bracelet-firmware.sh
+      # (never committed: it isn't ours to publish).
+      - path: Firmware
+        optional: true
+        buildPhase: resources
     info:
       path: Sources/App/Info.plist
       properties:

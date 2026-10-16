@@ -81,14 +81,14 @@ struct FirmwareSettingsView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
-                Text("If a bracelet ever gets stuck in update mode, the app repairs it automatically with its official firmware. Import the firmware file for your bracelet once (the .zip you saved).")
+                Text("If a bracelet ever gets stuck in update mode, the app repairs it automatically with its official firmware, built into the app. You can also import a newer official file.")
                     .font(Theme.font(14)).foregroundStyle(Theme.subtitle)
                     .fixedSize(horizontal: false, vertical: true)
                 ForEach(BraceletModel.allCases) { m in
                     HStack(spacing: 12) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(m.title).font(Theme.font(16, .bold)).foregroundStyle(.white)
-                            Text(recovery.installed[m] ?? "No firmware imported")
+                            Text(recovery.installed[m] ?? (recovery.hasBuiltIn(m) ? "Built in — repairs automatically" : "No firmware"))
                                 .font(Theme.font(12)).foregroundStyle(Theme.subtitle).lineLimit(1)
                         }
                         Spacer()
