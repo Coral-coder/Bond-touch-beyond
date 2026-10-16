@@ -24,6 +24,10 @@ final class AppModel: ObservableObject {
     @Published var legacyStatus = "Not signed in"
     @Published var legacyLastSync: Date?
     var legacyTask: Task<Void, Never>?
+    /// Polls iCloud bonds every few seconds while the app is foregrounded, so a live
+    /// back-and-forth updates without waiting on a silent push (iOS throttles those heavily
+    /// in the foreground). Cancelled when the app leaves the foreground — pushes cover that.
+    var cloudPollTask: Task<Void, Never>?
     var legacyProfileTask: Task<Void, Never>?
     var legacyPrimed = false
     var legacyCycle = 0
@@ -193,6 +197,7 @@ final class AppModel: ObservableObject {
             await publishProfile()
             await setOnline(true)
             await refreshAll()
+            startCloudPolling()
             // A join link tapped before the app was ready (cold launch).
             if let code = AppModel.pendingJoinCode {
                 AppModel.pendingJoinCode = nil
@@ -213,10 +218,13 @@ final class AppModel: ObservableObject {
             await legacySetOnline(true)
             await setOnline(true)
             await refreshAll()
+            startCloudPolling()
         } else if keeper.running {
             // Kept alive in the background: keep syncing and stay online.
+            stopCloudPolling()            // cloud bonds wake on push, not a background poll
         } else {
             stopLegacySync()
+            stopCloudPolling()
             await legacySetOnline(false)
             await setOnline(false)
         }
@@ -226,6 +234,24 @@ final class AppModel: ObservableObject {
         for partner in cloudPartners {
             try? await relay.sendPresence(online: online, bond: partner.bond, senderID: myUserID)
         }
+    }
+
+    /// Starts polling iCloud bonds while foregrounded (no-op if already running, or if no
+    /// cloud partners). A silent push still wakes the app from the background.
+    func startCloudPolling() {
+        guard cloudPollTask == nil, !cloudPartners.isEmpty else { return }
+        cloudPollTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 4_000_000_000)
+                if Task.isCancelled { break }
+                await self?.refreshAll()
+            }
+        }
+    }
+
+    func stopCloudPolling() {
+        cloudPollTask?.cancel()
+        cloudPollTask = nil
     }
 
     // MARK: - Partners
@@ -266,6 +292,7 @@ final class AppModel: ObservableObject {
             profileSyncedBondIDs.remove(bond.id)
             await publishProfile()
             await refreshAll()
+            startCloudPolling()
             return nil
         } catch {
             return error.localizedDescription
