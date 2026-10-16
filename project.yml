@@ -31,6 +31,9 @@ targets:
         # declared here (iPhone-only → portrait is enough) or TestFlight rejects the upload.
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
+        # Portrait-only phone app: requiring full screen waives the iPad-multitasking rule
+        # that otherwise demands all four orientations (App Store validation code 90474).
+        UIRequiresFullScreen: true
         ITSAppUsesNonExemptEncryption: false
         # CoreBluetooth usage strings are required or the app is rejected / crashes on first scan.
         NSBluetoothAlwaysUsageDescription: Bond Touch Beyond uses Bluetooth to talk to your bracelet.
