@@ -26,6 +26,11 @@ targets:
       path: Sources/App/Info.plist
       properties:
         CFBundleDisplayName: Bond Touch Beyond
+        # Bind version/build to the build settings so the TestFlight workflow's per-build
+        # override (CURRENT_PROJECT_VERSION / MARKETING_VERSION) reaches the archive. Without
+        # this, XcodeGen hardcodes CFBundleVersion to "1" and every upload collides.
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         UILaunchScreen: {}
         # XcodeGen generates the Info.plist from these properties, so orientations must be
         # declared here (iPhone-only → portrait is enough) or TestFlight rejects the upload.
