@@ -22,6 +22,7 @@ final class CloudRelay {
         var touches: [TouchMessage] = []
         var messages: [ChatMessage] = []
         var latestBPM: Int?
+        var latestBPMAt: Date?
         var presenceOnline: Bool?
         var presenceLastSeen: Date?
         var presenceLat: Double?
@@ -159,8 +160,8 @@ final class CloudRelay {
         _ = try await db.modifyRecords(saving: [record], deleting: [])
     }
 
-    /// Streams the current user's heartbeat to the partner. One stable record per sender,
-    /// overwritten each update, so the partner always reads the latest BPM.
+    /// Sends one heartbeat (a button press) to the partner: one stable record per sender,
+    /// overwritten each time, carrying the BPM and when it was sent.
     func sendHeartbeat(bpm: Int, bond: Bond, senderID: String) async throws {
         let db = bond.isOwner ? privateDB : sharedDB
         let zoneID = try await zoneID(forBond: bond, in: db)
@@ -266,6 +267,7 @@ final class CloudRelay {
                 if let bpm = record["bpm"] as? Int, sentAt > newestHeartbeat {
                     newestHeartbeat = sentAt
                     events.latestBPM = bpm
+                    events.latestBPMAt = sentAt
                 }
             case Self.recordTypePresence:
                 if sentAt > newestPresence {

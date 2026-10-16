@@ -66,7 +66,8 @@ final class AppModel: ObservableObject {
     @Published var pendingShareRoot: CKRecord?
     @Published var braceletState: BraceletState = .disconnected
     @Published var partnerHeartbeatActive = false
-    @Published var sharingHeartbeat = false
+    /// True for the 10 s while the user's own heartbeat is being sent.
+    @Published var sendingHeartbeat = false
     @Published private(set) var myUserID: String = ""
     @Published private(set) var ready = false
 
@@ -85,7 +86,6 @@ final class AppModel: ObservableObject {
         messagesByBond = ChatArchive.load()
         bracelet.$state.receive(on: DispatchQueue.main).assign(to: &$braceletState)
         bracelet.$heartbeatActive.receive(on: DispatchQueue.main).assign(to: &$partnerHeartbeatActive)
-        heart.onBPM = { [weak self] bpm in Task { @MainActor in await self?.relayHeartbeat(bpm) } }
         location.onUpdate = { [weak self] coord in Task { @MainActor in await self?.broadcastLocation(coord) } }
         // A tap pattern made on the user's own bracelet is a touch for the selected partner.
         bracelet.onLocalTap = { [weak self] pattern, generation in
@@ -284,31 +284,47 @@ final class AppModel: ObservableObject {
             // Only the selected partner's touches/heartbeat drive the bracelet.
             if partner.id == selectedPartnerID, !store.doNotDisturb {
                 for touch in events.touches { bracelet.play(touch) }
-                if let bpm = events.latestBPM { bracelet.startHeartbeat(bpm: bpm) }
+                // A heartbeat plays once, for 10 s — and only if it's fresh (not one that was
+                // sent long ago and is only now being fetched).
+                if let bpm = events.latestBPM, let at = events.latestBPMAt,
+                   Date().timeIntervalSince(at) < 60 {
+                    bracelet.playHeartbeat(bpm: bpm)
+                }
             }
         }
     }
 
-    // MARK: - Heartbeat sharing
+    // MARK: - Heartbeat (a button press sends 10 s of your heartbeat)
 
-    func startSharingHeartbeat() async {
+    /// Sends the user's current heartbeat to the selected partner, once: their bracelet
+    /// beats at that rate for 10 seconds. iCloud partners get a heartbeat record; a partner
+    /// on the original app gets it as a touch in the same rhythm.
+    /// Returns the BPM sent, or nil (with `statusLine` explaining why) when it couldn't.
+    @discardableResult
+    func sendHeartbeat() async -> Int? {
+        guard let bond = activeBond else { statusLine = "Choose a partner first."; return nil }
         await heart.requestAuthorization()
         guard heart.authorized else {
-            statusLine = "Allow heart-rate access in Health to share your heartbeat."
-            return
+            statusLine = "Allow heart-rate access in Health to send your heartbeat."
+            return nil
         }
-        heart.start()
-        sharingHeartbeat = true
-    }
-
-    func stopSharingHeartbeat() {
-        heart.stop()
-        sharingHeartbeat = false
-    }
-
-    private func relayHeartbeat(_ bpm: Int) async {
-        // Heartbeat is an iCloud-only feature; the original backend has no heartbeat relay.
-        guard sharingHeartbeat, let bond = activeBond, !bond.legacy else { return }
-        try? await relay.sendHeartbeat(bpm: bpm, bond: bond, senderID: myUserID)
+        guard let bpm = await heart.latestBPM() else {
+            statusLine = "No recent heart rate. Wear your Apple Watch, then try again."
+            return nil
+        }
+        sendingHeartbeat = true
+        defer { Task { @MainActor in try? await Task.sleep(nanoseconds: 10_000_000_000); self.sendingHeartbeat = false } }
+        if bond.legacy {
+            // 10 s of beats as an on/off pattern: a 120 ms press per beat.
+            let period = 60_000 / max(bpm, 30)
+            let beats = max(1, 10_000 / period)
+            var pattern: [Int] = []
+            for i in 0..<beats { pattern.append(120); if i < beats - 1 { pattern.append(max(period - 120, 80)) } }
+            await sendTouch(pattern: pattern, generation: 2, colorRGB: 0xE85D75, toBondID: bond.id)
+        } else {
+            do { try await relay.sendHeartbeat(bpm: bpm, bond: bond, senderID: myUserID) }
+            catch { statusLine = "Heartbeat failed: \(error.localizedDescription)"; return nil }
+        }
+        return bpm
     }
 }

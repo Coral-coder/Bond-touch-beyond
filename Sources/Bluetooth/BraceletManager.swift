@@ -112,22 +112,24 @@ final class BraceletManager: NSObject, ObservableObject {
         if gen != .v3 { enqueue(BondGATT.ledMotor(gen, rgb: touch.colorRGB)) }
     }
 
-    /// Beats the bracelet at `bpm` (one pulse per beat) until `stopHeartbeat()` or ~15s
-    /// without a refresh. Call again with a new BPM to retune live.
-    func startHeartbeat(bpm: Int, colorRGB: Int = 0xE85D75) {
+    /// Plays a received heartbeat: one pulse per beat at `bpm` for `seconds` (10 s), then
+    /// stops on its own.
+    func playHeartbeat(bpm: Int, seconds: Double = 10, colorRGB: Int = 0xE85D75) {
         let clamped = min(max(bpm, 30), 220)
-        resetHeartbeatWatchdog()
-        guard clamped != heartbeatBPM || heartbeatTimer == nil else { return }
+        stopHeartbeat()
         heartbeatBPM = clamped
-        heartbeatTimer?.invalidate()
         heartbeatActive = true
         let interval = 60.0 / Double(clamped)
+        if let gen { enqueue(BondGATT.heartbeatPulse(gen, rgb: colorRGB)) }
         let timer = Timer(timeInterval: interval, repeats: true) { [weak self] _ in
             guard let self, let gen = self.gen else { return }
             self.enqueue(BondGATT.heartbeatPulse(gen, rgb: colorRGB))
         }
         RunLoop.main.add(timer, forMode: .common)
         heartbeatTimer = timer
+        let end = Timer(timeInterval: seconds, repeats: false) { [weak self] _ in self?.stopHeartbeat() }
+        RunLoop.main.add(end, forMode: .common)
+        heartbeatWatchdog = end
     }
 
     func stopHeartbeat() {
@@ -135,13 +137,6 @@ final class BraceletManager: NSObject, ObservableObject {
         heartbeatWatchdog?.invalidate(); heartbeatWatchdog = nil
         heartbeatBPM = 0
         heartbeatActive = false
-    }
-
-    private func resetHeartbeatWatchdog() {
-        heartbeatWatchdog?.invalidate()
-        let w = Timer(timeInterval: 15, repeats: false) { [weak self] _ in self?.stopHeartbeat() }
-        RunLoop.main.add(w, forMode: .common)
-        heartbeatWatchdog = w
     }
 
     // MARK: - Write queue
