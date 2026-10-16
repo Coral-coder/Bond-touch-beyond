@@ -10,12 +10,12 @@
 	<array>
 		<string>CloudKit</string>
 	</array>
-	<!-- Use the DEVELOPMENT CloudKit environment for this TestFlight build. Development
-	     auto-creates record types (including the reserved cloudkit.share), so private
-	     pairing works with no manual schema setup. Once proven, Deploy Schema Changes
-	     Development → Production and switch this back to Production. -->
+	<!-- Production CloudKit. The Development build (24) created cloudkit.share in the
+	     Development schema; once that's deployed Development → Production, real invites
+	     resolve and accept here. Development share links don't resolve on the web, so
+	     Production is required for actual pairing. -->
 	<key>com.apple.developer.icloud-container-environment</key>
-	<string>Development</string>
+	<string>Production</string>
 	<key>aps-environment</key>
 	<string>production</string>
 	<key>com.apple.developer.healthkit</key>
