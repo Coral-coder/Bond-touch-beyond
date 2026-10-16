@@ -40,7 +40,11 @@ final class BraceletManager: NSObject, ObservableObject {
     func startScanning() {
         guard central.state == .poweredOn else { state = .bluetoothOff; return }
         state = .scanning
-        central.scanForPeripherals(withServices: [BondGATT.service])
+        // The bracelet does NOT advertise its 128-bit vendor service UUID (the original app
+        // scans by device name / address, never by service), so scanning `withServices:` would
+        // never discover it. Scan for all peripherals and filter by advertised name instead.
+        central.scanForPeripherals(withServices: nil,
+                                   options: [CBCentralManagerScanOptionAllowDuplicatesKey: false])
     }
 
     /// Plays a touch: send the rhythm on FFB2 and a matching buzz/glow on FFB1.

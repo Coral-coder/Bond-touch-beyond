@@ -27,7 +27,9 @@ enum BondGATT {
 
     static func isBondName(_ name: String?) -> Bool {
         guard let name else { return false }
-        return deviceNames.contains { name == $0 || name.hasPrefix($0) }
+        let upper = name.uppercased()
+        // Matches BOND, BOND MORE, BOND 4, BOND MINI (and DFU variants) case-insensitively.
+        return upper.hasPrefix("BOND")
     }
 
     /// The protocol is resolved (real UUIDs/format), so the manager can drive hardware.
