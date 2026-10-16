@@ -31,15 +31,27 @@ final class HeartRateService: ObservableObject {
     /// Starts streaming heart-rate samples. New samples arrive as the Watch records them.
     func start() {
         guard available, anchoredQuery == nil else { return }
-        let query = HKAnchoredObjectQuery(
-            type: hrType, predicate: nil, anchor: anchor,
-            limit: HKObjectQueryNoLimit
-        ) { [weak self] _, samples, _, newAnchor, _ in
-            self?.handle(samples: samples, newAnchor: newAnchor)
-        }
-        query.updateHandler = { [weak self] _, samples, _, newAnchor, _ in
-            self?.handle(samples: samples, newAnchor: newAnchor)
-        }
+        let unit = self.unit   // capture a local so the background callback touches no isolated state
+        // HealthKit calls this on a background queue, so it must not touch main-actor state
+        // directly; it computes the BPM and hops to the main actor to publish it.
+        let handler: (HKAnchoredObjectQuery, [HKSample]?, [HKDeletedObject]?, HKQueryAnchor?, Error?) -> Void
+            = { [weak self] _, samples, _, newAnchor, _ in
+                let bpm = (samples as? [HKQuantitySample])?
+                    .max(by: { $0.endDate < $1.endDate })?
+                    .quantity.doubleValue(for: unit)
+                Task { @MainActor in
+                    guard let self else { return }
+                    self.anchor = newAnchor
+                    if let bpm, bpm > 0 {
+                        let value = Int(bpm.rounded())
+                        self.currentBPM = value
+                        self.onBPM?(value)
+                    }
+                }
+            }
+        let query = HKAnchoredObjectQuery(type: hrType, predicate: nil, anchor: anchor,
+                                          limit: HKObjectQueryNoLimit, resultsHandler: handler)
+        query.updateHandler = handler
         store.execute(query)
         anchoredQuery = query
         // Keep delivering while backgrounded so a shared heartbeat doesn't stall.
@@ -48,17 +60,5 @@ final class HeartRateService: ObservableObject {
 
     func stop() {
         if let q = anchoredQuery { store.stop(q); anchoredQuery = nil }
-    }
-
-    private func handle(samples: [HKSample]?, newAnchor: HKQueryAnchor?) {
-        anchor = newAnchor
-        guard let latest = (samples as? [HKQuantitySample])?
-            .max(by: { $0.endDate < $1.endDate }) else { return }
-        let bpm = Int(latest.quantity.doubleValue(for: unit).rounded())
-        guard bpm > 0 else { return }
-        Task { @MainActor in
-            self.currentBPM = bpm
-            self.onBPM?(bpm)
-        }
     }
 }
