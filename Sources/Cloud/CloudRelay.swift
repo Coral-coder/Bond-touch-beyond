@@ -107,24 +107,50 @@ final class CloudRelay {
         do {
             let result = try await privateDB.modifyRecords(saving: [root, share], deleting: [],
                                                            savePolicy: .allKeys, atomically: true)
-            guard case .success(let savedShareRecord)? = result.saveResults[share.recordID],
-                  let savedShare = savedShareRecord as? CKShare else {
-                log(.fail, "iCloud: share didn't save", "no share in result")
+            switch result.saveResults[share.recordID] {
+            case .success(let saved):
+                guard let savedShare = saved as? CKShare, let url = savedShare.url else {
+                    log(.fail, "iCloud: share saved but has no invite URL", "")
+                    try? await deleteZone(zoneID)
+                    throw CloudRelayError.shareNotSaved
+                }
+                try? await installZoneSubscription(in: privateDB, zoneID: zoneID)
+                log(.ok, "iCloud: bond created, invite ready", url.absoluteString)
+                return (Bond(id: zoneID.zoneName, partnerName: "Pending…", isOwner: true, pending: true), savedShare)
+            case .failure(let error):
+                // The real reason the share wouldn't save — show it so we can fix it exactly.
+                log(.fail, "iCloud: share save failed", ckDetail(error))
+                try? await deleteZone(zoneID)
+                throw error
+            case .none:
+                let rootDetail: String
+                if case .failure(let rootErr)? = result.saveResults[root.recordID] { rootDetail = ckDetail(rootErr) }
+                else { rootDetail = "share missing from result" }
+                log(.fail, "iCloud: bond save failed", rootDetail)
+                try? await deleteZone(zoneID)
                 throw CloudRelayError.shareNotSaved
             }
-            guard savedShare.url != nil else {
-                log(.fail, "iCloud: share saved but has no invite URL", "")
-                throw CloudRelayError.shareNotSaved
-            }
-            try? await installZoneSubscription(in: privateDB, zoneID: zoneID)
-            log(.ok, "iCloud: bond created, invite ready", savedShare.url?.absoluteString ?? "")
-            return (Bond(id: zoneID.zoneName, partnerName: "Pending…", isOwner: true, pending: true), savedShare)
         } catch let error as CloudRelayError {
             throw error
         } catch {
-            log(.fail, "iCloud: couldn't save bond + share", error.localizedDescription)
+            log(.fail, "iCloud: couldn't save bond + share", ckDetail(error))
+            try? await deleteZone(zoneID)
             throw error
         }
+    }
+
+    /// A readable CloudKit error (code + reason), for the debug log.
+    private func ckDetail(_ error: Error) -> String {
+        guard let ck = error as? CKError else { return error.localizedDescription }
+        var parts = ["CKError.\(ck.code.rawValue)", ck.localizedDescription]
+        if let partials = ck.partialErrorsByItemID?.values.compactMap({ ($0 as? CKError)?.localizedDescription }), !partials.isEmpty {
+            parts.append("partial: " + partials.joined(separator: "; "))
+        }
+        return parts.joined(separator: " — ")
+    }
+
+    private func deleteZone(_ zoneID: CKRecordZone.ID) async throws {
+        _ = try await privateDB.modifyRecordZones(saving: [], deleting: [zoneID])
     }
 
     // MARK: - Accept an invite (partner side)
