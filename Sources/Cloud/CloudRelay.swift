@@ -66,11 +66,14 @@ final class CloudRelay {
         let zone = CKRecordZone(zoneID: zoneID)
         _ = try await privateDB.modifyRecordZones(saving: [zone], deleting: [])
 
+        try await installZoneSubscription(in: privateDB, zoneID: zoneID)
+
+        // Return an UNSAVED root; the share controller saves root + share together (the
+        // supported "share a new record" flow). Saving the root first and re-saving it with
+        // the share is what left the share sheet blank/grey.
         let rootID = CKRecord.ID(recordName: "root", zoneID: zoneID)
         let root = CKRecord(recordType: Self.recordTypeBond, recordID: rootID)
         root["ownerName"] = displayName as CKRecordValue
-        _ = try await privateDB.modifyRecords(saving: [root], deleting: [])
-        try await installZoneSubscription(in: privateDB, zoneID: zoneID)
 
         let bond = Bond(id: zoneID.zoneName, partnerName: "Pending…", isOwner: true, pending: true)
         return (bond, root)

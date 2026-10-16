@@ -75,29 +75,33 @@ enum BondBackend {
     // MARK: - Bond API
 
     @discardableResult
-    private static func bond(_ path: String, method: String = "POST", bearer: String,
+    private static func bond(_ path: String, method: String = "POST", bearer: String?,
                              body: [String: Any]? = nil) async throws -> Data {
         var req = URLRequest(url: apiBase.appendingPathComponent(path))
         req.httpMethod = method
-        req.setValue("Bearer " + bearer, forHTTPHeaderField: "Authorization")
+        if let bearer { req.setValue("Bearer " + bearer, forHTTPHeaderField: "Authorization") }
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         if let body { req.httpBody = try JSONSerialization.data(withJSONObject: body) }
         let (data, resp) = try await URLSession.shared.data(for: req)
         if let http = resp as? HTTPURLResponse, http.statusCode >= 400 {
-            throw BackendError(message: "Request to \(path) failed (\(http.statusCode))")
+            let detail = String(data: data, encoding: .utf8) ?? ""
+            throw BackendError(message: "HTTP \(http.statusCode) at /\(path): \(detail)")
         }
         return data
     }
 
-    static func requestPin(email: String, bearer: String) async throws {
+    static func requestPin(email: String, bearer: String? = nil) async throws {
         try await bond("bond/api/v3/auth/request-pin", bearer: bearer, body: ["email": email])
     }
 
-    static func validatePin(email: String, firebaseId: String, pin: String, bearer: String) async throws -> String {
+    static func validatePin(email: String, firebaseId: String, pin: String, bearer: String? = nil) async throws -> String {
         let data = try await bond("bond/api/v3/auth/validate-pin", bearer: bearer,
                                   body: ["email": email, "firebaseId": firebaseId, "pin": pin])
         let j = ((try? JSONSerialization.jsonObject(with: data)) as? [String: Any]) ?? [:]
-        guard let token = j["token"] as? String else { throw BackendError(message: "No custom token returned") }
+        guard let token = j["token"] as? String else {
+            let detail = String(data: data, encoding: .utf8) ?? ""
+            throw BackendError(message: "No custom token returned. Response: \(detail)")
+        }
         return token
     }
 
@@ -246,17 +250,16 @@ enum BondBackend {
 
     // MARK: - Two-step login
 
-    /// Step 1: anonymous sign-in, then email a PIN. Returns the anonymous session whose
-    /// bearer/uid are needed to validate the PIN.
-    static func beginEmailLogin(email: String) async throws -> Session {
-        let anon = try await anonymousSignIn()
-        try await requestPin(email: email, bearer: anon.idToken)
-        return anon
+    /// Step 1: ask the backend to email a 6-digit PIN. Public endpoint — no Firebase
+    /// anonymous sign-in (that provider is disabled on the project: "admin only").
+    static func beginEmailLogin(email: String) async throws {
+        try await requestPin(email: email)
     }
 
-    /// Step 2: validate the PIN and upgrade to the real account session.
-    static func completeEmailLogin(email: String, pin: String, anon: Session) async throws -> Session {
-        let customToken = try await validatePin(email: email, firebaseId: anon.uid, pin: pin, bearer: anon.idToken)
+    /// Step 2: validate the PIN for a Firebase custom token, then sign in with it.
+    static func completeEmailLogin(email: String, pin: String) async throws -> Session {
+        let firebaseId = UUID().uuidString
+        let customToken = try await validatePin(email: email, firebaseId: firebaseId, pin: pin)
         return try await signIn(customToken: customToken)
     }
 }

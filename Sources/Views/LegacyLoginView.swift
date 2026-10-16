@@ -10,7 +10,6 @@ struct LegacyLoginView: View {
     @State private var stage: Stage = .email
     @State private var email = ""
     @State private var pin = ""
-    @State private var anon: BondBackend.Session?
     @State private var busy = false
     @State private var error: String?
 
@@ -102,7 +101,7 @@ struct LegacyLoginView: View {
     private func beginLogin() async {
         busy = true; error = nil
         do {
-            anon = try await BondBackend.beginEmailLogin(email: email.trimmingCharacters(in: .whitespaces))
+            try await BondBackend.beginEmailLogin(email: email.trimmingCharacters(in: .whitespaces))
             stage = .pin
         } catch {
             self.error = error.localizedDescription
@@ -111,11 +110,10 @@ struct LegacyLoginView: View {
     }
 
     private func completeLogin() async {
-        guard let anon else { return }
         busy = true; error = nil
         do {
             let session = try await BondBackend.completeEmailLogin(
-                email: email.trimmingCharacters(in: .whitespaces), pin: pin, anon: anon)
+                email: email.trimmingCharacters(in: .whitespaces), pin: pin)
             store.firebaseAuthToken = session.idToken
             store.legacyRefreshToken = session.refreshToken
             let fetchedEmail = (try? await BondBackend.currentUserEmail(bearer: session.idToken)) ?? ""

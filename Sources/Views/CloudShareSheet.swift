@@ -26,11 +26,14 @@ struct CloudShareSheet: UIViewControllerRepresentable {
                 }
             }
             op.modifyRecordsResultBlock = { result in
-                switch result {
-                case .success: completion(savedShare, container, nil)
-                case .failure(let error): completion(nil, nil, error)
+                DispatchQueue.main.async {
+                    switch result {
+                    case .success: completion(savedShare, container, nil)
+                    case .failure(let error): completion(nil, nil, error)
+                    }
                 }
             }
+            op.qualityOfService = .userInitiated
             container.privateCloudDatabase.add(op)
         }
         controller.availablePermissions = [.allowReadWrite, .allowPrivate]
