@@ -32,6 +32,7 @@ struct SettingsView: View {
                     row("Bracelet notifications", "") { BraceletNotificationsView() }
                     row("Bond Touch account (beta)", "") { LegacyLoginView() }
                     languageRow
+                    AppIconPicker()
                     GlassCard(padding: 20) {
                         Toggle(isOn: Binding(get: { store.keepAliveInBackground },
                                              set: { store.keepAliveInBackground = $0; model.updateKeepAlive() })) {
@@ -203,5 +204,49 @@ private struct ComingSoonView: View {
             Text("\(title) is coming soon.").foregroundStyle(.white)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity).navigationTitle(title)
+    }
+}
+
+/// Switches the home-screen icon between the new heart-and-infinity icon and the original.
+struct AppIconPicker: View {
+    @State private var current = UIApplication.shared.alternateIconName
+
+    private let options: [(name: String?, label: String, preview: String)] = [
+        (nil, "New", "IconPreviewNew"),
+        ("AppIconClassic", "Classic", "IconPreviewClassic"),
+    ]
+
+    var body: some View {
+        GlassCard(padding: 20) {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("App icon").foregroundStyle(.white)
+                HStack(spacing: 20) {
+                    ForEach(options, id: \.label) { option in
+                        Button { choose(option.name) } label: {
+                            VStack(spacing: 6) {
+                                Image(option.preview).resizable().scaledToFit()
+                                    .frame(width: 64, height: 64)
+                                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                                    .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                        .stroke(current == option.name ? Theme.accent : .clear, lineWidth: 3))
+                                Text(option.label).font(.caption)
+                                    .foregroundStyle(current == option.name ? Theme.accent : Theme.subtitle)
+                            }
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("\(option.label) app icon")
+                        .accessibilityAddTraits(current == option.name ? .isSelected : [])
+                    }
+                    Spacer()
+                }
+            }
+        }
+    }
+
+    private func choose(_ name: String?) {
+        guard UIApplication.shared.supportsAlternateIcons, name != current else { return }
+        UIApplication.shared.setAlternateIconName(name) { error in
+            if error == nil { DispatchQueue.main.async { current = name } }
+        }
     }
 }
