@@ -1,5 +1,6 @@
 import CloudKit
 import SwiftUI
+import UIKit
 
 /// Create a bond and invite a partner. Used when the user has no partners yet, and from
 /// the People screen to add another.
@@ -23,11 +24,14 @@ struct PairingView: View {
 
             Button {
                 Task {
+                    inviteResult = nil
                     await model.createBond()
-                    showShare = model.pendingShare != nil
+                    if model.pendingShare == nil, shareError == nil {
+                        shareError = "Couldn't create the invite. Make sure you're signed into iCloud."
+                    }
                 }
             } label: {
-                Label("Create a bond & invite", systemImage: "square.and.arrow.up")
+                Label("Create an invite link", systemImage: "link")
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
@@ -36,6 +40,8 @@ struct PairingView: View {
                 .font(.footnote)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
+
+            if let url = model.pendingShare?.url { inviteLink(url) }
 
             if model.legacySignedIn { emailInvite }
         }
@@ -50,6 +56,33 @@ struct PairingView: View {
         .alert("Can't invite", isPresented: Binding(get: { shareError != nil }, set: { if !$0 { shareError = nil } })) {
             Button("OK", role: .cancel) { shareError = nil }
         } message: { Text(shareError ?? "") }
+    }
+
+    /// The ready invite link — share or copy it and send any way. This bypasses the
+    /// CloudKit share sheet's Messages preview, which can spin forever.
+    @ViewBuilder private func inviteLink(_ url: URL) -> some View {
+        VStack(spacing: 10) {
+            Divider().overlay(Color.white.opacity(0.1))
+            Text("Invite link ready").font(.headline).foregroundStyle(.white)
+            Text("Send this to your partner any way you like — Messages, WhatsApp, email. They tap it to join.")
+                .font(.footnote).foregroundStyle(Theme.subtitle).multilineTextAlignment(.center)
+            HStack(spacing: 12) {
+                ShareLink(item: url) {
+                    Label("Share link", systemImage: "square.and.arrow.up").frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                Button {
+                    UIPasteboard.general.url = url
+                    inviteResult = "Invite link copied."
+                } label: {
+                    Label("Copy", systemImage: "doc.on.doc").frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+            }
+            Text(url.absoluteString).font(.caption2.monospaced()).foregroundStyle(Theme.subtitle)
+                .lineLimit(1).truncationMode(.middle).textSelection(.enabled)
+            if let inviteResult { Text(inviteResult).font(.caption).foregroundStyle(Theme.accent) }
+        }
     }
 
     /// Invite someone who uses the original Bond Touch app, by their account email
