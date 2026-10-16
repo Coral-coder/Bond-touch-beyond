@@ -111,6 +111,7 @@ private struct DataDumpView: View {
     let bearer: String
     @State private var items: [BondBackend.Fetched] = []
     @State private var loading = true
+    @State private var exportURL: URL?
 
     var body: some View {
         List {
@@ -153,6 +154,12 @@ private struct DataDumpView: View {
                 Button { Task { await load() } } label: { Image(systemName: "arrow.clockwise") }
                     .disabled(loading)
             }
+            ToolbarItem(placement: .primaryAction) {
+                if let exportURL {
+                    ShareLink(item: exportURL) { Image(systemName: "square.and.arrow.up") }
+                        .accessibilityLabel("Export database")
+                }
+            }
         }
         .task { await load() }
     }
@@ -160,7 +167,28 @@ private struct DataDumpView: View {
     private func load() async {
         loading = true
         items = await BondBackend.dumpAccountStructured(bearer: bearer)
+        exportURL = writeExport(items)
         loading = false
+    }
+
+    /// Writes everything fetched to one pretty-printed JSON file for the share sheet
+    /// (save to Files, AirDrop, mail…): `{ "exportedAt", "endpoints": { "/path": {status, body} } }`.
+    private func writeExport(_ items: [BondBackend.Fetched]) -> URL? {
+        var endpoints: [String: Any] = [:]
+        for item in items {
+            endpoints["/" + item.path] = ["status": item.status, "body": item.json ?? item.pretty]
+        }
+        let root: [String: Any] = [
+            "exportedAt": ISO8601DateFormatter().string(from: Date()),
+            "source": BondBackend.apiBase.absoluteString,
+            "endpoints": endpoints
+        ]
+        guard JSONSerialization.isValidJSONObject(root),
+              let data = try? JSONSerialization.data(withJSONObject: root, options: [.prettyPrinted, .sortedKeys])
+        else { return nil }
+        let stamp = ISO8601DateFormatter().string(from: Date()).replacingOccurrences(of: ":", with: "-")
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("BondTouch-database-\(stamp).json")
+        do { try data.write(to: url, options: .atomic); return url } catch { return nil }
     }
 }
 

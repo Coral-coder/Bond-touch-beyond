@@ -107,6 +107,11 @@ private struct AddMeaningView: View {
     @State private var endColor = Color(rgbInt: 0xAEE63C)
     @State private var taps = 2
 
+    /// On/off milliseconds for `taps` quick taps: 150 ms press, 220 ms gap.
+    static func pattern(taps: Int) -> [Int] {
+        (0..<max(taps, 1)).flatMap { i in i == 0 ? [150] : [220, 150] }
+    }
+
     var body: some View {
         NavigationStack {
             Form {
@@ -117,7 +122,7 @@ private struct AddMeaningView: View {
                 Section("Colour (start → end)") {
                     ColorPicker("Start colour", selection: $startColor)
                     ColorPicker("End colour", selection: $endColor)
-                    TouchViz(pattern: Array(repeating: 220, count: max(0, taps - 1)),
+                    TouchViz(pattern: Self.pattern(taps: taps),
                              colorRGB: startColor.rgbInt, endColorRGB: endColor.rgbInt)
                         .frame(height: 30)
                 }
@@ -131,7 +136,7 @@ private struct AddMeaningView: View {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") {
-                        let pattern = Array(repeating: 220, count: max(0, taps - 1))
+                        let pattern = Self.pattern(taps: taps)
                         onSave(TouchMeaning(label: label.isEmpty ? "Touch" : label,
                                             emoji: "",
                                             colorRGB: startColor.rgbInt,

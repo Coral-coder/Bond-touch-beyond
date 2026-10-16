@@ -1,11 +1,13 @@
 import SwiftUI
 
-/// Renders a touch rhythm as a row of glowing neon strokes and dots — the app's signature
-/// visualization of a "touch". Short gaps become dots, longer gaps become strokes. The
-/// colour runs as a two-stop gradient (start → end) across the sequence, matching the
-/// original app's customizable start/end touch colours.
+/// Renders a touch as a glowing timeline: the pattern is the on/off millisecond list the
+/// bracelet and server use (even indices = finger down, odd = finger up). Each "on" becomes
+/// a neon stroke whose length is its duration (short presses read as dots), and the gaps
+/// keep their proportions. The whole touch is scaled to the available width, so any
+/// pattern length fits — it never pushes the layout wider. The colour runs as the touch's
+/// start → end gradient.
 struct TouchViz: View {
-    let pattern: [Int]          // inter-tap gaps in ms
+    let pattern: [Int]
     let startColorRGB: Int
     let endColorRGB: Int
     var height: CGFloat = 26
@@ -17,44 +19,39 @@ struct TouchViz: View {
         self.height = height
     }
 
-    private enum Mark { case dot; case stroke(Int) }
-
-    /// One mark per tap (pattern.count + 1 taps). A tap preceded by a long gap renders as a
-    /// stroke; a quick tap renders as a dot.
-    private var marks: [Mark] {
-        var result: [Mark] = [.dot]
-        for gap in pattern {
-            result.append(gap < 160 ? .dot : .stroke(min(max(gap, 180), 700)))
+    /// (start, duration) of each press, in ms from the beginning of the touch.
+    private var presses: [(start: Double, length: Double)] {
+        let values = pattern.isEmpty ? [200] : pattern.map { Double(max($0, 1)) }
+        var out: [(start: Double, length: Double)] = []
+        var t = 0.0
+        for (i, v) in values.enumerated() {
+            if i % 2 == 0 { out.append((start: t, length: v)) }
+            t += v
         }
-        return result
+        return out
     }
 
     var body: some View {
-        let items = marks
-        return HStack(alignment: .center, spacing: 10) {
-            ForEach(items.indices, id: \.self) { index in
-                let t = items.count > 1 ? Double(index) / Double(items.count - 1) : 0
-                markView(items[index], color: color(at: t))
+        let items = presses
+        let total = max(items.last.map { $0.start + $0.length } ?? 1, 1)
+        Canvas { ctx, size in
+            let dot = height * 0.42
+            let pad = dot / 2 + 4
+            let usable = max(size.width - pad * 2, 1)
+            let mid = size.height / 2
+            for (i, p) in items.enumerated() {
+                let t = items.count > 1 ? Double(i) / Double(items.count - 1) : 0
+                let tint = color(at: t)
+                let x0 = pad + usable * p.start / total
+                let w = max(usable * p.length / total, dot)
+                let rect = CGRect(x: x0 - dot / 2, y: mid - dot / 2, width: w, height: dot)
+                var layer = ctx
+                layer.addFilter(.shadow(color: tint.opacity(0.85), radius: 7))
+                layer.fill(Path(roundedRect: rect, cornerRadius: dot / 2), with: .color(tint))
             }
         }
-        .frame(height: height)
-    }
-
-    @ViewBuilder private func markView(_ mark: Mark, color: Color) -> some View {
-        switch mark {
-        case .dot:
-            Circle()
-                .fill(color)
-                .frame(width: height * 0.42, height: height * 0.42)
-                .shadow(color: color.opacity(0.9), radius: 8)
-        case .stroke(let gap):
-            Capsule()
-                .fill(LinearGradient(colors: [color.opacity(0.85), color],
-                                     startPoint: .leading, endPoint: .trailing))
-                .frame(width: CGFloat(gap) / 700 * 64 + 22, height: height * 0.5)
-                .shadow(color: color.opacity(0.8), radius: 9)
-                .rotationEffect(.degrees(-18))
-        }
+        .frame(maxWidth: .infinity, minHeight: height, maxHeight: height)
+        .accessibilityLabel("Touch with \(items.count) press\(items.count == 1 ? "" : "es")")
     }
 
     /// Interpolated colour at fraction `t` (0…1) between the start and end colours.
