@@ -49,6 +49,23 @@ struct DebugView: View {
                     section("Bracelet") {
                         row("State", "\(model.braceletState)")
                     }
+
+                    section("My database") {
+                        if store.firebaseAuthToken.isEmpty {
+                            Text("Sign in under Settings → Bond Touch account to read your database.")
+                                .font(.footnote).foregroundStyle(Theme.subtitle)
+                        } else {
+                            NavigationLink {
+                                DataDumpView(bearer: store.firebaseAuthToken)
+                            } label: {
+                                Text("Load everything in my database")
+                                    .font(.headline).frame(maxWidth: .infinity).frame(height: Metric.buttonHeight)
+                                    .background(Theme.accent).foregroundStyle(Theme.bgBottom)
+                                    .clipShape(RoundedRectangle(cornerRadius: Metric.cornerMedium))
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
                 }
                 .padding(20)
             }
@@ -77,5 +94,40 @@ struct DebugView: View {
             Text(value).font(.footnote.monospaced()).foregroundStyle(.white)
                 .textSelection(.enabled)
         }
+    }
+}
+
+/// Fetches and shows the raw JSON of everything the signed-in account can read from the
+/// original Bond Touch database (api.bond-touch.com), endpoint by endpoint.
+private struct DataDumpView: View {
+    let bearer: String
+    @State private var dump = "Loading…"
+    @State private var loading = true
+
+    var body: some View {
+        ScrollView([.vertical, .horizontal]) {
+            Text(dump)
+                .font(.system(size: 11, design: .monospaced))
+                .foregroundStyle(.white)
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(16)
+        }
+        .screenBackground()
+        .navigationTitle("My database")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                if loading { ProgressView().tint(Theme.accent) }
+                else { Button { Task { await load() } } label: { Image(systemName: "arrow.clockwise") } }
+            }
+        }
+        .task { await load() }
+    }
+
+    private func load() async {
+        loading = true
+        dump = await BondBackend.dumpAccount(bearer: bearer)
+        loading = false
     }
 }

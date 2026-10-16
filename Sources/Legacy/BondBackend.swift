@@ -107,6 +107,79 @@ enum BondBackend {
         return (j["email"] as? String) ?? ""
     }
 
+    // MARK: - Raw data dump (debug)
+
+    /// A single GET, returning the HTTP status plus the pretty-printed JSON (or raw body).
+    static func rawGet(_ path: String, bearer: String) async -> String {
+        var req = URLRequest(url: apiBase.appendingPathComponent(path))
+        req.httpMethod = "GET"
+        req.setValue("Bearer " + bearer, forHTTPHeaderField: "Authorization")
+        do {
+            let (data, resp) = try await URLSession.shared.data(for: req)
+            let code = (resp as? HTTPURLResponse)?.statusCode ?? 0
+            return "HTTP \(code)\n" + pretty(data)
+        } catch {
+            return "ERROR: \(error.localizedDescription)"
+        }
+    }
+
+    private static func pretty(_ data: Data) -> String {
+        if let obj = try? JSONSerialization.jsonObject(with: data),
+           let out = try? JSONSerialization.data(withJSONObject: obj, options: [.prettyPrinted, .sortedKeys]),
+           let s = String(data: out, encoding: .utf8) {
+            return s
+        }
+        return String(data: data, encoding: .utf8) ?? "<\(data.count) bytes>"
+    }
+
+    /// Account-level GET endpoints (no path parameters).
+    static let accountReadPaths = [
+        "bond/api/v3/user",
+        "bond/api/v3/user/details",
+        "bond/api/v3/user/status",
+        "bond/api/v3/user/consent",
+        "bond/api/v3/meanings/recommendations",
+        "bond/api/v3/bonds/details",
+        "bond/api/v3/bonds/chat"
+    ]
+
+    private static func bondIds(bearer: String) async -> [String] {
+        var req = URLRequest(url: apiBase.appendingPathComponent("bond/api/v3/bonds/details"))
+        req.httpMethod = "GET"
+        req.setValue("Bearer " + bearer, forHTTPHeaderField: "Authorization")
+        guard let (data, _) = try? await URLSession.shared.data(for: req) else { return [] }
+        var ids: [String] = []
+        func scan(_ any: Any) {
+            if let arr = any as? [Any] { arr.forEach(scan) }
+            else if let obj = any as? [String: Any] {
+                if let b = obj["bondId"] as? String { ids.append(b) }
+                else if let b = obj["id"] as? String { ids.append(b) }
+                obj.values.forEach(scan)
+            }
+        }
+        if let json = try? JSONSerialization.jsonObject(with: data) { scan(json) }
+        return Array(Set(ids))
+    }
+
+    /// Dumps everything the signed-in account can read: every account endpoint, then each
+    /// bond's meanings, chat messages, presence and places.
+    static func dumpAccount(bearer: String) async -> String {
+        var out = ""
+        func dump(_ path: String) async {
+            out += "━━━━━━ GET /\(path) ━━━━━━\n" + (await rawGet(path, bearer: bearer)) + "\n\n"
+        }
+        for path in accountReadPaths { await dump(path) }
+        for id in await bondIds(bearer: bearer) {
+            for path in ["bond/api/v3/bonds/\(id)/meanings",
+                         "bond/api/v3/bonds/\(id)/chatmessages",
+                         "bond/api/v3/presences/\(id)",
+                         "bond/api/v3/presences/\(id)/places"] {
+                await dump(path)
+            }
+        }
+        return out.isEmpty ? "Nothing returned." : out
+    }
+
     // MARK: - Two-step login
 
     /// Step 1: anonymous sign-in, then email a PIN. Returns the anonymous session whose
