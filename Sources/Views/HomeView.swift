@@ -16,6 +16,8 @@ struct HomeView: View {
     @State private var showPartner = false
     @State private var editingGreeting = false
     @State private var greetingDraft = ""
+    @State private var meaningFromTouch: TouchMessage?
+    @State private var meaningName = ""
 
     private var partner: Partner? { model.selectedPartner }
 
@@ -61,6 +63,24 @@ struct HomeView: View {
         }
         .onAppear { configureRecorder() }
         .onChange(of: store.touchWindowSeconds) { recorder.windowSeconds = $0 }
+        .alert("Save as meaning", isPresented: Binding(get: { meaningFromTouch != nil },
+                                                       set: { if !$0 { meaningFromTouch = nil } })) {
+            TextField("Name, e.g. Love you", text: $meaningName)
+            Button("Save") {
+                if let t = meaningFromTouch {
+                    let pattern = t.generation == 3 ? TouchPattern.trimmed(t.pattern) : t.pattern
+                    let m = TouchMeaning(label: meaningName.isEmpty ? "Touch" : String(meaningName.prefix(20)),
+                                         emoji: "", colorRGB: t.colorRGB, endColorRGB: t.endColorRGB,
+                                         pattern: pattern, isNew: true, generation: t.generation)
+                    Task { await model.addMeaning(m) }
+                }
+                meaningName = ""
+                meaningFromTouch = nil
+            }
+            Button("Cancel", role: .cancel) { meaningFromTouch = nil }
+        } message: {
+            Text("Save this touch to your Touch Language so you can send it again with one tap.")
+        }
     }
 
     private func configureRecorder() {
@@ -248,11 +268,18 @@ struct HomeView: View {
     @ViewBuilder private var feed: some View {
         let touches = partnerHistory
         if !touches.isEmpty {
-            Text("Recent touches with \(partner?.displayName ?? "partner")")
-                .font(Theme.font(15, .heavy)).foregroundStyle(Theme.mutedHeadline)
-                .padding(.horizontal, 4).padding(.top, 4)
+            HStack {
+                Text("Recent touches with \(partner?.displayName ?? "partner")")
+                    .font(Theme.font(15, .heavy)).foregroundStyle(Theme.mutedHeadline)
+                Spacer()
+                Label("Swipe to save", systemImage: "hand.draw")
+                    .font(Theme.font(11)).foregroundStyle(Theme.subtitle).labelStyle(.titleAndIcon)
+            }
+            .padding(.horizontal, 4).padding(.top, 4)
             ForEach(touches) { touch in
-                touchRow(touch)
+                SwipeToSave(onSave: { meaningName = ""; meaningFromTouch = touch }) {
+                    touchRow(touch)
+                }
             }
         } else if partner != nil {
             Text("No touches yet with \(partner?.displayName ?? "partner"). Send one above.")
@@ -397,5 +424,60 @@ private struct GreetingEditor: View {
                 }
             }
         }
+    }
+}
+
+/// Swipe a history row left to reveal a "Save as meaning" action (the feed is a VStack, not
+/// a List, so this stands in for `.swipeActions`). A full swipe triggers it; a short swipe
+/// reveals the button to tap.
+private struct SwipeToSave<Content: View>: View {
+    var onSave: () -> Void
+    @ViewBuilder var content: () -> Content
+
+    @State private var offset: CGFloat = 0
+    private let actionWidth: CGFloat = 92
+    private let trigger: CGFloat = 150
+
+    var body: some View {
+        ZStack(alignment: .trailing) {
+            Button(action: fire) {
+                VStack(spacing: 3) {
+                    Image(systemName: "star.fill").font(.system(size: 16, weight: .bold))
+                    Text("Meaning").font(Theme.font(11, .bold))
+                }
+                .foregroundStyle(Theme.onAccent)
+                .frame(width: actionWidth)
+                .frame(maxHeight: .infinity)
+                .background(Theme.accent)
+                .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+            }
+            .buttonStyle(.plain)
+            .opacity(offset < -8 ? 1 : 0)
+
+            content()
+                .offset(x: offset)
+                .gesture(
+                    DragGesture(minimumDistance: 12)
+                        .onChanged { v in
+                            if v.translation.width < 0 { offset = max(v.translation.width, -trigger - 40) }
+                            else if offset != 0 { offset = min(0, offset + v.translation.width) }
+                        }
+                        .onEnded { v in
+                            if -v.translation.width > trigger { fire() }
+                            else {
+                                withAnimation(.spring(response: 0.3)) {
+                                    offset = -v.translation.width > actionWidth * 0.6 ? -actionWidth : 0
+                                }
+                            }
+                        }
+                )
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityAction(named: "Save as meaning") { onSave() }
+    }
+
+    private func fire() {
+        withAnimation(.spring(response: 0.3)) { offset = 0 }
+        onSave()
     }
 }
