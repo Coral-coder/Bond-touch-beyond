@@ -26,7 +26,7 @@ struct SettingsView: View {
                     row("Tutorials", "") { HelpView() }
                     row("Do not disturb", "") { DoNotDisturbView() }
                     row("My people", "") { PeopleView().navigationTitle("My people") }
-                    row("Private Space", "") { ComingSoonView(title: "Private Space") }
+                    row("Private Space", "") { PrivateSpaceView() }
                     row("Help & Support", "") { HelpView() }
                     row("Bracelet notifications", "") { BraceletNotificationsView() }
                     row("Legacy data", "") { LegacyDataView() }

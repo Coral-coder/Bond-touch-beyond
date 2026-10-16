@@ -46,6 +46,7 @@ targets:
         NSHealthShareUsageDescription: Bond Touch Beyond reads your heart rate so you can send your live heartbeat to your partner's bracelet.
         NSHealthUpdateUsageDescription: Bond Touch Beyond does not write to Health; this permission is required by the HealthKit framework.
         NSLocationWhenInUseUsageDescription: Bond Touch Beyond shows your location on the map so you can share it with your partner.
+        NSFaceIDUsageDescription: Bond Touch Beyond uses Face ID to unlock your Private Space.
         UIBackgroundModes:
           - bluetooth-central
           - remote-notification

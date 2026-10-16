@@ -1,4 +1,5 @@
 import Combine
+import CryptoKit
 import Foundation
 
 /// Small Codable-backed `UserDefaults` persistence for per-device preferences and the
@@ -49,6 +50,24 @@ final class LocalStore: ObservableObject {
         if let date { encounters[bondID] = date } else { encounters.removeValue(forKey: bondID) }
     }
 
+    /// Private Space passcode, stored as a SHA-256 hash (never in the clear).
+    @Published var privateSpacePasscodeHash: String? {
+        didSet { UserDefaults.standard.set(privateSpacePasscodeHash, forKey: Key.psPasscode.rawValue) }
+    }
+
+    var hasPrivateSpace: Bool { privateSpacePasscodeHash != nil }
+
+    func setPrivateSpacePasscode(_ code: String) { privateSpacePasscodeHash = Self.hash(code) }
+
+    func checkPrivateSpacePasscode(_ code: String) -> Bool {
+        guard let h = privateSpacePasscodeHash else { return false }
+        return h == Self.hash(code)
+    }
+
+    private static func hash(_ s: String) -> String {
+        SHA256.hash(data: Data(s.utf8)).map { String(format: "%02x", $0) }.joined()
+    }
+
     static let defaultGreeting = "Hello,\nthis is us"
 
     func greeting(for bondID: String?) -> String {
@@ -61,7 +80,7 @@ final class LocalStore: ObservableObject {
         greetings[bondID] = text
     }
 
-    private enum Key: String { case meanings, vibration, dnd, profile, fbEnabled, fbURL, fbToken, greetings, encounters }
+    private enum Key: String { case meanings, vibration, dnd, profile, fbEnabled, fbURL, fbToken, greetings, encounters, psPasscode }
 
     init() {
         self.meanings = LocalStore.load([TouchMeaning].self, for: .meanings) ?? TouchMeaning.starters
@@ -74,6 +93,7 @@ final class LocalStore: ObservableObject {
         self.firebaseAuthToken = UserDefaults.standard.string(forKey: Key.fbToken.rawValue) ?? ""
         self.greetings = LocalStore.load([String: String].self, for: .greetings) ?? [:]
         self.encounters = LocalStore.load([String: Date].self, for: .encounters) ?? [:]
+        self.privateSpacePasscodeHash = UserDefaults.standard.string(forKey: Key.psPasscode.rawValue)
     }
 
     var legacyFirebase: LegacyFirebaseClient? {
