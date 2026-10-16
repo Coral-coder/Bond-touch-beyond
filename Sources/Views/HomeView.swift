@@ -7,8 +7,6 @@ import SwiftUI
 struct HomeView: View {
     @EnvironmentObject var model: AppModel
     @EnvironmentObject var store: LocalStore
-    // Not observed here: only the touch bar card redraws while a touch is recorded.
-    @State private var recorder = TouchBarRecorder()
     @State private var showHeart = false
     @State private var showPeople = false
     @State private var showEncounters = false
@@ -34,7 +32,7 @@ struct HomeView: View {
             ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 14) {
                     pairCard
-                    HomeTouchBarCard(recorder: recorder, showCompose: $showCompose)
+                    sendTouchButton
                     meaningChips
                     feed
                     Color.clear.frame(height: 96) // room for the floating tab bar
@@ -61,8 +59,6 @@ struct HomeView: View {
             }
             .presentationDetents([.height(240)])
         }
-        .onAppear { configureRecorder() }
-        .onChange(of: store.touchWindowSeconds) { recorder.windowSeconds = $0 }
         .alert("Save as meaning", isPresented: Binding(get: { meaningFromTouch != nil },
                                                        set: { if !$0 { meaningFromTouch = nil } })) {
             TextField("Name, e.g. Love you", text: $meaningName)
@@ -80,16 +76,6 @@ struct HomeView: View {
             Button("Cancel", role: .cancel) { meaningFromTouch = nil }
         } message: {
             Text("Save this touch to your Touch Language so you can send it again with one tap.")
-        }
-    }
-
-    private func configureRecorder() {
-        recorder.windowSeconds = store.touchWindowSeconds
-        recorder.onFinish = { samples in
-            Task {
-                await model.sendTouch(pattern: samples, generation: 3,
-                                      colorRGB: store.profile.colorRGB, endColorRGB: store.profile.colorRGB)
-            }
         }
     }
 
@@ -225,6 +211,40 @@ struct HomeView: View {
         }
     }
 
+    // MARK: Touch
+
+    /// Opens the full-screen touch bar, where there's room to tap and slide properly.
+    private var sendTouchButton: some View {
+        Button { showCompose = true } label: {
+            HStack(spacing: 12) {
+                Image(systemName: "hand.tap.fill").font(.system(size: 20, weight: .bold))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Send a touch").font(Theme.font(17, .heavy))
+                    Text(partner == nil ? "Pick a partner first"
+                         : "Tap and slide on the big bar · \(model.braceletState == .connected ? "bracelet connected" : "no bracelet needed")")
+                        .font(Theme.font(12)).foregroundStyle(Theme.onAccent.opacity(0.75))
+                }
+                Spacer()
+                Image(systemName: "chevron.right").font(.system(size: 15, weight: .bold))
+            }
+            .foregroundStyle(Theme.onAccent)
+            .padding(.horizontal, 18).frame(height: 66)
+            .frame(maxWidth: .infinity)
+            .background(
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .fill(LinearGradient(colors: [Color(rgbInt: 0x74D3CB), Theme.accentDeep],
+                                         startPoint: .top, endPoint: .bottom))
+                    .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).stroke(.white.opacity(0.45), lineWidth: 1))
+                    .shadow(color: Theme.accent.opacity(0.25), radius: 10, y: 5)
+            )
+        }
+        .buttonStyle(.plain)
+        .disabled(partner == nil)
+        .opacity(partner == nil ? 0.5 : 1)
+        .accessibilityLabel("Send a touch")
+        .accessibilityHint("Opens the full-screen touch bar")
+    }
+
     // MARK: Meanings
 
     @ViewBuilder private var meaningChips: some View {
@@ -312,57 +332,6 @@ struct HomeView: View {
         .padding(.horizontal, 14).padding(.vertical, 10)
         .glass(cornerRadius: 22)
     }
-}
-
-/// The Home touch bar, with its countdown and live trace while a touch is recorded.
-private struct HomeTouchBarCard: View {
-    @EnvironmentObject var model: AppModel
-    @EnvironmentObject var store: LocalStore
-    @ObservedObject var recorder: TouchBarRecorder
-    @Binding var showCompose: Bool
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 9) {
-            HStack {
-                Text("Touch bar").font(Theme.font(15, .heavy)).foregroundStyle(.white)
-                Spacer()
-                if recorder.recording {
-                    Button("Send now") { recorder.finish() }
-                        .font(Theme.font(13, .heavy)).foregroundStyle(Theme.onAccent)
-                        .padding(.horizontal, 12).frame(height: 28)
-                        .background(Capsule().fill(Theme.accent))
-                    CountdownRing(progress: recorder.progress, remaining: recorder.remaining, size: 30)
-                } else {
-                    Text(model.braceletState == .connected ? "Bracelet connected" : "No bracelet needed")
-                        .font(Theme.font(12, .bold)).foregroundStyle(Theme.subtitle)
-                        .padding(.horizontal, 10).padding(.vertical, 4)
-                        .background(Capsule().fill(.white.opacity(0.14)))
-                    Button { showCompose = true } label: {
-                        Image(systemName: "arrow.up.left.and.arrow.down.right")
-                            .font(.system(size: 14, weight: .bold)).foregroundStyle(.white)
-                            .frame(width: 32, height: 32).background(Circle().fill(.white.opacity(0.14)))
-                    }
-                    .accessibilityLabel("Open the full touch bar")
-                }
-            }
-            TouchBarSurface(recorder: recorder, vertical: false,
-                            startRGB: store.profile.colorRGB, endRGB: store.profile.colorRGB)
-                .frame(height: 46)
-            if recorder.recording {
-                TouchViz(pattern: recorder.samples, generation: 3,
-                         colorRGB: store.profile.colorRGB, height: 40)
-            } else {
-                Text("Touch to start · tap and slide for \(Int(store.touchWindowSeconds)) s · sends when time's up")
-                    .font(Theme.font(11)).foregroundStyle(Theme.subtitle)
-                    .frame(maxWidth: .infinity)
-            }
-        }
-        .padding(14)
-        .glass(cornerRadius: 26)
-        .disabled(model.selectedPartner == nil)
-        .opacity(model.selectedPartner == nil ? 0.5 : 1)
-    }
-
 }
 
 /// A small non-interactive map framing you and your partner.
