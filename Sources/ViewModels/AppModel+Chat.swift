@@ -27,12 +27,72 @@ extension AppModel {
         return cloudPartners.first { $0.id == id }?.bond ?? cloudPending.first { $0.id == id }
     }
 
-    /// iCloud bonds that carry chat for an original-app partner (hidden from the partner bar).
+    /// iCloud bonds linked to an original-app partner.
     var chatLinkedCloudIDs: Set<String> { Set(store.chatLinks.values) }
+
+    /// Original-app partners who have joined you on iCloud (their linked iCloud bond is
+    /// accepted). They sync through iCloud only.
+    var migratedLegacyIDs: Set<String> {
+        let accepted = Set(cloudPartners.map(\.id))
+        return Set(store.chatLinks.filter { accepted.contains($0.value) }.keys)
+    }
+
+    /// Whether any partner still syncs through the original backend only. When none does,
+    /// nothing (presence, location, profile) is sent there anymore.
+    var hasOriginalOnlyPartners: Bool {
+        let migrated = migratedLegacyIDs
+        return legacyPartners.contains { !migrated.contains($0.id) }
+    }
+
+    /// The iCloud partner that replaces an original-app partner, if they've moved.
+    func iCloudPartnerID(forLegacy id: String) -> String? {
+        guard migratedLegacyIDs.contains(id) else { return nil }
+        return store.chatLinks[id]
+    }
+
+    /// Links original-app partners to an iCloud partner with exactly the same name (when
+    /// there's just one such), and moves the selection onto the iCloud partner once linked.
+    func autoLinkPartners() {
+        let linkedCloud = chatLinkedCloudIDs
+        for legacy in legacyPartners where store.chatLinks[legacy.id] == nil {
+            let name = legacy.displayName.trimmingCharacters(in: .whitespaces).lowercased()
+            let matches = cloudPartners.filter {
+                !linkedCloud.contains($0.id) && $0.displayName.trimmingCharacters(in: .whitespaces).lowercased() == name
+            }
+            if matches.count == 1, !name.isEmpty { store.chatLinks[legacy.id] = matches[0].id }
+        }
+        if let sel = selectedPartnerID, let moved = iCloudPartnerID(forLegacy: sel) {
+            selectedPartnerID = moved
+        }
+        importMeaningsFromMovedPartners()
+    }
+
+    /// Once per partner who moved to iCloud: copy their Touch Language from the original
+    /// backend into the local library, so nothing is lost.
+    private func importMeaningsFromMovedPartners() {
+        let key = "ImportedLegacyMeanings"
+        var done = Set(UserDefaults.standard.stringArray(forKey: key) ?? [])
+        for id in migratedLegacyIDs where !done.contains(id) {
+            guard let list = legacyMeanings[id] else { continue }
+            let existing = Set(store.meanings.map { $0.label.lowercased() })
+            for m in list where !existing.contains(m.label.lowercased()) {
+                var copy = m
+                copy.serverID = nil
+                store.meanings.append(copy)
+            }
+            done.insert(id)
+        }
+        UserDefaults.standard.set(Array(done), forKey: key)
+    }
 
     /// Creates an iCloud bond to invite an original-app partner to chat; it is linked to them
     /// right away and the share sheet is offered (`pendingShareRoot`).
     func inviteToICloudChat(_ legacyID: String) async {
+        // Replace an earlier, still-unaccepted invite rather than piling them up.
+        if let old = store.chatLinks[legacyID], let pending = cloudPending.first(where: { $0.id == old }) {
+            await removeBond(pending)
+            store.chatLinks.removeValue(forKey: legacyID)
+        }
         let before = Set(cloudPending.map(\.id))
         await createBond()
         if let new = cloudPending.first(where: { !before.contains($0.id) }) {

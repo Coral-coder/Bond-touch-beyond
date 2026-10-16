@@ -46,11 +46,12 @@ final class AppModel: ObservableObject {
     /// The Apple Watch link (touch bar + meanings on the watch).
     let watch = WatchBridge()
 
-    /// Every partner — iCloud and original backend. An iCloud bond that only carries chat
-    /// for an original-app partner is not listed separately.
+    /// Every partner, once each: iCloud partners, plus original-app partners who aren't on
+    /// iCloud with you yet. A partner who has moved to iCloud is shown (and synced) only
+    /// through their iCloud bond.
     var partners: [Partner] {
-        let linked = chatLinkedCloudIDs
-        return cloudPartners.filter { !linked.contains($0.id) } + legacyPartners
+        let migrated = migratedLegacyIDs
+        return cloudPartners + legacyPartners.filter { !migrated.contains($0.id) }
     }
     /// Every invite the user sent that has not been accepted yet.
     var pendingBonds: [Bond] { cloudPending + legacyPending }
@@ -233,6 +234,7 @@ final class AppModel: ObservableObject {
     func handleRemoteNotification() async { await refreshAll() }
 
     func refreshAll() async {
+        defer { autoLinkPartners() }
         for index in cloudPartners.indices {
             let partner = cloudPartners[index]
             guard let events = try? await relay.fetchNewEvents(bond: partner.bond, myUserID: myUserID) else { continue }

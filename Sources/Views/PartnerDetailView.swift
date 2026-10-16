@@ -1,3 +1,4 @@
+import CloudKit
 import CoreLocation
 import MapKit
 import SwiftUI
@@ -14,6 +15,8 @@ struct PartnerDetailView: View {
     @State private var color = Color.white
     @State private var showEncounters = false
     @State private var confirmUnbond = false
+    @State private var showShare = false
+    @State private var inviting = false
 
     private var partner: Partner? { model.partners.first { $0.id == partnerID } }
     private var photo: UIImage? { model.photo(forBond: partnerID) }
@@ -77,6 +80,8 @@ struct PartnerDetailView: View {
                         }
                         .padding(16).glass(cornerRadius: 22)
 
+                        connectionCard(partner)
+
                         VStack(spacing: 0) {
                             Toggle(isOn: useBackground) {
                                 Text("Use photo as background").font(Theme.font(16, .bold)).foregroundStyle(.white)
@@ -123,12 +128,57 @@ struct PartnerDetailView: View {
             if new.rgbInt != partner?.colorRGB { model.setPartnerColor(new.rgbInt, for: partnerID) }
         }
         .sheet(isPresented: $showEncounters) { EncountersView(bondID: partnerID) }
+        .sheet(isPresented: $showShare) {
+            if let root = model.pendingShareRoot {
+                CloudShareSheet(root: root, container: CKContainer(identifier: AppConfig.cloudContainerID))
+            }
+        }
         .confirmationDialog("Unbond from \(partner?.displayName ?? "this partner")?",
                             isPresented: $confirmUnbond, titleVisibility: .visible) {
             Button("Unbond", role: .destructive) {
                 if let bond = partner?.bond { Task { await model.removeBond(bond); dismiss() } }
             }
         }
+    }
+
+    /// How this partner syncs: iCloud, or the original servers with an invite to move.
+    @ViewBuilder private func connectionCard(_ p: Partner) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 10) {
+                Image(systemName: p.bond.legacy ? "antenna.radiowaves.left.and.right" : "icloud.fill")
+                    .foregroundStyle(p.bond.legacy ? Theme.amber : Theme.accent)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(p.bond.legacy ? "Original Bond Touch app" : "On iCloud")
+                        .font(Theme.font(16, .bold)).foregroundStyle(.white)
+                    Text(p.bond.legacy
+                         ? (model.store.chatLinks[p.id] != nil
+                            ? "Invite sent — everything moves to iCloud when they accept"
+                            : "Touches sync through the original servers; chat needs iCloud")
+                         : "Everything syncs privately through iCloud")
+                        .font(Theme.font(12)).foregroundStyle(Theme.subtitle)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer()
+            }
+            if p.bond.legacy {
+                Button {
+                    inviting = true
+                    Task {
+                        await model.inviteToICloudChat(p.id)
+                        inviting = false
+                        showShare = model.pendingShareRoot != nil
+                    }
+                } label: {
+                    HStack {
+                        if inviting { ProgressView().tint(Theme.onAccent) }
+                        Text(model.store.chatLinks[p.id] != nil ? "Send the iCloud invite again" : "Invite \(p.displayName) to iCloud")
+                    }
+                }
+                .buttonStyle(AccentButtonStyle(height: 46))
+                .disabled(inviting)
+            }
+        }
+        .padding(16).glass(cornerRadius: 22)
     }
 
     private func statusText(_ p: Partner) -> String {

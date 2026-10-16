@@ -126,6 +126,10 @@ extension AppModel {
                                     online: known?.online ?? false, lastSeen: known?.lastSeen,
                                     latitude: known?.latitude, longitude: known?.longitude))
 
+            // A partner who is on iCloud with you syncs through iCloud only: ignore their
+            // touches, meanings, greeting and encounter from the original backend.
+            if migratedLegacyIDs.contains(id) { continue }
+
             let meanings = ((b["meanings"] as? [[String: Any]]) ?? []).compactMap(BondBackend.meaning(from:))
             legacyMeanings[id] = meanings
 
@@ -161,6 +165,7 @@ extension AppModel {
 
         history.sort { $0.sentAt < $1.sentAt }
         legacyPartners = partners
+        autoLinkPartners()
         legacyPending = pending
         incomingInvites = incoming
         seenTouchIDs = seen
@@ -195,7 +200,7 @@ extension AppModel {
     // MARK: - Presence
 
     func legacySetOnline(_ online: Bool) async {
-        guard legacySignedIn, let token = try? await legacyToken(),
+        guard legacySignedIn, hasOriginalOnlyPartners, let token = try? await legacyToken(),
               let status = try? await BondBackend.setOnline(online, bearer: token) else { return }
         for i in legacyPartners.indices {
             if let on = status[legacyPartners[i].id] {
@@ -206,13 +211,13 @@ extension AppModel {
     }
 
     func legacySetSharing(_ on: Bool) async {
-        guard legacySignedIn, let token = try? await legacyToken() else { return }
+        guard legacySignedIn, hasOriginalOnlyPartners, let token = try? await legacyToken() else { return }
         try? await BondBackend.updateSharing(on, bearer: token)
     }
 
     /// Pushes the user's location, at most every 30 seconds.
     func legacyPushLocation(_ coord: CLLocationCoordinate2D) async {
-        guard legacySignedIn, Date().timeIntervalSince(legacyLastLocationPush) > 30,
+        guard legacySignedIn, hasOriginalOnlyPartners, Date().timeIntervalSince(legacyLastLocationPush) > 30,
               let token = try? await legacyToken() else { return }
         legacyLastLocationPush = Date()
         try? await BondBackend.updateLocation(lat: coord.latitude, lng: coord.longitude, bearer: token)
@@ -339,7 +344,7 @@ extension AppModel {
 
     /// Pushes name + colour to the account, debounced (the colour picker fires per change).
     func legacyPublishProfile(name: String, colorRGB: Int) {
-        guard legacySignedIn else { return }
+        guard legacySignedIn, hasOriginalOnlyPartners else { return }
         legacyProfileTask?.cancel()
         legacyProfileTask = Task { [weak self] in
             try? await Task.sleep(nanoseconds: 1_000_000_000)
