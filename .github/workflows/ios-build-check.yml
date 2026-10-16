@@ -1,0 +1,38 @@
+# Compiles the iOS app for the simulator on every push and PR, with signing disabled,
+# so build breaks are caught without needing an Apple team or secrets. The separate
+# ios-testflight.yml workflow handles signed archives/uploads from main.
+name: iOS build check
+
+on:
+  push:
+    paths:
+      - "project.yml"
+      - "Sources/**"
+      - ".github/workflows/ios-build-check.yml"
+  pull_request:
+    paths:
+      - "project.yml"
+      - "Sources/**"
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Build for simulator (no signing)
+        run: |
+          xcodebuild \
+            -project BondTouchBeyond.xcodeproj \
+            -scheme BondTouchBeyond \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            -configuration Debug \
+            CODE_SIGNING_ALLOWED=NO \
+            build

@@ -1,0 +1,202 @@
+# Downloads the Bond Touch Android XAPK (com.impossible.bondtouch) from APKPure and keeps it as
+# a workflow artifact. Run it by hand (Actions → Download Bond Touch XAPK → Run workflow); it also
+# runs on any push that changes this file. By default it fetches versionCode 490 for armeabi-v7a
+# on Android 10 (SDK 29), i.e.
+#   https://d.apkpure.com/b/XAPK/com.impossible.bondtouch?versionCode=490&nc=armeabi-v7a&sv=29
+# Clear the version code to get the latest version instead; clear the ABI or SDK to drop them
+# from the request. Tick "release" to also attach the file to a GitHub release tagged
+# apk-<versionName>.
+#
+# The website link sits behind a Cloudflare challenge that GitHub's runners don't pass, so the
+# workflow falls back to the API APKPure's Android app uses (api.pureapk.com), which lists a
+# download link per version. An XAPK is a zip holding the base APK, split APKs and a
+# manifest.json; the workflow checks that what came back really is one, that its versionCode is
+# the one asked for, and also uploads the extracted APKs.
+name: Download Bond Touch XAPK
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_code:
+        description: "versionCode to fetch (empty for the latest version)"
+        required: false
+        default: "490"
+      abi:
+        description: "CPU ABI (nc), e.g. armeabi-v7a or arm64-v8a; empty for any"
+        required: false
+        default: armeabi-v7a
+      sdk:
+        description: "Android SDK level of the device (sv); empty for any"
+        required: false
+        default: "29"
+      release:
+        description: "Also publish the file as a GitHub release"
+        type: boolean
+        default: false
+  push:
+    paths: [.github/workflows/download-xapk.yml]
+
+permissions:
+  contents: write
+
+env:
+  PACKAGE: com.impossible.bondtouch
+
+jobs:
+  download:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download XAPK
+        env:
+          VERSION_CODE: ${{ inputs.version_code }}
+          ABI: ${{ inputs.abi }}
+          SDK: ${{ inputs.sdk }}
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          # A push has no inputs, so it uses the same defaults as a manual run. On a manual run an
+          # input left empty is dropped from the request.
+          if [ "$GITHUB_EVENT_NAME" != workflow_dispatch ]; then
+            VERSION_CODE=490 ABI=armeabi-v7a SDK=29
+          fi
+          if [ -n "$VERSION_CODE" ]; then query="versionCode=${VERSION_CODE}"; else query="version=latest"; fi
+          if [ -n "$ABI" ]; then query="${query}&nc=${ABI}"; fi
+          if [ -n "$SDK" ]; then query="${query}&sv=${SDK}"; fi
+          ua="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0 Safari/537.36"
+          ok=
+          # Fetches $1 into out/download; succeeds when the body is a zip (starts with "PK").
+          # APKPure answers blocked requests with an HTML page (Cloudflare's "Just a moment...").
+          fetch() {
+            echo "::group::$1"
+            rm -f out/download out/headers.txt
+            code=$(curl -sS -L --retry 2 --connect-timeout 20 -A "$ua" -H "Accept: */*" \
+              -D out/headers.txt -o out/download -w '%{http_code}' "$1" || echo 000)
+            echo "HTTP $code, $(stat -c %s out/download 2>/dev/null || echo 0) bytes"
+            grep -i -E '^(location|content-type|content-disposition):' out/headers.txt || true
+            echo "::endgroup::"
+            [ "$code" = 200 ] && [ "$(head -c 2 out/download)" = "PK" ]
+          }
+          # 1. The website link, then the same path on download.pureapk.com, the host APKPure's
+          #    Android app downloads from (d.apkpure.com sits behind a Cloudflare challenge that
+          #    GitHub's runners don't pass). XAPK first; APK is for versions without splits.
+          for kind in XAPK APK; do
+            for host in d.apkpure.com download.pureapk.com; do
+              if fetch "https://${host}/b/${kind}/${PACKAGE}?${query}"; then ok=$kind; break 2; fi
+            done
+          done
+          # 2. Ask the app's API for the version list and fetch a download link from it. The answer
+          #    is protobuf, so the links are picked out of it as plain strings.
+          if [ -z "$ok" ]; then
+            echo "::group::APKPure app API"
+            curl -sS -L --compressed --retry 2 -A "okhttp/4.9.3" -H "x-cv: 3172501" -H "x-sv: ${SDK:-29}" \
+              -H "x-abis: ${ABI:-arm64-v8a,armeabi-v7a,armeabi}" -H "x-gp: 1" \
+              -o out/versions.bin -w 'HTTP %{http_code}\n' \
+              "https://api.pureapk.com/m/v3/cms/app_version?hl=en-US&package_name=${PACKAGE}" || true
+            grep -aoE 'https?://[A-Za-z0-9.-]+/b/(XAPK|APK)/[^[:space:][:cntrl:]"]+' out/versions.bin \
+              2>/dev/null | awk '!seen[$0]++' > out/links.txt || true
+            echo "$(wc -l < out/links.txt) links found"
+            echo "::endgroup::"
+            # Each link's c= parameter ends in base64 of "dev=...&t=xapk&s=<size>&vn=<name>&vc=<code>";
+            # pick the link whose vc is the wanted versionCode (else the first, the newest). The
+            # versionCode is checked again against the XAPK's manifest.json after the download.
+            : > out/pick.txt
+            while read -r link; do
+              c=${link##*c=}; c=${c##*%7C}; c=$(printf '%s' "$c" | tr -- '-_' '+/')
+              while [ $(( ${#c} % 4 )) -ne 0 ]; do c="$c="; done
+              vc=$(printf '%s' "$c" | base64 -d 2>/dev/null | sed -n 's/.*[?&]vc=\([0-9]*\).*/\1/p' || true)
+              echo "versionCode ${vc:-?}: ${link%%\?*}"
+              if [ -z "$VERSION_CODE" ] || [ "$vc" = "$VERSION_CODE" ]; then echo "$link" >> out/pick.txt; fi
+            done < out/links.txt
+            head -1 out/pick.txt > out/pick1.txt && mv out/pick1.txt out/pick.txt
+            if [ ! -s out/pick.txt ]; then
+              echo "::error::APKPure lists no download for versionCode ${VERSION_CODE}."
+            fi
+            while read -r link; do
+              fetch "$link" || continue
+              case "$link" in */b/XAPK/*) kind=XAPK ;; *) kind=APK ;; esac
+              if [ -n "$VERSION_CODE" ]; then
+                got=$(unzip -p out/download manifest.json 2>/dev/null | jq -r '.version_code // empty' || true)
+                echo "versionCode in package: ${got:-unknown}"
+                [ "$got" = "$VERSION_CODE" ] || continue
+              fi
+              ok=$kind; break
+            done < out/pick.txt
+          fi
+          if [ -z "$ok" ]; then
+            echo "::error::APKPure did not return a package. First bytes of the last response:"
+            head -c 600 out/download 2>/dev/null || true
+            exit 1
+          fi
+          ext=$(echo "$ok" | tr 'A-Z' 'a-z')
+          mv out/download "out/${PACKAGE}.${ext}"
+          echo "KIND=$ok" >> "$GITHUB_ENV"
+          echo "FILE=out/${PACKAGE}.${ext}" >> "$GITHUB_ENV"
+
+      - name: Inspect package
+        run: |
+          set -euo pipefail
+          unzip -l "$FILE"
+          mkdir -p out/apks
+          if [ "$KIND" = XAPK ]; then
+            unzip -o -q "$FILE" '*.apk' -d out/apks
+            ver=$(unzip -p "$FILE" manifest.json | jq -r '.version_name // empty')
+            code=$(unzip -p "$FILE" manifest.json | jq -r '.version_code // empty')
+          else
+            cp "$FILE" out/apks/
+            ver=$(aapt dump badging "$FILE" 2>/dev/null | sed -n "s/.*versionName='\([^']*\)'.*/\1/p" || true)
+            code=$(aapt dump badging "$FILE" 2>/dev/null | sed -n "s/.*versionCode='\([^']*\)'.*/\1/p" || true)
+          fi
+          ver=${ver:-unknown}
+          (cd out && sha256sum "$(basename "$FILE")" > SHA256SUMS && cd apks && sha256sum *.apk >> ../SHA256SUMS)
+          echo "VERSION_NAME=$ver" >> "$GITHUB_ENV"
+          {
+            echo "### ${PACKAGE} ${ver} (${code:-?})"
+            echo
+            echo "Type: $KIND, size: $(du -h "$FILE" | cut -f1)"
+            echo
+            echo '```'
+            cat out/SHA256SUMS
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload API answer for debugging
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: apkpure-debug
+          path: |
+            out/versions.bin
+            out/links.txt
+            out/download
+          if-no-files-found: ignore
+
+      - name: Upload package
+        uses: actions/upload-artifact@v4
+        with:
+          name: bondtouch-${{ env.VERSION_NAME }}-${{ env.KIND }}
+          path: |
+            ${{ env.FILE }}
+            out/SHA256SUMS
+          compression-level: 0
+
+      - name: Upload extracted APKs
+        uses: actions/upload-artifact@v4
+        with:
+          name: bondtouch-${{ env.VERSION_NAME }}-apks
+          path: out/apks/*.apk
+          compression-level: 0
+
+      - name: Publish release
+        if: inputs.release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag="apk-${VERSION_NAME}"
+          if gh release view "$tag" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$tag" "$FILE" out/SHA256SUMS --clobber -R "$GITHUB_REPOSITORY"
+          else
+            gh release create "$tag" "$FILE" out/SHA256SUMS -R "$GITHUB_REPOSITORY" \
+              --target "$GITHUB_SHA" --title "Bond Touch ${VERSION_NAME}" \
+              --notes "${PACKAGE} ${VERSION_NAME} ($KIND) downloaded from APKPure by the Download Bond Touch XAPK workflow."
+          fi
