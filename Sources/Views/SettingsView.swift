@@ -1,75 +1,126 @@
 import SwiftUI
 
-/// Settings skeleton mirroring the original's device/user sections. No account tier or
-/// billing — every feature is free.
+/// Settings — profile header plus a list of sections, matching the original's layout.
 struct SettingsView: View {
     @EnvironmentObject var model: AppModel
     @EnvironmentObject var store: LocalStore
-    @State private var testResult: String?
-    @State private var testing = false
 
     var body: some View {
-        Form {
-            Section("Bracelet") {
-                LabeledContent("Connection", value: connectionText)
-                VStack(alignment: .leading) {
-                    Text("Vibration strength: \(Int(store.vibrationStrength))")
-                    Slider(value: $store.vibrationStrength, in: 0...255, step: 5)
+        ScrollView {
+            VStack(spacing: 16) {
+                Text("Settings").font(.title3.bold()).foregroundStyle(.white).padding(.top, 10)
+
+                AvatarRing(name: store.profile.name.isEmpty ? "Me" : store.profile.name,
+                           color: Color(rgbInt: store.profile.colorRGB), size: 110)
+                Text(store.profile.name.isEmpty ? "Me" : store.profile.name)
+                    .font(.title2.bold()).foregroundStyle(.white)
+                HStack(spacing: 6) {
+                    Image(systemName: "dot.radiowaves.left.and.right")
+                    Text(connectionText)
                 }
-                Toggle("Do Not Disturb", isOn: $store.doNotDisturb)
-            }
-            Section("Partner") {
-                LabeledContent("Selected partner", value: model.selectedPartner?.displayName ?? "—")
-                LabeledContent("Partners", value: "\(model.partners.count)")
-            }
-            Section {
-                Toggle("Use legacy Firebase", isOn: $store.useLegacyFirebase)
-                if store.useLegacyFirebase {
-                    TextField("Database URL (https://…firebaseio.com)", text: $store.firebaseDatabaseURL)
-                        .textInputAutocapitalization(.never).autocorrectionDisabled()
-                    SecureField("Auth token (optional)", text: $store.firebaseAuthToken)
-                    Button {
-                        Task { await runTest() }
-                    } label: {
-                        HStack {
-                            Text("Test connection")
-                            if testing { Spacer(); ProgressView() }
-                        }
-                    }
-                    .disabled(testing || store.firebaseDatabaseURL.isEmpty)
-                    if let testResult { Text(testResult).font(.footnote).foregroundStyle(.secondary) }
+                .font(.subheadline).foregroundStyle(Theme.subtitle)
+
+                VStack(spacing: 12) {
+                    row("Personal details", "person.text.rectangle") { PersonalDetailsView() }
+                    row("My Bond Touch Bracelet", "applewatch") { BraceletSettingsView() }
+                    row("Do not disturb", "moon.fill") { DoNotDisturbView() }
+                    row("My people", "person.2.fill") { PeopleView().navigationTitle("My people") }
+                    row("Private Space", "lock.fill") { ComingSoonView(title: "Private Space") }
+                    row("Legacy data", "externaldrive.fill") { LegacyDataView() }
+                    row("Help & Support", "questionmark.circle.fill") { ComingSoonView(title: "Help & Support") }
                 }
-            } header: {
-                Text("Legacy data")
-            } footer: {
-                Text("Experimental. Bond Touch Beyond uses iCloud by default. The original Firebase project only accepts the original app, so unless its owner registers this app (\(AppConfig.bundleID)) or you provide a working database URL and token, the connection will be rejected.")
+                Text("Bond Touch Beyond").font(.caption2).foregroundStyle(Theme.subtitle).padding(.top, 8)
+                Color.clear.frame(height: 90)
             }
-            Section("About") {
-                LabeledContent("Relay", value: store.useLegacyFirebase ? "iCloud + legacy Firebase" : "iCloud (CloudKit)")
-                LabeledContent("Telemetry", value: "None")
-                LabeledContent("Protocol", value: "Bond Touch v3 BLE")
-            }
+            .padding(.horizontal, 20)
         }
     }
 
-    @MainActor private func runTest() async {
-        guard let client = store.legacyFirebase else { testResult = "Enable and enter a URL first."; return }
-        testing = true; testResult = nil
-        let result = await client.testConnection()
-        testing = false
-        switch result {
-        case .ok: testResult = "✅ Connected — this app can read the database."
-        case .rejected: testResult = "⛔️ Reached Firebase, but it rejected this app (auth / rules / App Check). Only the project owner can allow \(AppConfig.bundleID)."
-        case .unreachable(let why): testResult = "⚠️ Couldn't reach it: \(why)"
+    @ViewBuilder private func row<Destination: View>(_ title: String, _ icon: String,
+                                                     @ViewBuilder destination: () -> Destination) -> some View {
+        NavigationLink {
+            destination().screenBackground().navigationBarTitleDisplayMode(.inline)
+        } label: {
+            GlassCard {
+                HStack(spacing: 14) {
+                    Image(systemName: icon).foregroundStyle(Theme.teal).frame(width: 24)
+                    Text(title).foregroundStyle(.white)
+                    Spacer()
+                    Image(systemName: "chevron.right").foregroundStyle(Theme.subtitle).font(.footnote)
+                }
+            }
         }
+        .buttonStyle(.plain)
     }
 
     private var connectionText: String {
         switch model.braceletState {
         case .connected: return "Connected"
-        case .scanning, .connecting: return "Searching…"
+        case .scanning, .connecting: return "Connecting…"
         case .bluetoothOff: return "Bluetooth off"
         case .disconnected: return "Not connected"
         }
+    }
+}
+
+private struct PersonalDetailsView: View {
+    @EnvironmentObject var model: AppModel
+    @EnvironmentObject var store: LocalStore
+    @State private var color: Color = .pink
+    var body: some View {
+        Form {
+            TextField("Name", text: $store.profile.name)
+            ColorPicker("Your colour", selection: $color)
+        }
+        .scrollContentBackground(.hidden)
+        .navigationTitle("Personal details")
+        .onAppear { color = Color(rgbInt: store.profile.colorRGB) }
+        .onChange(of: color) { store.profile.colorRGB = $0.rgbInt; Task { await model.publishProfile() } }
+    }
+}
+
+private struct BraceletSettingsView: View {
+    @EnvironmentObject var model: AppModel
+    @EnvironmentObject var store: LocalStore
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 16) {
+                ConnectView()
+                GlassCard {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Vibration strength: \(Int(store.vibrationStrength))").foregroundStyle(.white)
+                        Slider(value: $store.vibrationStrength, in: 0...255, step: 5)
+                    }
+                }
+            }
+            .padding(20)
+        }
+        .navigationTitle("My Bond Touch Bracelet")
+    }
+}
+
+private struct DoNotDisturbView: View {
+    @EnvironmentObject var store: LocalStore
+    var body: some View {
+        VStack(spacing: 16) {
+            GlassCard {
+                Toggle("Do not disturb", isOn: $store.doNotDisturb).foregroundStyle(.white).tint(Theme.teal)
+            }
+            Text("When on, incoming touches won't buzz your bracelet.")
+                .font(.footnote).foregroundStyle(Theme.subtitle)
+            Spacer()
+        }
+        .padding(20).navigationTitle("Do not disturb")
+    }
+}
+
+private struct ComingSoonView: View {
+    let title: String
+    var body: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "hourglass").font(.largeTitle).foregroundStyle(Theme.subtitle)
+            Text("\(title) is coming soon.").foregroundStyle(.white)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity).navigationTitle(title)
     }
 }

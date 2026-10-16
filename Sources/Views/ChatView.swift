@@ -1,6 +1,7 @@
 import SwiftUI
 
-/// Text + touch chat with the selected partner, relayed over CloudKit.
+/// Chat with the selected partner — text bubbles and touches rendered as glowing strokes,
+/// with a message input bar.
 struct ChatView: View {
     @EnvironmentObject var model: AppModel
     @State private var draft = ""
@@ -12,69 +13,73 @@ struct ChatView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            if model.partners.count > 1 { PartnerPicker() }
+            HStack { Spacer(); PartnerBar(); Spacer() }
+                .padding(.horizontal, 20).padding(.top, 8).padding(.bottom, 6)
+
             ScrollViewReader { proxy in
                 ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 8) {
+                    LazyVStack(alignment: .leading, spacing: 14) {
                         ForEach(messages) { msg in bubble(msg).id(msg.id) }
+                        Color.clear.frame(height: 8).id("bottom")
                     }
-                    .padding()
+                    .padding(.horizontal, 16).padding(.top, 8)
                 }
                 .onChange(of: messages.count) { _ in
-                    if let last = messages.last { withAnimation { proxy.scrollTo(last.id, anchor: .bottom) } }
+                    withAnimation { proxy.scrollTo("bottom", anchor: .bottom) }
                 }
             }
-            Divider()
-            HStack(spacing: 10) {
-                TextField("Message", text: $draft)
-                    .textFieldStyle(.roundedBorder)
-                Button {
-                    let text = draft
-                    draft = ""
-                    Task { await model.sendChatText(text) }
-                } label: { Image(systemName: "paperplane.fill") }
-                    .disabled(draft.trimmingCharacters(in: .whitespaces).isEmpty)
-            }
-            .padding(10)
+
+            inputBar
         }
     }
 
     @ViewBuilder private func bubble(_ msg: ChatMessage) -> some View {
         let mine = msg.senderID == model.myUserID
-        HStack {
-            if mine { Spacer(minLength: 40) }
-            Text(msg.kind == .touch ? "👆 touch" : msg.text)
-                .padding(.horizontal, 12).padding(.vertical, 8)
-                .background(mine ? Color.accentColor.opacity(0.9) : Color.gray.opacity(0.2))
-                .foregroundStyle(mine ? .white : .primary)
-                .clipShape(RoundedRectangle(cornerRadius: 16))
-            if !mine { Spacer(minLength: 40) }
-        }
-        .frame(maxWidth: .infinity, alignment: mine ? .trailing : .leading)
-    }
-}
-
-/// A compact partner selector shown when the user has more than one partner.
-struct PartnerPicker: View {
-    @EnvironmentObject var model: AppModel
-    var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(model.partners) { partner in
-                    Button {
-                        model.selectedPartnerID = partner.id
-                    } label: {
-                        Text(partner.displayName)
-                            .font(.subheadline)
-                            .padding(.horizontal, 12).padding(.vertical, 6)
-                            .background(partner.id == model.selectedPartnerID
-                                        ? Color.accentColor.opacity(0.2) : Color.gray.opacity(0.15))
-                            .clipShape(Capsule())
-                    }
-                    .buttonStyle(.plain)
+        VStack(alignment: mine ? .trailing : .leading, spacing: 4) {
+            HStack {
+                if mine { Spacer(minLength: 40) }
+                if msg.kind == .touch {
+                    GlassCard { TouchViz(pattern: [], colorRGB: msg.colorRGB) }
+                        .frame(maxWidth: 260)
+                } else {
+                    Text(msg.text)
+                        .foregroundStyle(mine ? .white : .white.opacity(0.95))
+                        .padding(.horizontal, 14).padding(.vertical, 10)
+                        .background(mine ? Theme.teal.opacity(0.22) : Color.white.opacity(0.08))
+                        .clipShape(RoundedRectangle(cornerRadius: 18))
                 }
+                if !mine { Spacer(minLength: 40) }
             }
-            .padding(.horizontal).padding(.vertical, 6)
+            Text(msg.sentAt.formatted(date: .omitted, time: .shortened))
+                .font(.caption2).foregroundStyle(Theme.subtitle)
+                .frame(maxWidth: .infinity, alignment: mine ? .trailing : .leading)
         }
+    }
+
+    private var inputBar: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "camera.fill")
+                .foregroundStyle(.white)
+                .frame(width: 44, height: 44)
+                .background(Circle().fill(Theme.teal.opacity(0.9)))
+            TextField("", text: $draft, prompt: Text("Message \(model.selectedPartner?.displayName ?? "")…")
+                .foregroundColor(Theme.subtitle))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 14).padding(.vertical, 10)
+                .background(Capsule().fill(Color.white.opacity(0.08)))
+            Button {
+                let text = draft; draft = ""
+                Task { await model.sendChatText(text) }
+            } label: {
+                Image(systemName: "arrow.up")
+                    .font(.system(size: 18, weight: .bold)).foregroundStyle(.white)
+                    .frame(width: 40, height: 40)
+                    .background(Circle().fill(draft.trimmingCharacters(in: .whitespaces).isEmpty
+                                              ? Color.white.opacity(0.12) : Theme.teal))
+            }
+            .disabled(draft.trimmingCharacters(in: .whitespaces).isEmpty)
+        }
+        .padding(.horizontal, 16).padding(.vertical, 10)
+        .background(.ultraThinMaterial)
     }
 }
