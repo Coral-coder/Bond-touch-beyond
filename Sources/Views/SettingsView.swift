@@ -262,7 +262,9 @@ struct MyPhotoPicker: View {
     @State private var showPicker = false
 
     var body: some View {
-        Button { model.myPhoto == nil ? (showPicker = true) : (showOptions = true) } label: {
+        Button {
+            if model.myPhoto == nil { showPicker = true } else { showOptions = true }
+        } label: {
             AvatarRing(name: store.profile.name.isEmpty ? "Me" : store.profile.name,
                        ringColor: Color(rgbInt: store.profile.colorRGB), size: size, photo: model.myPhoto)
                 .overlay(alignment: .bottomTrailing) {
