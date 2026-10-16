@@ -14,6 +14,8 @@ struct BondTouchBeyondApp: App {
                 .environmentObject(model)
                 .environmentObject(model.store)
                 .environmentObject(model.heart)
+                .environmentObject(model.recovery)
+                .onOpenURL { model.recovery.handleOpened($0) }
                 .task { await model.bootstrap() }
                 .onAppear { appDelegate.model = model }
                 .onChange(of: scenePhase) { phase in

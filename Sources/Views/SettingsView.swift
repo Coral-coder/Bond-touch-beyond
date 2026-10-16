@@ -23,6 +23,7 @@ struct SettingsView: View {
                 VStack(spacing: 12) {
                     row("Personal details", "") { PersonalDetailsView() }
                     row("My Bond Touch Bracelet", "") { BraceletSettingsView() }
+                    row("Bracelet firmware (recovery)", "") { FirmwareSettingsView() }
                     row("Tutorials", "") { HelpView() }
                     row("Do not disturb", "") { DoNotDisturbView() }
                     row("My people", "") { PeopleView().navigationTitle("My people") }
@@ -31,6 +32,17 @@ struct SettingsView: View {
                     row("Bracelet notifications", "") { BraceletNotificationsView() }
                     row("Bond Touch account (beta)", "") { LegacyLoginView() }
                     languageRow
+                    GlassCard(padding: 20) {
+                        Toggle(isOn: Binding(get: { store.keepAliveInBackground },
+                                             set: { store.keepAliveInBackground = $0; model.updateKeepAlive() })) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Stay connected in background").foregroundStyle(.white)
+                                Text("Receive and send touches with the phone locked. Needed for partners on the original app; shows the location indicator.")
+                                    .font(.caption).foregroundStyle(Theme.subtitle)
+                            }
+                        }
+                        .tint(Theme.accent)
+                    }
                     GlassCard(padding: 20) {
                         Stepper(value: $store.touchWindowSeconds, in: 5...10, step: 1) {
                             VStack(alignment: .leading, spacing: 2) {

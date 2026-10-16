@@ -45,6 +45,10 @@ final class AppModel: ObservableObject {
     var photoRequests: Set<String> = []
     /// The Apple Watch link (touch bar + meanings on the watch).
     let watch = WatchBridge()
+    /// Repairs a bracelet stuck in firmware-update mode.
+    let recovery = FirmwareRecovery()
+    /// Keeps the app running in the background for original-app partners.
+    let keeper = BackgroundKeeper()
 
     /// Every partner, once each: iCloud partners, plus original-app partners who aren't on
     /// iCloud with you yet. A partner who has moved to iCloud is shown (and synced) only
@@ -92,6 +96,17 @@ final class AppModel: ObservableObject {
             }
         }
         watch.start(self)
+        recovery.start(bracelet)
+    }
+
+    /// Whether the app needs to keep running in the background: on in Settings and some
+    /// partner is on the original servers (iCloud partners wake the app with pushes).
+    var needsBackgroundKeepAlive: Bool {
+        store.keepAliveInBackground && legacySignedIn && hasOriginalOnlyPartners
+    }
+
+    func updateKeepAlive() {
+        if needsBackgroundKeepAlive { keeper.start() } else { keeper.stop() }
     }
 
     // MARK: - Presence (live location)
@@ -145,9 +160,19 @@ final class AppModel: ObservableObject {
     /// Foreground / background: presence on both backends, and the original backend's
     /// sync loop runs only while the app is active.
     func setActive(_ active: Bool) async {
-        if active { startLegacySync() } else { stopLegacySync() }
-        await legacySetOnline(active)
-        await setOnline(active)
+        if active {
+            updateKeepAlive()
+            startLegacySync()
+            await legacySetOnline(true)
+            await setOnline(true)
+            await refreshAll()
+        } else if keeper.running {
+            // Kept alive in the background: keep syncing and stay online.
+        } else {
+            stopLegacySync()
+            await legacySetOnline(false)
+            await setOnline(false)
+        }
     }
 
     func setOnline(_ online: Bool) async {
@@ -201,6 +226,10 @@ final class AppModel: ObservableObject {
     func sendTouch(pattern: [Int], generation: Int = 2, colorRGB: Int, endColorRGB: Int? = nil,
                    toBondID: String? = nil) async {
         guard let bond = bond(for: toBondID) else { return }
+        // Finish sending even if the app goes to the background meanwhile (e.g. a touch
+        // made on the bracelet while the phone is locked).
+        let bg = UIApplication.shared.beginBackgroundTask(withName: "send-touch")
+        defer { UIApplication.shared.endBackgroundTask(bg) }
         let touch = TouchMessage(senderID: myUserID, pattern: pattern, generation: generation,
                                  colorRGB: colorRGB, endColorRGB: endColorRGB)
         do {

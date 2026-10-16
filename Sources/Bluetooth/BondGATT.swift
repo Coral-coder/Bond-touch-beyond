@@ -60,9 +60,23 @@ enum BondGATT {
     static let deviceNames = ["BOND", "Bond More", "BOND 4", "BOND MINI"]
     static let dfuNames = ["BOND_DFU", "BOND_M_DFU", "BOND_4_DFU", "BOND_MINI_DFU"]
 
+    /// A normal (running) bracelet. Excludes bracelets in firmware-update (DFU) mode.
     static func isBondName(_ name: String?) -> Bool {
         guard let name else { return false }
-        return name.uppercased().hasPrefix("BOND")
+        return name.uppercased().hasPrefix("BOND") && dfuModel(name) == nil
+    }
+
+    /// The bracelet model of a bracelet stuck in firmware-update (DFU) mode, from the name
+    /// its bootloader advertises: `BOND_DFU` (Bond Touch), `BOND_M_DFU` (Bond Touch More),
+    /// `BOND_4_DFU` (Bond Touch 4), `BOND_MINI_DFU` (Bond Mini). Nil for anything else.
+    static func dfuModel(_ name: String?) -> BraceletModel? {
+        switch name?.uppercased() {
+        case "BOND_DFU": return .bondTouch
+        case "BOND_M_DFU": return .bondTouchMore
+        case "BOND_4_DFU": return .bondTouch4
+        case "BOND_MINI_DFU": return .bondMini
+        default: return nil
+        }
     }
 
     /// Generation from the API-version byte (non-v3) or the presence of the v3 service.
@@ -293,5 +307,41 @@ enum BondGATT {
         var f = bytes
         if f.count < n { f += Array(repeating: 0xFF, count: n - f.count) }
         return Data(f.prefix(n))
+    }
+}
+
+/// Bracelet models, as far as firmware recovery is concerned (one firmware per model).
+enum BraceletModel: String, CaseIterable, Codable, Identifiable {
+    case bondTouchMore, bondTouch, bondTouch4, bondMini
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .bondTouchMore: return "Bond Touch More"
+        case .bondTouch: return "Bond Touch"
+        case .bondTouch4: return "Bond Touch 4"
+        case .bondMini: return "Bond Mini"
+        }
+    }
+
+    /// The name the bracelet advertises when stuck in update mode.
+    var dfuName: String {
+        switch self {
+        case .bondTouchMore: return "BOND_M_DFU"
+        case .bondTouch: return "BOND_DFU"
+        case .bondTouch4: return "BOND_4_DFU"
+        case .bondMini: return "BOND_MINI_DFU"
+        }
+    }
+
+    /// A best guess from a firmware file's name (the official files are named after the
+    /// model, e.g. `dfu_v3.1.1.zip` for the Bond Touch More).
+    static func guess(fromFileName name: String) -> BraceletModel? {
+        let n = name.uppercased()
+        if n.contains("M_DFU") || n.contains("MORE") || n.contains("V3.1") || n.contains("HW3G") || n.contains("V311") { return .bondTouchMore }
+        if n.contains("MINI") { return .bondMini }
+        if n.contains("BOND_4") || n.contains("DFU_4") || n.contains("TOUCH 4") || n.contains("HW4G") { return .bondTouch4 }
+        if n.contains("2G") || n.contains("V279") || n.contains("V260") || n.contains("HW203") || n.contains("BOND_DFU") { return .bondTouch }
+        return nil
     }
 }

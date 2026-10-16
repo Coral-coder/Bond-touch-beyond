@@ -80,6 +80,7 @@ extension AppModel {
             if legacyCycle == 1 { loadMyPhoto() }
             legacyLastSync = Date()
             legacyStatus = "Synced"
+            if legacyCycle == 1 { updateKeepAlive() }
         } catch {
             legacyStatus = "Sync error: \(error.localizedDescription)"
         }

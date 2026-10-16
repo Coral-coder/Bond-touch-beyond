@@ -19,6 +19,12 @@ settings:
     # overrides APP_BUNDLE_ID (not PRODUCT_BUNDLE_IDENTIFIER, which would hit every target).
     APP_BUNDLE_ID: com.lightwave.beyond
 
+packages:
+  # Nordic Semiconductor's DFU library (BSD-3), used to repair a bracelet stuck in update mode.
+  NordicDFU:
+    url: https://github.com/NordicSemiconductor/IOS-DFU-Library
+    exactVersion: 4.15.3
+
 targets:
   # Signal's LibSignalClient v0.86.5 (AGPL-3.0) — the same Signal-protocol library the
   # original iOS app ships, needed to interoperate with its end-to-end encrypted chat.
@@ -48,6 +54,7 @@ targets:
         link: true
         embed: false
       - target: BondTouchBeyondWatch
+      - package: NordicDFU
     sources:
       - path: Sources
     info:
@@ -73,11 +80,22 @@ targets:
         NSBluetoothPeripheralUsageDescription: Bond Touch Beyond uses Bluetooth to talk to your bracelet.
         NSHealthShareUsageDescription: Bond Touch Beyond reads your heart rate so you can send your live heartbeat to your partner's bracelet.
         NSHealthUpdateUsageDescription: Bond Touch Beyond does not write to Health; this permission is required by the HealthKit framework.
-        NSLocationWhenInUseUsageDescription: Bond Touch Beyond shows your location on the map so you can share it with your partner.
+        NSLocationWhenInUseUsageDescription: Bond Touch Beyond keeps running in the background so your partner's touches reach your bracelet while your phone is locked, and shows your location on the map if you share it with your partner.
         NSFaceIDUsageDescription: Bond Touch Beyond uses Face ID to unlock your Private Space.
         UIBackgroundModes:
           - bluetooth-central
           - remote-notification
+          - location
+        NSLocationAlwaysAndWhenInUseUsageDescription: Bond Touch Beyond keeps running in the background so touches from your partner reach your bracelet while your phone is locked, and shares your location with your partner if you turn that on.
+        # Open official bracelet firmware (.zip) shared from Files or another app, so a
+        # bracelet stuck in update mode can be repaired.
+        CFBundleDocumentTypes:
+          - CFBundleTypeName: Bracelet firmware
+            CFBundleTypeRole: Viewer
+            LSHandlerRank: Alternate
+            LSItemContentTypes:
+              - public.zip-archive
+        LSSupportsOpeningDocumentsInPlace: false
     entitlements:
       path: Sources/App/BondTouchBeyond.entitlements
       properties:

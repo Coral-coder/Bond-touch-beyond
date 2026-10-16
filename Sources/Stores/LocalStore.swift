@@ -53,6 +53,12 @@ final class LocalStore: ObservableObject {
 
     func photoBackground(for bondID: String) -> Bool { photoBackgrounds[bondID] ?? true }
 
+    /// Keep running in the background so touches from original-app partners arrive while
+    /// the phone is locked (uses low-accuracy background location).
+    @Published var keepAliveInBackground: Bool {
+        didSet { UserDefaults.standard.set(keepAliveInBackground, forKey: Key.keepAlive.rawValue) }
+    }
+
     /// Original-app partner (bond id) → the iCloud bond that carries chat with them.
     @Published var chatLinks: [String: String] {
         didSet { save(chatLinks, for: .chatLinks) }
@@ -111,7 +117,7 @@ final class LocalStore: ObservableObject {
         greetings[bondID] = text
     }
 
-    private enum Key: String { case meanings, vibration, dnd, profile, fbEnabled, fbURL, fbToken, greetings, encounters, psPasscode, legacyEmail, legacyRefresh, legacyChat, photoBg, bgSoftness, touchWindow, chatLinks }
+    private enum Key: String { case meanings, vibration, dnd, profile, fbEnabled, fbURL, fbToken, greetings, encounters, psPasscode, legacyEmail, legacyRefresh, legacyChat, photoBg, bgSoftness, touchWindow, chatLinks, keepAlive }
 
     init() {
         self.meanings = LocalStore.load([TouchMeaning].self, for: .meanings) ?? TouchMeaning.starters
@@ -127,6 +133,7 @@ final class LocalStore: ObservableObject {
         self.legacyChatEnabled = UserDefaults.standard.bool(forKey: Key.legacyChat.rawValue)
         self.photoBackgrounds = LocalStore.load([String: Bool].self, for: .photoBg) ?? [:]
         self.chatLinks = LocalStore.load([String: String].self, for: .chatLinks) ?? [:]
+        self.keepAliveInBackground = (UserDefaults.standard.object(forKey: Key.keepAlive.rawValue) as? Bool) ?? true
         self.backgroundSoftness = (UserDefaults.standard.object(forKey: Key.bgSoftness.rawValue) as? Double) ?? 18
         self.touchWindowSeconds = (UserDefaults.standard.object(forKey: Key.touchWindow.rawValue) as? Double) ?? 5
         self.greetings = LocalStore.load([String: String].self, for: .greetings) ?? [:]

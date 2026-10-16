@@ -50,9 +50,21 @@ final class BraceletManager: NSObject, ObservableObject {
     private var heartbeatBPM = 0
     @Published private(set) var heartbeatActive = false
 
+    /// A bracelet found stuck in firmware-update (DFU) mode, waiting to be reflashed.
+    struct DFUCandidate: Equatable {
+        let id: UUID
+        let model: BraceletModel
+    }
+    @Published var dfuDevice: DFUCandidate?
+
     override init() {
         super.init()
-        central = CBCentralManager(delegate: self, queue: .main)
+        // State restoration: if iOS ends the app in the background while the bracelet is
+        // connected, it relaunches the app for the bracelet's events and hands the
+        // connection back (centralManager(_:willRestoreState:)).
+        central = CBCentralManager(delegate: self, queue: .main,
+                                   options: [CBCentralManagerOptionRestoreIdentifierKey: "BondTouchBeyond.bracelet",
+                                             CBCentralManagerOptionShowPowerAlertKey: true])
     }
 
     // MARK: - Scan / connect
@@ -77,6 +89,7 @@ final class BraceletManager: NSObject, ObservableObject {
     }
 
     private func connect(_ peripheral: CBPeripheral) {
+        if let old = bracelet, old != peripheral { central.cancelPeripheralConnection(old) }
         bracelet = peripheral
         peripheral.delegate = self
         state = .connecting
@@ -210,8 +223,42 @@ extension BraceletManager: CBCentralManagerDelegate {
     func centralManager(_ central: CBCentralManager, didDiscover peripheral: CBPeripheral,
                         advertisementData: [String: Any], rssi RSSI: NSNumber) {
         let advName = advertisementData[CBAdvertisementDataLocalNameKey] as? String ?? peripheral.name
+        // A bracelet stuck in update mode: never connect to it as a bracelet; offer recovery.
+        if let model = BondGATT.dfuModel(advName) {
+            if dfuDevice?.id != peripheral.identifier {
+                dfuDevice = DFUCandidate(id: peripheral.identifier, model: model)
+            }
+            return
+        }
         guard BondGATT.isBondName(advName) else { return }
         connect(peripheral)
+    }
+
+    func centralManager(_ central: CBCentralManager, willRestoreState dict: [String: Any]) {
+        guard let peripherals = dict[CBCentralManagerRestoredStatePeripheralsKey] as? [CBPeripheral],
+              let p = peripherals.first(where: { BondGATT.isBondName($0.name) }) ?? peripherals.first else { return }
+        bracelet = p
+        p.delegate = self
+        if p.state == .connected {
+            state = .connecting
+            resetConnectionState()
+            p.discoverServices(nil)
+        } else {
+            state = .connecting
+            central.connect(p)
+        }
+    }
+
+    /// Stops looking for a bracelet (the firmware updater takes over the radio for a minute).
+    func pauseScanning() {
+        central.stopScan()
+    }
+
+    /// After a reflash: forget the DFU device and look for the bracelet again.
+    func resumeAfterRecovery() {
+        dfuDevice = nil
+        state = .disconnected
+        startScanning()
     }
 
     func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
@@ -228,6 +275,11 @@ extension BraceletManager: CBCentralManagerDelegate {
                         error: Error?) {
         state = .disconnected
         resetConnectionState()
+        // Reconnect automatically (also in the background): a pending connect completes
+        // whenever the bracelet comes back in range.
+        if peripheral == bracelet { state = .connecting; central.connect(peripheral) }
+        // Keep scanning meanwhile so a bracelet that rebooted into update mode is noticed.
+        central.scanForPeripherals(withServices: nil, options: [CBCentralManagerScanOptionAllowDuplicatesKey: false])
     }
 
     private func resetConnectionState() {
