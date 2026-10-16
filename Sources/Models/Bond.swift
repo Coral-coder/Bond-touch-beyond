@@ -1,8 +1,8 @@
 import Foundation
 
-/// A pairing between two people. In CloudKit terms this is a shared custom zone:
-/// the creator owns it, the partner accepts a `CKShare` into it, and touches are
-/// records written into that zone by either side.
+/// A pairing between two people, identified by a short random code. Records for the bond
+/// live in the shared iCloud database, grouped by that code and end-to-end encrypted with a
+/// key derived from it, so one link connects both phones with no acceptance step.
 struct Bond: Identifiable, Equatable {
     let id: String          // zone name / share root record name
     var partnerName: String // display name of the other person

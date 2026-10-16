@@ -38,6 +38,11 @@ final class LocalStore: ObservableObject {
     @Published var legacyRefreshToken: String {
         didSet { UserDefaults.standard.set(legacyRefreshToken, forKey: Key.legacyRefresh.rawValue) }
     }
+    /// iCloud bond codes this device belongs to (created or joined), persisted so bonds
+    /// come back after relaunch. Maps code → true if we created it.
+    @Published var cloudBondCodes: [String: Bool] {
+        didSet { save(cloudBondCodes, for: .cloudBonds) }
+    }
     /// Per-partner "use their photo as the background" (bond id → on/off; on by default).
     @Published var photoBackgrounds: [String: Bool] {
         didSet { save(photoBackgrounds, for: .photoBg) }
@@ -124,7 +129,7 @@ final class LocalStore: ObservableObject {
         greetings[bondID] = text
     }
 
-    private enum Key: String { case meanings, vibration, dnd, profile, fbEnabled, fbURL, fbToken, greetings, encounters, psPasscode, legacyEmail, legacyRefresh, legacyChat, photoBg, bgSoftness, touchWindow, chatLinks, keepAlive }
+    private enum Key: String { case meanings, vibration, dnd, profile, fbEnabled, fbURL, fbToken, greetings, encounters, psPasscode, legacyEmail, legacyRefresh, legacyChat, photoBg, bgSoftness, touchWindow, chatLinks, keepAlive, cloudBonds }
 
     init() {
         self.meanings = LocalStore.load([TouchMeaning].self, for: .meanings) ?? TouchMeaning.starters
@@ -138,6 +143,7 @@ final class LocalStore: ObservableObject {
         self.legacyEmail = UserDefaults.standard.string(forKey: Key.legacyEmail.rawValue) ?? ""
         self.legacyRefreshToken = UserDefaults.standard.string(forKey: Key.legacyRefresh.rawValue) ?? ""
         self.legacyChatEnabled = UserDefaults.standard.bool(forKey: Key.legacyChat.rawValue)
+        self.cloudBondCodes = LocalStore.load([String: Bool].self, for: .cloudBonds) ?? [:]
         self.photoBackgrounds = LocalStore.load([String: Bool].self, for: .photoBg) ?? [:]
         self.chatLinks = LocalStore.load([String: String].self, for: .chatLinks) ?? [:]
         // Prefer the iCloud-latched choice, then this device's, then the default (on).

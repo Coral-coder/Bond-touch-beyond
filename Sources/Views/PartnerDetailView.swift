@@ -1,4 +1,3 @@
-import CloudKit
 import CoreLocation
 import MapKit
 import SwiftUI
@@ -130,10 +129,7 @@ struct PartnerDetailView: View {
         }
         .sheet(isPresented: $showEncounters) { EncountersView(bondID: partnerID) }
         .sheet(isPresented: $showShare) {
-            if let share = model.pendingShare {
-                CloudShareSheet(share: share, container: CKContainer(identifier: AppConfig.cloudContainerID),
-                                onError: { msg in showShare = false; shareError = msg })
-            }
+            InviteCodeSheet(url: model.pendingInviteURL)
         }
         .alert("Can't invite", isPresented: Binding(get: { shareError != nil }, set: { if !$0 { shareError = nil } })) {
             Button("OK", role: .cancel) { shareError = nil }
@@ -171,7 +167,7 @@ struct PartnerDetailView: View {
                     Task {
                         await model.inviteToICloudChat(p.id)
                         inviting = false
-                        showShare = model.pendingShare != nil
+                        if let msg = model.iCloudStatus { shareError = msg } else { showShare = model.pendingInviteURL != nil }
                     }
                 } label: {
                     HStack {

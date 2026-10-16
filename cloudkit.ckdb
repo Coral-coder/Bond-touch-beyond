@@ -1,62 +1,60 @@
 DEFINE SCHEMA
 
     RECORD TYPE Bond (
-        ownerName   STRING,
+        bondID      STRING QUERYABLE,
+        ownerID     STRING,
+        payload     BYTES,
+        sentAt      TIMESTAMP,
         GRANT WRITE TO "_creator",
         GRANT CREATE TO "_icloud",
         GRANT READ TO "_world"
     );
 
     RECORD TYPE Touch (
+        bondID      STRING QUERYABLE,
         senderID    STRING,
-        pattern     BYTES,
-        generation  INT64,
-        colorRGB    INT64,
-        endColorRGB INT64,
-        sentAt      TIMESTAMP,
+        payload     BYTES,
+        sentAt      TIMESTAMP QUERYABLE SORTABLE,
         GRANT WRITE TO "_creator",
         GRANT CREATE TO "_icloud",
         GRANT READ TO "_world"
     );
 
     RECORD TYPE Heartbeat (
+        bondID      STRING QUERYABLE,
         senderID    STRING,
-        bpm         INT64,
-        sentAt      TIMESTAMP,
+        payload     BYTES,
+        sentAt      TIMESTAMP QUERYABLE SORTABLE,
         GRANT WRITE TO "_creator",
         GRANT CREATE TO "_icloud",
         GRANT READ TO "_world"
     );
 
     RECORD TYPE Message (
+        bondID      STRING QUERYABLE,
         senderID    STRING,
-        kind        STRING,
-        text        STRING,
-        colorRGB    INT64,
-        sentAt      TIMESTAMP,
-        image       ASSET,
+        payload     BYTES,
+        sentAt      TIMESTAMP QUERYABLE SORTABLE,
         GRANT WRITE TO "_creator",
         GRANT CREATE TO "_icloud",
         GRANT READ TO "_world"
     );
 
     RECORD TYPE Presence (
+        bondID      STRING QUERYABLE,
         senderID    STRING,
-        online      INT64,
-        lat         DOUBLE,
-        lng         DOUBLE,
-        sentAt      TIMESTAMP,
+        payload     BYTES,
+        sentAt      TIMESTAMP QUERYABLE SORTABLE,
         GRANT WRITE TO "_creator",
         GRANT CREATE TO "_icloud",
         GRANT READ TO "_world"
     );
 
     RECORD TYPE Profile (
+        bondID      STRING QUERYABLE,
         senderID    STRING,
-        name        STRING,
-        colorRGB    INT64,
-        photo       ASSET,
-        sentAt      TIMESTAMP,
+        payload     BYTES,
+        sentAt      TIMESTAMP QUERYABLE SORTABLE,
         GRANT WRITE TO "_creator",
         GRANT CREATE TO "_icloud",
         GRANT READ TO "_world"

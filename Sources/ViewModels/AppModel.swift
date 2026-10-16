@@ -82,7 +82,8 @@ final class AppModel: ObservableObject {
     func recordTouch(_ touch: TouchMessage) { recordTouches([touch]) }
     @Published var messagesByBond: [String: [ChatMessage]] = [:] // chat per bond
     @Published var statusLine: String = "Starting…"
-    @Published var pendingShare: CKShare?
+    /// The invite link for a bond just created (share or copy it to the partner).
+    @Published var pendingInviteURL: URL?
     @Published var braceletState: BraceletState = .disconnected
     @Published var partnerHeartbeatActive = false
     /// True for the 5 s while the user's own heartbeat is being sent.
@@ -181,8 +182,7 @@ final class AppModel: ObservableObject {
         }
         do {
             myUserID = try await relay.currentUserID()
-            await relay.installSharedDatabaseSubscription()   // wake on a newly accepted bond
-            let bonds = try await relay.loadBonds()
+            let bonds = try await relay.loadBonds(codes: Array(store.cloudBondCodes.keys), myUserID: myUserID)
             cloudPartners = bonds.filter { !$0.pending }.map { Partner(bond: $0) }
             cloudPartners.forEach { loadCachedPhoto(bondID: $0.id) }
             cloudPending = bonds.filter { $0.pending }
@@ -192,10 +192,10 @@ final class AppModel: ObservableObject {
             await publishProfile()
             await setOnline(true)
             await refreshAll()
-            // A share invite tapped before the app was ready (cold launch via the link).
-            if let metadata = AppModel.pendingShareMetadata {
-                AppModel.pendingShareMetadata = nil
-                await accept(metadata)
+            // A join link tapped before the app was ready (cold launch).
+            if let code = AppModel.pendingJoinCode {
+                AppModel.pendingJoinCode = nil
+                await joinBond(code: code)
             }
         } catch {
             statusLine = "iCloud error: \(error.localizedDescription)"
@@ -232,14 +232,18 @@ final class AppModel: ObservableObject {
     /// Creates an iCloud invite. Returns an error message when it can't (chiefly: not signed
     /// into iCloud), so the UI can show it instead of a dead end.
     @discardableResult
+    /// Creates an iCloud bond and its invite link. Returns an error message when it can't.
+    @discardableResult
     func createBond() async -> String? {
         iCloudStatus = await relay.accountStatusMessage()
         if let msg = iCloudStatus { return msg }
+        if myUserID.isEmpty { myUserID = (try? await relay.currentUserID()) ?? "" }
         do {
-            let (bond, share) = try await relay.createBond(displayName: store.profile.name.isEmpty ? "Me" : store.profile.name)
-            // A created invite is pending until the partner accepts — it is not a partner yet.
+            let (bond, url) = try await relay.createBond(
+                displayName: store.profile.name.isEmpty ? "Me" : store.profile.name, myUserID: myUserID)
+            store.cloudBondCodes[bond.id] = true
             cloudPending.append(bond)
-            pendingShare = share
+            pendingInviteURL = url
             return nil
         } catch {
             statusLine = "Couldn't create bond: \(error.localizedDescription)"
@@ -247,117 +251,36 @@ final class AppModel: ObservableObject {
         }
     }
 
-    /// Removes a partner or cancels a pending invite, deleting its CloudKit zone.
-    func removeBond(_ bond: Bond) async {
-        if bond.legacy { await legacyCancelBond(bond); return }
+    /// Joins a bond by its code (typed, or from a tapped invite link).
+    @discardableResult
+    func joinBond(code: String) async -> String? {
+        iCloudStatus = await relay.accountStatusMessage()
+        if let msg = iCloudStatus { return msg }
+        if myUserID.isEmpty { myUserID = (try? await relay.currentUserID()) ?? "" }
         do {
-            try await relay.deleteBond(bond)
-            cloudPartners.removeAll { $0.id == bond.id }
+            let bond = try await relay.joinBond(code: code, displayName: store.profile.name.isEmpty ? "Me" : store.profile.name,
+                                                myUserID: myUserID)
+            store.cloudBondCodes[bond.id] = bond.isOwner
+            if !cloudPartners.contains(where: { $0.id == bond.id }) { cloudPartners.append(Partner(bond: bond)) }
             cloudPending.removeAll { $0.id == bond.id }
-            if selectedPartnerID == bond.id { selectedPartnerID = partners.first?.id }
-        } catch {
-            statusLine = "Couldn't remove: \(error.localizedDescription)"
-        }
-    }
-
-    /// A share invite the partner accepted while the app was launching, held until ready.
-    static var pendingShareMetadata: CKShare.Metadata?
-
-    /// Routes an accepted CloudKit share invite in, whether the app is ready or still starting.
-    static func deliverShare(_ metadata: CKShare.Metadata) {
-        if let model = shared {
-            Task { @MainActor in await model.accept(metadata) }
-        } else {
-            pendingShareMetadata = metadata
-        }
-    }
-
-    func accept(_ metadata: CKShare.Metadata) async {
-        do {
-            let bond = try await relay.acceptShare(metadata)
-            if !cloudPartners.contains(where: { $0.id == bond.id }) {
-                cloudPartners.append(Partner(bond: bond))
-            }
             selectedPartnerID = bond.id
+            profileSyncedBondIDs.remove(bond.id)
             await publishProfile()
             await refreshAll()
+            return nil
         } catch {
-            statusLine = "Couldn't join bond: \(error.localizedDescription)"
+            return error.localizedDescription
         }
     }
 
-    // MARK: - Sending
+    /// A join code from a link tapped while the app was launching, held until ready.
+    static var pendingJoinCode: String?
 
-    func sendTouch(pattern: [Int], generation: Int = 2, colorRGB: Int, endColorRGB: Int? = nil,
-                   toBondID: String? = nil) async {
-        guard let bond = bond(for: toBondID) else { return }
-        // Finish sending even if the app goes to the background meanwhile (e.g. a touch
-        // made on the bracelet while the phone is locked).
-        let bg = UIApplication.shared.beginBackgroundTask(withName: "send-touch")
-        defer { UIApplication.shared.endBackgroundTask(bg) }
-        let touch = TouchMessage(bondID: bond.id, senderID: myUserID, pattern: pattern, generation: generation,
-                                 colorRGB: colorRGB, endColorRGB: endColorRGB)
-        let route = bond.legacy ? "original Bond API" : "iCloud"
-        NetLog.shared.log(.send, "Send touch → \(bond.partnerName) (\(route))",
-                          "gen \(generation), \(pattern.count) samples")
-        do {
-            if bond.legacy {
-                try await legacySendTouch(touch, bond: bond)
-            } else {
-                try await relay.sendTouch(touch, bond: bond)
-                NetLog.shared.log(.ok, "Touch → iCloud accepted", "\(bond.partnerName)")
-            }
-            recordTouch(touch)
-        } catch {
-            statusLine = "Send failed: \(error.localizedDescription)"
-            NetLog.shared.log(.fail, "Send touch failed (\(route))", error.localizedDescription)
-        }
-    }
-
-    /// Sends a saved meaning. For a partner on the original app, send it by the meaning's id
-    /// (`/touches/basic`) so their app plays it as that meaning and its colour lights their
-    /// bracelet; a raw pattern would only buzz. iCloud carries the colour, so it goes as a
-    /// normal touch there.
-    func sendMeaning(_ meaning: TouchMeaning, toBondID: String? = nil) async {
-        guard let bond = bond(for: toBondID) else { return }
-        if bond.legacy, let serverID = meaning.serverID {
-            let bg = UIApplication.shared.beginBackgroundTask(withName: "send-meaning")
-            defer { UIApplication.shared.endBackgroundTask(bg) }
-            let touch = TouchMessage(bondID: bond.id, senderID: myUserID, pattern: meaning.pattern,
-                                     generation: meaning.touchGeneration, colorRGB: meaning.colorRGB,
-                                     endColorRGB: meaning.endColorRGB)
-            NetLog.shared.log(.send, "Send meaning \"\(meaning.label)\" → \(bond.partnerName) (original Bond API)",
-                              "meaningId \(serverID)")
-            do {
-                try await BondBackend.sendMeaningTouch(bondId: bond.id, meaningId: serverID,
-                                                       bearer: try await legacyToken())
-                recordTouch(touch)
-            } catch {
-                statusLine = "Send failed: \(error.localizedDescription)"
-                NetLog.shared.log(.fail, "Send meaning failed", error.localizedDescription)
-            }
-            return
-        }
-        // iCloud, or a legacy meaning without a server id: send the pattern and colour.
-        await sendTouch(pattern: meaning.pattern, generation: meaning.touchGeneration,
-                        colorRGB: meaning.colorRGB, endColorRGB: meaning.endColorRGB, toBondID: toBondID)
-    }
-
-    private func bond(for id: String?) -> Bond? {
-        if let id { return partners.first { $0.id == id }?.bond }
-        return activeBond
-    }
-
-    // MARK: - Profile
-
-    func publishProfile() async {
-        let p = store.profile
-        guard p.isComplete else { return }
-        legacyPublishProfile(name: p.name, colorRGB: p.colorRGB)
-        for partner in cloudPartners {
-            try? await relay.sendProfile(name: p.name, colorRGB: p.colorRGB, photo: myPhotoFileURL,
-                                         bond: partner.bond, senderID: myUserID)
-        }
+    /// Routes a tapped invite link in. If still starting, the code is joined after bootstrap.
+    func handleOpenURL(_ url: URL) {
+        guard let code = CloudRelay.code(fromURL: url) else { return }
+        if ready { Task { await joinBond(code: code) } }
+        else { AppModel.pendingJoinCode = code }
     }
 
     // MARK: - Receiving

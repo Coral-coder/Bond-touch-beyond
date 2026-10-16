@@ -1,17 +1,13 @@
 import CloudKit
 import Foundation
 
-/// Private pairing over the user's own iCloud — no app server, no Firebase.
+/// Connects two phones through a shared iCloud database with ONE link — no CloudKit sharing,
+/// no accept step. A bond is a short random **code**; the invite link carries it. Both phones
+/// read and write records in the app's public database, filtered by that code.
 ///
-/// A bond is a **private CloudKit shared zone**: only the two paired people can read or write
-/// inside it. Nobody else — not the developer, not other users, not Apple — can see the
-/// touches, messages, heartbeats, location or photos. The owner creates a custom zone and a
-/// `CKShare`; the partner accepts the share's invite link, which adds them as the one other
-/// participant. Both sides then read and write records in that zone and are woken by a silent
-/// push when the other writes.
-///
-/// Every step logs to the debug panel (NetLog) so a failure shows exactly where it happened
-/// instead of a silent spinner.
+/// It is still private: every payload is end-to-end encrypted with a key derived from the
+/// code (see BondCrypto), which only the two people with the link have. The database stores
+/// only ciphertext, an opaque sender id, a timestamp, and the code used to group records.
 final class CloudRelay {
     static let recordTypeBond = "Bond"
     static let recordTypeTouch = "Touch"
@@ -20,10 +16,6 @@ final class CloudRelay {
     static let recordTypePresence = "Presence"
     static let recordTypeProfile = "Profile"
 
-    private static let zonePrefix = "bond-"
-    private static let rootName = "root"
-
-    /// What a fetch pulled since the last change token, for one bond.
     struct RelayEvents {
         var touches: [TouchMessage] = []
         var messages: [ChatMessage] = []
@@ -39,12 +31,8 @@ final class CloudRelay {
     }
 
     private let container: CKContainer
-    private var privateDB: CKDatabase { container.privateCloudDatabase }
-    private var sharedDB: CKDatabase { container.sharedCloudDatabase }
-
-    /// Per-zone change tokens so we only fetch new records (in memory; a fresh launch
-    /// re-reads recent records, which the app dedupes).
-    private var changeTokens: [CKRecordZone.ID: CKServerChangeToken] = [:]
+    private var db: CKDatabase { container.publicCloudDatabase }
+    private var lastSeen: [String: Date] = [:]
 
     init(containerIdentifier: String = AppConfig.cloudContainerID) {
         self.container = CKContainer(identifier: containerIdentifier)
@@ -54,21 +42,20 @@ final class CloudRelay {
         NetLog.shared.record(kind, title, detail)
     }
 
+    private func ckDetail(_ error: Error) -> String {
+        guard let ck = error as? CKError else { return error.localizedDescription }
+        return "CKError.\(ck.code.rawValue) — \(ck.localizedDescription)"
+    }
+
     // MARK: - Account
 
-    func currentUserID() async throws -> String {
-        try await container.userRecordID().recordName
-    }
-
-    func accountIsAvailable() async -> Bool {
-        (try? await container.accountStatus()) == .available
-    }
+    func currentUserID() async throws -> String { try await container.userRecordID().recordName }
+    func accountIsAvailable() async -> Bool { (try? await container.accountStatus()) == .available }
 
     func accountStatusMessage() async -> String? {
         let status = (try? await container.accountStatus()) ?? .couldNotDetermine
         switch status {
-        case .available:
-            return nil
+        case .available: return nil
         case .noAccount:
             return "You're not signed into iCloud on this iPhone. Open the Settings app, tap \"Sign in to your iPhone\" at the top, sign in with your Apple ID, and turn on iCloud Drive — then come back and pairing, photos and your heartbeat will work. (Apps can't open the iCloud sign-in for you.)"
         case .restricted:
@@ -80,323 +67,244 @@ final class CloudRelay {
         }
     }
 
-    // MARK: - Create a bond and its private share
+    // MARK: - Codes & links
 
-    /// Creates a private bond: a fresh custom zone, a root record, and a `CKShare` saved
-    /// together so the returned share's invite URL is ready to send. The partner accepts the
-    /// link in their own copy of this app to join; nobody else can.
-    func createBond(displayName: String) async throws -> (Bond, CKShare) {
-        let zoneID = CKRecordZone.ID(zoneName: Self.zonePrefix + UUID().uuidString,
-                                     ownerName: CKCurrentUserDefaultName)
-        log(.send, "iCloud: creating bond zone", zoneID.zoneName)
+    static func inviteURL(for code: String) -> URL { URL(string: "bondtouchbeyond://join?code=\(code)")! }
+
+    static func code(fromURL url: URL) -> String? {
+        guard url.scheme == "bondtouchbeyond", url.host == "join",
+              let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems,
+              let code = items.first(where: { $0.name == "code" })?.value, !code.isEmpty else { return nil }
+        return code.uppercased()
+    }
+
+    private static func newCode() -> String {
+        let alphabet = Array("ABCDEFGHJKLMNPQRSTUVWXYZ23456789")   // no O/0/I/1
+        return String((0..<8).map { _ in alphabet.randomElement()! })
+    }
+
+    private func bondRecordID(_ code: String) -> CKRecord.ID { CKRecord.ID(recordName: "bond-\(code)") }
+
+    // MARK: - Create & join
+
+    /// Creates a bond under a fresh code and returns the code + invite link. The partner joins
+    /// by opening the link or typing the code — no acceptance step.
+    func createBond(displayName: String, myUserID: String) async throws -> (Bond, URL) {
+        var code = Self.newCode()
+        if (try? await db.record(for: bondRecordID(code))) != nil { code = Self.newCode() }
+        log(.send, "iCloud: creating bond", code)
+        let record = CKRecord(recordType: Self.recordTypeBond, recordID: bondRecordID(code))
+        record["bondID"] = code as CKRecordValue
+        record["ownerID"] = myUserID as CKRecordValue
+        record["payload"] = (BondCrypto.seal(["name": displayName], code: code) ?? Data()) as CKRecordValue
+        record["sentAt"] = Date() as CKRecordValue
         do {
-            _ = try await privateDB.modifyRecordZones(saving: [CKRecordZone(zoneID: zoneID)], deleting: [])
+            _ = try await db.save(record)
         } catch {
-            log(.fail, "iCloud: couldn't create zone", error.localizedDescription)
-            throw error
+            log(.fail, "iCloud: couldn't create bond", ckDetail(error)); throw error
         }
-
-        let root = CKRecord(recordType: Self.recordTypeBond,
-                            recordID: CKRecord.ID(recordName: Self.rootName, zoneID: zoneID))
-        root["ownerName"] = displayName as CKRecordValue
-
-        let share = CKShare(rootRecord: root)
-        share[CKShare.SystemFieldKey.title] = "Bond Touch Beyond" as CKRecordValue
-        share.publicPermission = .none   // invite-only: private to the two participants
-
-        do {
-            let result = try await privateDB.modifyRecords(saving: [root, share], deleting: [],
-                                                           savePolicy: .allKeys, atomically: true)
-            switch result.saveResults[share.recordID] {
-            case .success(let saved):
-                guard let savedShare = saved as? CKShare, let url = savedShare.url else {
-                    log(.fail, "iCloud: share saved but has no invite URL", "")
-                    try? await deleteZone(zoneID)
-                    throw CloudRelayError.shareNotSaved
-                }
-                try? await installZoneSubscription(in: privateDB, zoneID: zoneID)
-                log(.ok, "iCloud: bond created, invite ready", url.absoluteString)
-                return (Bond(id: zoneID.zoneName, partnerName: "Pending…", isOwner: true, pending: true), savedShare)
-            case .failure(let error):
-                // The real reason the share wouldn't save — show it so we can fix it exactly.
-                log(.fail, "iCloud: share save failed", ckDetail(error))
-                try? await deleteZone(zoneID)
-                throw error
-            case .none:
-                let rootDetail: String
-                if case .failure(let rootErr)? = result.saveResults[root.recordID] { rootDetail = ckDetail(rootErr) }
-                else { rootDetail = "share missing from result" }
-                log(.fail, "iCloud: bond save failed", rootDetail)
-                try? await deleteZone(zoneID)
-                throw CloudRelayError.shareNotSaved
-            }
-        } catch let error as CloudRelayError {
-            throw error
-        } catch {
-            log(.fail, "iCloud: couldn't save bond + share", ckDetail(error))
-            try? await deleteZone(zoneID)
-            throw error
-        }
+        try? await installSubscription(code: code)
+        log(.ok, "iCloud: bond created, invite ready", Self.inviteURL(for: code).absoluteString)
+        return (Bond(id: code, partnerName: "Pending…", isOwner: true, pending: true), Self.inviteURL(for: code))
     }
 
-    /// A readable CloudKit error (code + reason), for the debug log.
-    private func ckDetail(_ error: Error) -> String {
-        guard let ck = error as? CKError else { return error.localizedDescription }
-        var parts = ["CKError.\(ck.code.rawValue)", ck.localizedDescription]
-        if let partials = ck.partialErrorsByItemID?.values.compactMap({ ($0 as? CKError)?.localizedDescription }), !partials.isEmpty {
-            parts.append("partial: " + partials.joined(separator: "; "))
+    /// Joins a bond by code. Verifies it exists and returns it.
+    func joinBond(code rawCode: String, displayName: String, myUserID: String) async throws -> Bond {
+        let code = rawCode.uppercased()
+        log(.send, "iCloud: joining bond", code)
+        guard let record = try? await db.record(for: bondRecordID(code)) else {
+            log(.fail, "iCloud: no bond with that code", code)
+            throw CloudRelayError.bondNotFound
         }
-        return parts.joined(separator: " — ")
+        try? await installSubscription(code: code)
+        let ownerID = record["ownerID"] as? String ?? ""
+        let ownerName = (record["payload"] as? Data).flatMap { BondCrypto.open([String: String].self, from: $0, code: code)?["name"] } ?? "Partner"
+        log(.ok, "iCloud: joined bond", code)
+        return Bond(id: code, partnerName: ownerID == myUserID ? "Partner" : ownerName, isOwner: ownerID == myUserID)
     }
 
-    private func deleteZone(_ zoneID: CKRecordZone.ID) async throws {
-        _ = try await privateDB.modifyRecordZones(saving: [], deleting: [zoneID])
-    }
-
-    // MARK: - Accept an invite (partner side)
-
-    /// Accepts a private share invite the partner tapped. After this, the shared zone is in
-    /// their shared database and both sides can read and write it.
-    func acceptShare(_ metadata: CKShare.Metadata) async throws -> Bond {
-        let zoneID = metadata.share.recordID.zoneID
-        log(.send, "iCloud: accepting invite", zoneID.zoneName)
-        do {
-            _ = try await container.accept(metadata)
-        } catch {
-            log(.fail, "iCloud: accept failed", error.localizedDescription)
-            throw error
-        }
-        try? await installZoneSubscription(in: sharedDB, zoneID: zoneID)
-        let name = metadata.ownerIdentity.nameComponents
-            .map { PersonNameComponentsFormatter().string(from: $0) } ?? "Partner"
-        log(.ok, "iCloud: invite accepted", name)
-        return Bond(id: zoneID.zoneName, partnerName: name.isEmpty ? "Partner" : name, isOwner: false)
-    }
-
-    // MARK: - Load bonds
-
-    /// Every bond: zones this device created (private DB) and zones shared with it (shared DB).
-    func loadBonds() async throws -> [Bond] {
+    /// Loads known bonds (by code), filling in the partner's name from their profile.
+    func loadBonds(codes: [String], myUserID: String) async throws -> [Bond] {
         var bonds: [Bond] = []
-
-        let privateZones = (try? await privateDB.allRecordZones()) ?? []
-        for zone in privateZones where zone.zoneID.zoneName.hasPrefix(Self.zonePrefix) {
-            // Pending until a participant other than the owner has accepted the share.
-            var pending = true
-            if let root = try? await privateDB.record(for: CKRecord.ID(recordName: Self.rootName, zoneID: zone.zoneID)),
-               let shareRef = root.share,
-               let shareRecord = try? await privateDB.record(for: shareRef.recordID),
-               let share = shareRecord as? CKShare {
-                pending = !share.participants.contains { $0.acceptanceStatus == .accepted && $0.role != .owner }
-            }
-            bonds.append(Bond(id: zone.zoneID.zoneName, partnerName: "Partner", isOwner: true, pending: pending))
+        for code in codes {
+            guard let record = try? await db.record(for: bondRecordID(code)) else { continue }
+            let ownerID = record["ownerID"] as? String ?? ""
+            let isOwner = ownerID == myUserID
+            let partnerProfile = try? await latestProfilePayload(code: code, otherThan: myUserID)
+            let ownerName = (record["payload"] as? Data).flatMap { BondCrypto.open([String: String].self, from: $0, code: code)?["name"] }
+            let name = partnerProfile?["name"] ?? (isOwner ? "Pending…" : (ownerName ?? "Partner"))
+            bonds.append(Bond(id: code, partnerName: name, isOwner: isOwner, pending: isOwner && partnerProfile == nil))
         }
-
-        let sharedZones = (try? await sharedDB.allRecordZones()) ?? []
-        for zone in sharedZones where zone.zoneID.zoneName.hasPrefix(Self.zonePrefix) {
-            var name = "Partner"
-            if let root = try? await sharedDB.record(for: CKRecord.ID(recordName: Self.rootName, zoneID: zone.zoneID)),
-               let ownerName = root["ownerName"] as? String, !ownerName.isEmpty {
-                name = ownerName
-            }
-            bonds.append(Bond(id: zone.zoneID.zoneName, partnerName: name, isOwner: false, pending: false))
-        }
-        log(.ok, "iCloud: loaded bonds", "\(bonds.count) (\(bonds.filter { $0.pending }.count) pending)")
         return bonds
     }
 
-    /// Removes a bond: the owner deletes its zone; a participant leaves by removing it from
-    /// their shared DB.
     func deleteBond(_ bond: Bond) async throws {
-        if bond.isOwner {
-            let zoneID = CKRecordZone.ID(zoneName: bond.id, ownerName: CKCurrentUserDefaultName)
-            _ = try await privateDB.modifyRecordZones(saving: [], deleting: [zoneID])
-        } else {
-            let zones = (try? await sharedDB.allRecordZones()) ?? []
-            if let z = zones.first(where: { $0.zoneID.zoneName == bond.id }) {
-                _ = try await sharedDB.modifyRecordZones(saving: [], deleting: [z.zoneID])
-            }
-        }
+        if bond.isOwner { _ = try? await db.deleteRecord(withID: bondRecordID(bond.id)) }
     }
 
-    // MARK: - Sending
+    // MARK: - Sending (encrypted)
 
-    private func db(for bond: Bond) -> CKDatabase { bond.isOwner ? privateDB : sharedDB }
-
-    private func zoneID(forBond bond: Bond, in db: CKDatabase) async throws -> CKRecordZone.ID {
-        let zones = try await db.allRecordZones()
-        guard let match = zones.first(where: { $0.zoneID.zoneName == bond.id }) else {
-            throw CloudRelayError.bondZoneNotFound
-        }
-        return match.zoneID
+    private func newRecord(_ type: String, name: String, code: String, senderID: String, payload: Data, sentAt: Date = Date()) -> CKRecord {
+        let record = CKRecord(recordType: type, recordID: CKRecord.ID(recordName: name))
+        record["bondID"] = code as CKRecordValue
+        record["senderID"] = senderID as CKRecordValue
+        record["sentAt"] = sentAt as CKRecordValue
+        record["payload"] = payload as CKRecordValue
+        return record
     }
 
     func sendTouch(_ touch: TouchMessage, bond: Bond) async throws {
-        let database = db(for: bond)
-        let zone = try await zoneID(forBond: bond, in: database)
-        let record = CKRecord(recordType: Self.recordTypeTouch,
-                              recordID: CKRecord.ID(recordName: touch.id.uuidString, zoneID: zone))
-        record["senderID"] = touch.senderID as CKRecordValue
-        // Stored as bytes, not an Int list: CloudKit's schema import can't declare a list
-        // field, so the pattern is JSON-encoded into a BYTES field.
-        record["pattern"] = (try? JSONEncoder().encode(touch.pattern)) as CKRecordValue? ?? (Data() as CKRecordValue)
-        record["generation"] = touch.generation as CKRecordValue
-        record["colorRGB"] = touch.colorRGB as CKRecordValue
-        record["endColorRGB"] = touch.endColorRGB as CKRecordValue
-        record["sentAt"] = touch.sentAt as CKRecordValue
-        _ = try await database.modifyRecords(saving: [record], deleting: [])
+        let body = TouchPayload(pattern: touch.pattern, generation: touch.generation,
+                                colorRGB: touch.colorRGB, endColorRGB: touch.endColorRGB)
+        guard let payload = BondCrypto.seal(body, code: bond.id) else { return }
+        let record = newRecord(Self.recordTypeTouch, name: "t-\(bond.id)-\(touch.id.uuidString)",
+                               code: bond.id, senderID: touch.senderID, payload: payload, sentAt: touch.sentAt)
+        _ = try await db.save(record)
     }
 
     func sendHeartbeat(bpm: Int, bond: Bond, senderID: String) async throws {
-        let database = db(for: bond)
-        let zone = try await zoneID(forBond: bond, in: database)
-        let record = CKRecord(recordType: Self.recordTypeHeartbeat,
-                              recordID: CKRecord.ID(recordName: "heartbeat-\(senderID)", zoneID: zone))
-        record["senderID"] = senderID as CKRecordValue
-        record["bpm"] = bpm as CKRecordValue
-        record["sentAt"] = Date() as CKRecordValue
-        _ = try await database.modifyRecords(saving: [record], deleting: [], savePolicy: .changedKeys)
+        guard let payload = BondCrypto.seal(["bpm": bpm], code: bond.id) else { return }
+        _ = try await db.save(newRecord(Self.recordTypeHeartbeat, name: "hb-\(bond.id)-\(senderID)",
+                                        code: bond.id, senderID: senderID, payload: payload))
     }
 
     func sendChat(_ message: ChatMessage, bond: Bond) async throws {
-        let database = db(for: bond)
-        let zone = try await zoneID(forBond: bond, in: database)
-        let record = CKRecord(recordType: Self.recordTypeMessage,
-                              recordID: CKRecord.ID(recordName: message.id.uuidString, zoneID: zone))
-        record["senderID"] = message.senderID as CKRecordValue
-        record["kind"] = message.kind.rawValue as CKRecordValue
-        record["text"] = message.text as CKRecordValue
-        record["colorRGB"] = message.colorRGB as CKRecordValue
-        record["sentAt"] = message.sentAt as CKRecordValue
+        var imageData: Data?
         if message.kind == .image, let file = message.imageFile {
-            record["image"] = CKAsset(fileURL: ChatArchive.imageURL(file))
+            imageData = try? Data(contentsOf: ChatArchive.imageURL(file))
         }
-        _ = try await database.modifyRecords(saving: [record], deleting: [])
+        let body = MessagePayload(kind: message.kind.rawValue, text: message.text,
+                                  colorRGB: message.colorRGB, image: imageData)
+        guard let payload = BondCrypto.seal(body, code: bond.id) else { return }
+        _ = try await db.save(newRecord(Self.recordTypeMessage, name: "m-\(bond.id)-\(message.id.uuidString)",
+                                        code: bond.id, senderID: message.senderID, payload: payload, sentAt: message.sentAt))
     }
 
     func sendPresence(online: Bool, bond: Bond, senderID: String,
                       latitude: Double? = nil, longitude: Double? = nil) async throws {
-        let database = db(for: bond)
-        let zone = try await zoneID(forBond: bond, in: database)
-        let record = CKRecord(recordType: Self.recordTypePresence,
-                              recordID: CKRecord.ID(recordName: "presence-\(senderID)", zoneID: zone))
-        record["senderID"] = senderID as CKRecordValue
-        record["online"] = (online ? 1 : 0) as CKRecordValue
-        if let latitude, let longitude {
-            record["lat"] = latitude as CKRecordValue
-            record["lng"] = longitude as CKRecordValue
-        }
-        record["sentAt"] = Date() as CKRecordValue
-        _ = try await database.modifyRecords(saving: [record], deleting: [], savePolicy: .changedKeys)
+        let body = PresencePayload(online: online, lat: latitude, lng: longitude)
+        guard let payload = BondCrypto.seal(body, code: bond.id) else { return }
+        _ = try await db.save(newRecord(Self.recordTypePresence, name: "pr-\(bond.id)-\(senderID)",
+                                        code: bond.id, senderID: senderID, payload: payload))
     }
 
     func sendProfile(name: String, colorRGB: Int, photo: URL?, bond: Bond, senderID: String) async throws {
-        let database = db(for: bond)
-        let zone = try await zoneID(forBond: bond, in: database)
-        let record = CKRecord(recordType: Self.recordTypeProfile,
-                              recordID: CKRecord.ID(recordName: "profile-\(senderID)", zoneID: zone))
-        record["senderID"] = senderID as CKRecordValue
-        record["name"] = name as CKRecordValue
-        record["colorRGB"] = colorRGB as CKRecordValue
-        record["photo"] = photo.map { CKAsset(fileURL: $0) }
-        record["sentAt"] = Date() as CKRecordValue
-        _ = try await database.modifyRecords(saving: [record], deleting: [], savePolicy: .allKeys)
+        let photoData = photo.flatMap { try? Data(contentsOf: $0) }
+        let body = ProfilePayload(name: name, colorRGB: colorRGB, photo: photoData)
+        guard let payload = BondCrypto.seal(body, code: bond.id) else { return }
+        _ = try await db.save(newRecord(Self.recordTypeProfile, name: "pf-\(bond.id)-\(senderID)",
+                                        code: bond.id, senderID: senderID, payload: payload))
     }
 
-    // MARK: - Receiving
+    // MARK: - Receiving (decrypt)
 
-    /// Fetches new records in the bond's zone since our last change token, ignoring our own.
     func fetchNewEvents(bond: Bond, myUserID: String) async throws -> RelayEvents {
-        let database = db(for: bond)
-        let zone = try await zoneID(forBond: bond, in: database)
+        let code = bond.id
+        let since = lastSeen[code] ?? .distantPast
         var events = RelayEvents()
-        var newestHeartbeat: Date = .distantPast
-        var newestPresence: Date = .distantPast
-        var newestProfile: Date = .distantPast
+        var newest = since
+        var newestHeartbeat: Date = .distantPast, newestPresence: Date = .distantPast, newestProfile: Date = .distantPast
 
-        let changes = try await database.recordZoneChanges(inZoneWith: zone, since: changeTokens[zone])
-        for modification in changes.modificationResultsByID.values {
-            guard let record = try? modification.get().record,
-                  let sender = record["senderID"] as? String, sender != myUserID,
-                  let sentAt = record["sentAt"] as? Date else { continue }
-            switch record.recordType {
-            case Self.recordTypeTouch:
-                let pattern: [Int]? = (record["pattern"] as? Data).flatMap { try? JSONDecoder().decode([Int].self, from: $0) }
-                    ?? (record["pattern"] as? [Int])   // tolerate any older list-typed records
-                if let pattern, let color = record["colorRGB"] as? Int,
-                   let id = UUID(uuidString: record.recordID.recordName) {
-                    let endColor = record["endColorRGB"] as? Int ?? color
-                    events.touches.append(TouchMessage(id: id, bondID: bond.id, senderID: sender, pattern: pattern,
-                                                       generation: record["generation"] as? Int ?? 2,
-                                                       colorRGB: color, endColorRGB: endColor, sentAt: sentAt))
+        for type in [Self.recordTypeTouch, Self.recordTypeMessage, Self.recordTypeHeartbeat,
+                     Self.recordTypePresence, Self.recordTypeProfile] {
+            let predicate = NSPredicate(format: "bondID == %@ AND sentAt > %@", code, since as NSDate)
+            let query = CKQuery(recordType: type, predicate: predicate)
+            query.sortDescriptors = [NSSortDescriptor(key: "sentAt", ascending: true)]
+            let records = try await allRecords(matching: query)
+            for record in records {
+                guard let sender = record["senderID"] as? String, sender != myUserID,
+                      let sentAt = record["sentAt"] as? Date, let data = record["payload"] as? Data else { continue }
+                newest = max(newest, sentAt)
+                switch type {
+                case Self.recordTypeTouch:
+                    if let p = BondCrypto.open(TouchPayload.self, from: data, code: code) {
+                        let id = UUID(uuidString: String(record.recordID.recordName.dropFirst("t-\(code)-".count))) ?? UUID()
+                        events.touches.append(TouchMessage(id: id, bondID: code, senderID: sender, pattern: p.pattern,
+                                                           generation: p.generation, colorRGB: p.colorRGB,
+                                                           endColorRGB: p.endColorRGB, sentAt: sentAt))
+                    }
+                case Self.recordTypeMessage:
+                    if let p = BondCrypto.open(MessagePayload.self, from: data, code: code) {
+                        let kind = ChatMessage.Kind(rawValue: p.kind) ?? .text
+                        var imageFile: String?
+                        if kind == .image, let img = p.image { imageFile = ChatArchive.saveImage(img) }
+                        let id = UUID(uuidString: String(record.recordID.recordName.dropFirst("m-\(code)-".count))) ?? UUID()
+                        events.messages.append(ChatMessage(id: id, bondID: code, senderID: sender, kind: kind,
+                                                           text: p.text, colorRGB: p.colorRGB, sentAt: sentAt, imageFile: imageFile))
+                    }
+                case Self.recordTypeHeartbeat:
+                    if sentAt > newestHeartbeat, let p = BondCrypto.open([String: Int].self, from: data, code: code), let bpm = p["bpm"] {
+                        newestHeartbeat = sentAt; events.latestBPM = bpm; events.latestBPMAt = sentAt
+                    }
+                case Self.recordTypePresence:
+                    if sentAt > newestPresence, let p = BondCrypto.open(PresencePayload.self, from: data, code: code) {
+                        newestPresence = sentAt
+                        events.presenceOnline = p.online; events.presenceLastSeen = sentAt
+                        events.presenceLat = p.lat; events.presenceLng = p.lng
+                    }
+                case Self.recordTypeProfile:
+                    if sentAt > newestProfile, let p = BondCrypto.open(ProfilePayload.self, from: data, code: code) {
+                        newestProfile = sentAt
+                        events.partnerName = p.name; events.partnerColorRGB = p.colorRGB; events.partnerPhoto = p.photo
+                    }
+                default: break
                 }
-            case Self.recordTypeMessage:
-                if let id = UUID(uuidString: record.recordID.recordName) {
-                    let kind = ChatMessage.Kind(rawValue: record["kind"] as? String ?? "text") ?? .text
-                    var imageFile: String?
-                    if kind == .image, let url = (record["image"] as? CKAsset)?.fileURL,
-                       let data = try? Data(contentsOf: url) { imageFile = ChatArchive.saveImage(data) }
-                    events.messages.append(ChatMessage(id: id, bondID: bond.id, senderID: sender, kind: kind,
-                                                       text: record["text"] as? String ?? "",
-                                                       colorRGB: record["colorRGB"] as? Int ?? 0xFF4081,
-                                                       sentAt: sentAt, imageFile: imageFile))
-                }
-            case Self.recordTypeHeartbeat:
-                if let bpm = record["bpm"] as? Int, sentAt > newestHeartbeat {
-                    newestHeartbeat = sentAt; events.latestBPM = bpm; events.latestBPMAt = sentAt
-                }
-            case Self.recordTypePresence:
-                if sentAt > newestPresence {
-                    newestPresence = sentAt
-                    events.presenceOnline = (record["online"] as? Int ?? 0) == 1
-                    events.presenceLastSeen = sentAt
-                    events.presenceLat = record["lat"] as? Double
-                    events.presenceLng = record["lng"] as? Double
-                }
-            case Self.recordTypeProfile:
-                if sentAt > newestProfile {
-                    newestProfile = sentAt
-                    events.partnerName = record["name"] as? String
-                    events.partnerColorRGB = record["colorRGB"] as? Int
-                    if let url = (record["photo"] as? CKAsset)?.fileURL { events.partnerPhoto = try? Data(contentsOf: url) }
-                }
-            default: break
             }
         }
-        changeTokens[zone] = changes.changeToken
+        lastSeen[code] = newest
         events.touches.sort { $0.sentAt < $1.sentAt }
         events.messages.sort { $0.sentAt < $1.sentAt }
         return events
     }
 
-    // MARK: - Subscriptions
+    // MARK: - Plumbing
 
-    /// Installs the per-zone silent-push subscription and, for the shared DB, a database-wide
-    /// subscription so a newly accepted bond also wakes the app. Safe to call repeatedly.
-    func installSharedDatabaseSubscription() async {
-        let sub = CKDatabaseSubscription(subscriptionID: "shared-db-changes")
+    private func latestProfilePayload(code: String, otherThan myUserID: String) async throws -> [String: Any]? {
+        let predicate = NSPredicate(format: "bondID == %@", code)
+        let query = CKQuery(recordType: Self.recordTypeProfile, predicate: predicate)
+        let records = try await allRecords(matching: query)
+        guard let record = records.first(where: { ($0["senderID"] as? String) != myUserID }),
+              let data = record["payload"] as? Data,
+              let p = BondCrypto.open(ProfilePayload.self, from: data, code: code) else { return nil }
+        return ["name": p.name, "colorRGB": p.colorRGB]
+    }
+
+    private func allRecords(matching query: CKQuery) async throws -> [CKRecord] {
+        var out: [CKRecord] = []
+        var result = try await db.records(matching: query, resultsLimit: 200)
+        func collect(_ matches: [(CKRecord.ID, Result<CKRecord, Error>)]) {
+            for (_, r) in matches { if case .success(let rec) = r { out.append(rec) } }
+        }
+        collect(result.matchResults)
+        while let cursor = result.queryCursor {
+            result = try await db.records(continuingMatchFrom: cursor, resultsLimit: 200)
+            collect(result.matchResults)
+        }
+        return out
+    }
+
+    private func installSubscription(code: String) async throws {
+        let predicate = NSPredicate(format: "bondID == %@", code)
+        let sub = CKQuerySubscription(recordType: Self.recordTypeTouch, predicate: predicate,
+                                      subscriptionID: "touch-\(code)", options: [.firesOnRecordCreation])
         let note = CKSubscription.NotificationInfo()
         note.shouldSendContentAvailable = true
         sub.notificationInfo = note
-        _ = try? await sharedDB.modifySubscriptions(saving: [sub], deleting: [])
-    }
-
-    private func installZoneSubscription(in db: CKDatabase, zoneID: CKRecordZone.ID) async throws {
-        let sub = CKRecordZoneSubscription(zoneID: zoneID, subscriptionID: "zone-\(zoneID.zoneName)")
-        let note = CKSubscription.NotificationInfo()
-        note.shouldSendContentAvailable = true   // silent push; we fetch on wake
-        sub.notificationInfo = note
-        _ = try await db.modifySubscriptions(saving: [sub], deleting: [])
+        _ = try? await db.modifySubscriptions(saving: [sub], deleting: [])
     }
 }
 
+// Encrypted payload shapes (JSON, then AES-GCM sealed).
+private struct TouchPayload: Codable { let pattern: [Int]; let generation: Int; let colorRGB: Int; let endColorRGB: Int }
+private struct MessagePayload: Codable { let kind: String; let text: String; let colorRGB: Int; let image: Data? }
+private struct PresencePayload: Codable { let online: Bool; let lat: Double?; let lng: Double? }
+private struct ProfilePayload: Codable { let name: String; let colorRGB: Int; let photo: Data? }
+
 enum CloudRelayError: LocalizedError {
-    case bondZoneNotFound
-    case shareNotSaved
+    case bondNotFound
     var errorDescription: String? {
         switch self {
-        case .bondZoneNotFound: return "That bond's iCloud zone wasn't found."
-        case .shareNotSaved: return "iCloud didn't finish creating the invite. Try again."
+        case .bondNotFound: return "No bond with that code. Check it and try again."
         }
     }
 }

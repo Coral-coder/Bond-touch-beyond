@@ -1,16 +1,16 @@
-import CloudKit
 import SwiftUI
 import UIKit
 
-/// Create a bond and invite a partner. Used when the user has no partners yet, and from
-/// the People screen to add another.
+/// Pair with someone by a short code / link — one link connects both phones, no accept step.
 struct PairingView: View {
     @EnvironmentObject var model: AppModel
-    @State private var showShare = false
     @State private var shareError: String?
     @State private var inviteEmail = ""
     @State private var inviting = false
     @State private var inviteResult: String?
+    @State private var joinCode = ""
+    @State private var joining = false
+    @State private var joinError: String?
 
     var body: some View {
         ScrollView {
@@ -18,7 +18,7 @@ struct PairingView: View {
             Image(systemName: "heart.circle.fill")
                 .font(.system(size: 72))
                 .foregroundStyle(.pink)
-            Text("Pair with someone. Touches, messages and your heartbeat are relayed privately through iCloud — no account, no server.")
+            Text("Pair with someone. Touches, messages and your heartbeat sync privately through iCloud — end-to-end encrypted, no account, no server.")
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)
 
@@ -31,32 +31,85 @@ struct PairingView: View {
                     if let error { shareError = error }
                 }
             } label: {
-                Label("Create an invite link", systemImage: "link")
+                Label("Create an invite code", systemImage: "link")
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
             .disabled(model.iCloudStatus != nil)
 
-            Text("Your partner joins by opening the invite you send them.")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
+            if let code = model.pendingInviteURL.flatMap(CloudRelay.code(fromURL:)),
+               let url = model.pendingInviteURL {
+                inviteBlock(code: code, url: url)
+            } else {
+                Text("Create a code, then send it to your partner. They enter it (or tap the link) and you're connected.")
+                    .font(.footnote).foregroundStyle(.secondary).multilineTextAlignment(.center)
+            }
 
-            if let url = model.pendingShare?.url { inviteLink(url) }
+            joinBlock
 
             if model.legacySignedIn { emailInvite }
         }
         .padding()
         }
-        .sheet(isPresented: $showShare) {
-            if let share = model.pendingShare {
-                CloudShareSheet(share: share, container: CKContainer(identifier: AppConfig.cloudContainerID),
-                                onError: { msg in showShare = false; shareError = msg })
-            }
-        }
         .alert("Can't invite", isPresented: Binding(get: { shareError != nil }, set: { if !$0 { shareError = nil } })) {
             Button("OK", role: .cancel) { shareError = nil }
         } message: { Text(shareError ?? "") }
+    }
+
+    /// The created invite: the code in big type, plus Share / Copy of the link.
+    @ViewBuilder private func inviteBlock(code: String, url: URL) -> some View {
+        VStack(spacing: 10) {
+            Divider().overlay(Color.white.opacity(0.1))
+            Text("Your invite code").font(.headline).foregroundStyle(.white)
+            Text(code).font(.system(.largeTitle, design: .monospaced).weight(.heavy))
+                .foregroundStyle(Theme.accent).textSelection(.enabled)
+            Text("Send your partner this code, or the link below. One tap connects you — no accepting, no waiting.")
+                .font(.footnote).foregroundStyle(Theme.subtitle).multilineTextAlignment(.center)
+            HStack(spacing: 12) {
+                ShareLink(item: url) {
+                    Label("Share link", systemImage: "square.and.arrow.up").frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                Button {
+                    UIPasteboard.general.string = code
+                    inviteResult = "Code copied."
+                } label: {
+                    Label("Copy code", systemImage: "doc.on.doc").frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+            }
+            if let inviteResult { Text(inviteResult).font(.caption).foregroundStyle(Theme.accent) }
+        }
+    }
+
+    /// Join a partner's bond by typing their code.
+    private var joinBlock: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Divider().overlay(Color.white.opacity(0.1))
+            Text("Have a code from your partner?").font(.headline).foregroundStyle(.white)
+            HStack(spacing: 10) {
+                TextField("CODE", text: $joinCode)
+                    .textInputAutocapitalization(.characters).autocorrectionDisabled()
+                    .font(.system(.body, design: .monospaced))
+                    .padding(12).background(Color.white.opacity(0.08))
+                    .clipShape(RoundedRectangle(cornerRadius: Metric.cornerMedium)).foregroundStyle(.white)
+                Button {
+                    Task {
+                        joining = true; joinError = nil
+                        joinError = await model.joinBond(code: joinCode.trimmingCharacters(in: .whitespaces))
+                        if joinError == nil { joinCode = "" }
+                        joining = false
+                    }
+                } label: {
+                    if joining { ProgressView().tint(Theme.onAccent) } else { Text("Join").font(.headline) }
+                }
+                .frame(height: Metric.buttonHeight).padding(.horizontal, 18)
+                .background(joinCode.count >= 4 ? Theme.accent : Color.white.opacity(0.2))
+                .foregroundStyle(Theme.onAccent).clipShape(RoundedRectangle(cornerRadius: Metric.cornerMedium))
+                .disabled(joinCode.count < 4 || joining)
+            }
+            if let joinError { Text(joinError).font(.footnote).foregroundStyle(Theme.amber) }
+        }
     }
 
     /// Shown when iCloud isn't usable (chiefly: not signed in) — the reason, plus a button
@@ -76,33 +129,6 @@ struct PairingView: View {
         }
         .padding(14)
         .background(Theme.amber.opacity(0.16), in: RoundedRectangle(cornerRadius: Metric.cornerMedium))
-    }
-
-    /// The ready invite link — share or copy it and send any way. This bypasses the
-    /// CloudKit share sheet's Messages preview, which can spin forever.
-    @ViewBuilder private func inviteLink(_ url: URL) -> some View {
-        VStack(spacing: 10) {
-            Divider().overlay(Color.white.opacity(0.1))
-            Text("Invite link ready").font(.headline).foregroundStyle(.white)
-            Text("Send this to your partner any way you like — Messages, WhatsApp, email. They tap it to join.")
-                .font(.footnote).foregroundStyle(Theme.subtitle).multilineTextAlignment(.center)
-            HStack(spacing: 12) {
-                ShareLink(item: url) {
-                    Label("Share link", systemImage: "square.and.arrow.up").frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
-                Button {
-                    UIPasteboard.general.url = url
-                    inviteResult = "Invite link copied."
-                } label: {
-                    Label("Copy", systemImage: "doc.on.doc").frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.bordered)
-            }
-            Text(url.absoluteString).font(.caption2.monospaced()).foregroundStyle(Theme.subtitle)
-                .lineLimit(1).truncationMode(.middle).textSelection(.enabled)
-            if let inviteResult { Text(inviteResult).font(.caption).foregroundStyle(Theme.accent) }
-        }
     }
 
     /// Invite someone who uses the original Bond Touch app, by their account email
@@ -147,5 +173,39 @@ struct PairingView: View {
                 Text(inviteResult).font(.footnote).foregroundStyle(Theme.subtitle)
             }
         }
+    }
+}
+
+/// A sheet showing a bond's invite code + link (used from a partner/chat screen).
+struct InviteCodeSheet: View {
+    let url: URL?
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 18) {
+                if let url, let code = CloudRelay.code(fromURL: url) {
+                    Text("Invite code").font(.headline).foregroundStyle(.secondary)
+                    Text(code).font(.system(.largeTitle, design: .monospaced).weight(.heavy))
+                        .foregroundStyle(Theme.accent).textSelection(.enabled)
+                    Text("Send your partner this code or the link. One tap connects you — no accepting.")
+                        .font(.footnote).foregroundStyle(.secondary).multilineTextAlignment(.center)
+                    HStack(spacing: 12) {
+                        ShareLink(item: url) { Label("Share link", systemImage: "square.and.arrow.up") }
+                            .buttonStyle(.borderedProminent)
+                        Button { UIPasteboard.general.string = code } label: { Label("Copy", systemImage: "doc.on.doc") }
+                            .buttonStyle(.bordered)
+                    }
+                } else {
+                    Text("Couldn't create the invite. Make sure you're signed into iCloud.")
+                        .multilineTextAlignment(.center).foregroundStyle(.secondary)
+                }
+                Spacer()
+            }
+            .padding()
+            .navigationTitle("Invite").navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
+        }
+        .presentationDetents([.medium])
     }
 }
