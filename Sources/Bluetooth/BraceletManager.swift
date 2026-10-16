@@ -24,6 +24,10 @@ final class BraceletManager: NSObject, ObservableObject {
     private var chars: [CBUUID: CBCharacteristic] = [:]
     private var hasV3Service = false
 
+    /// True when the connected bracelet is third-generation (BTM) — the original backend
+    /// tags its touches generation "3"; every other model is "2".
+    var isThirdGeneration: Bool { gen == .v3 }
+
     /// Persisted per-install AUID (device/user id) sent during pairing.
     private let auid: UInt32 = {
         let key = "BondAUID"

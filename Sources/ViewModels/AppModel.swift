@@ -8,9 +8,30 @@ import SwiftUI
 /// the app state the views render. Supports multiple partners.
 @MainActor
 final class AppModel: ObservableObject {
-    @Published var partners: [Partner] = []
-    /// Invites the user created that no partner has accepted yet (not active partners).
-    @Published var pendingBonds: [Bond] = []
+    /// Partners bonded over iCloud (CloudKit shared zones).
+    @Published var cloudPartners: [Partner] = []
+    /// iCloud invites the user created that no partner has accepted yet.
+    @Published var cloudPending: [Bond] = []
+
+    // Original Bond Touch backend (runs in parallel with iCloud; see AppModel+Legacy).
+    @Published var legacyPartners: [Partner] = []
+    @Published var legacyPending: [Bond] = []
+    /// Bond invites other original-app users sent to this account (accept / decline).
+    @Published var incomingInvites: [Bond] = []
+    /// Touch Language per original-app bond, as stored on the server.
+    @Published var legacyMeanings: [String: [TouchMeaning]] = [:]
+    @Published var legacyStatus = "Not signed in"
+    @Published var legacyLastSync: Date?
+    var legacyTask: Task<Void, Never>?
+    var legacyProfileTask: Task<Void, Never>?
+    var legacyPrimed = false
+    var legacyCycle = 0
+    var legacyLastLocationPush = Date.distantPast
+
+    /// Every partner — iCloud and original backend.
+    var partners: [Partner] { cloudPartners + legacyPartners }
+    /// Every invite the user sent that has not been accepted yet.
+    var pendingBonds: [Bond] { cloudPending + legacyPending }
     @Published var selectedPartnerID: String?
     @Published var history: [TouchMessage] = []                  // sent + received touches
     @Published var messagesByBond: [String: [ChatMessage]] = [:] // chat per bond
@@ -26,7 +47,7 @@ final class AppModel: ObservableObject {
     let store = LocalStore()
     let heart = HeartRateService()
     let location = LocationService()
-    private let relay = CloudRelay()
+    let relay = CloudRelay()
 
     @Published var sharingLocation = false
 
@@ -38,12 +59,20 @@ final class AppModel: ObservableObject {
         bracelet.$heartbeatActive.receive(on: DispatchQueue.main).assign(to: &$partnerHeartbeatActive)
         heart.onBPM = { [weak self] bpm in Task { @MainActor in await self?.relayHeartbeat(bpm) } }
         location.onUpdate = { [weak self] coord in Task { @MainActor in await self?.broadcastLocation(coord) } }
+        // A tap pattern made on the user's own bracelet is a touch for the selected partner.
+        bracelet.onLocalTap = { [weak self] pattern in
+            Task { @MainActor in
+                guard let self else { return }
+                await self.sendTouch(pattern: pattern, colorRGB: self.store.profile.colorRGB)
+            }
+        }
     }
 
     // MARK: - Presence (live location)
 
     func setLocationSharing(_ on: Bool) {
         sharingLocation = on
+        Task { await legacySetSharing(on) }
         if on {
             location.start()
         } else {
@@ -54,7 +83,8 @@ final class AppModel: ObservableObject {
 
     private func broadcastLocation(_ coord: CLLocationCoordinate2D) async {
         guard sharingLocation else { return }
-        for partner in partners {
+        await legacyPushLocation(coord)
+        for partner in cloudPartners {
             try? await relay.sendPresence(online: true, bond: partner.bond, senderID: myUserID,
                                           latitude: coord.latitude, longitude: coord.longitude)
         }
@@ -63,6 +93,9 @@ final class AppModel: ObservableObject {
     // MARK: - Lifecycle
 
     func bootstrap() async {
+        bracelet.startScanning()
+        // The original backend works without iCloud, so start it first and independently.
+        startLegacySync()
         guard await relay.accountIsAvailable() else {
             statusLine = "Sign in to iCloud to use Bond Touch Beyond."
             return
@@ -70,12 +103,11 @@ final class AppModel: ObservableObject {
         do {
             myUserID = try await relay.currentUserID()
             let bonds = try await relay.loadBonds()
-            partners = bonds.filter { !$0.pending }.map { Partner(bond: $0) }
-            pendingBonds = bonds.filter { $0.pending }
+            cloudPartners = bonds.filter { !$0.pending }.map { Partner(bond: $0) }
+            cloudPending = bonds.filter { $0.pending }
             if selectedPartnerID == nil { selectedPartnerID = partners.first?.id }
             ready = true
             statusLine = "Ready."
-            bracelet.startScanning()
             await publishProfile()
             await setOnline(true)
             await refreshAll()
@@ -84,8 +116,16 @@ final class AppModel: ObservableObject {
         }
     }
 
+    /// Foreground / background: presence on both backends, and the original backend's
+    /// sync loop runs only while the app is active.
+    func setActive(_ active: Bool) async {
+        if active { startLegacySync() } else { stopLegacySync() }
+        await legacySetOnline(active)
+        await setOnline(active)
+    }
+
     func setOnline(_ online: Bool) async {
-        for partner in partners {
+        for partner in cloudPartners {
             try? await relay.sendPresence(online: online, bond: partner.bond, senderID: myUserID)
         }
     }
@@ -96,7 +136,7 @@ final class AppModel: ObservableObject {
         do {
             let (bond, root) = try await relay.createBond(displayName: store.profile.name.isEmpty ? "Me" : store.profile.name)
             // A created invite is pending until the partner accepts — it is not a partner yet.
-            pendingBonds.append(bond)
+            cloudPending.append(bond)
             pendingShareRoot = root
         } catch {
             statusLine = "Couldn't create bond: \(error.localizedDescription)"
@@ -105,10 +145,11 @@ final class AppModel: ObservableObject {
 
     /// Removes a partner or cancels a pending invite, deleting its CloudKit zone.
     func removeBond(_ bond: Bond) async {
+        if bond.legacy { await legacyCancelBond(bond); return }
         do {
             try await relay.deleteBond(bond)
-            partners.removeAll { $0.id == bond.id }
-            pendingBonds.removeAll { $0.id == bond.id }
+            cloudPartners.removeAll { $0.id == bond.id }
+            cloudPending.removeAll { $0.id == bond.id }
             if selectedPartnerID == bond.id { selectedPartnerID = partners.first?.id }
         } catch {
             statusLine = "Couldn't remove: \(error.localizedDescription)"
@@ -118,8 +159,8 @@ final class AppModel: ObservableObject {
     func accept(_ metadata: CKShare.Metadata) async {
         do {
             let bond = try await relay.acceptShare(metadata)
-            if !partners.contains(where: { $0.id == bond.id }) {
-                partners.append(Partner(bond: bond))
+            if !cloudPartners.contains(where: { $0.id == bond.id }) {
+                cloudPartners.append(Partner(bond: bond))
             }
             selectedPartnerID = bond.id
             await publishProfile()
@@ -136,13 +177,21 @@ final class AppModel: ObservableObject {
         let touch = TouchMessage(senderID: myUserID, pattern: pattern,
                                  colorRGB: colorRGB, endColorRGB: endColorRGB)
         do {
-            try await relay.sendTouch(touch, bond: bond)
+            if bond.legacy {
+                try await legacySendTouch(pattern: pattern, bond: bond)
+            } else {
+                try await relay.sendTouch(touch, bond: bond)
+            }
             history.append(touch)
         } catch { statusLine = "Send failed: \(error.localizedDescription)" }
     }
 
     func sendChatText(_ text: String, toBondID: String? = nil) async {
         guard let bond = bond(for: toBondID), !text.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+        if bond.legacy {
+            statusLine = Self.legacyChatUnsupported
+            return
+        }
         let msg = ChatMessage(bondID: bond.id, senderID: myUserID, kind: .text, text: text)
         do {
             try await relay.sendChat(msg, bond: bond)
@@ -160,7 +209,8 @@ final class AppModel: ObservableObject {
     func publishProfile() async {
         let p = store.profile
         guard p.isComplete else { return }
-        for partner in partners {
+        legacyPublishProfile(name: p.name, colorRGB: p.colorRGB)
+        for partner in cloudPartners {
             try? await relay.sendProfile(name: p.name, colorRGB: p.colorRGB, bond: partner.bond, senderID: myUserID)
         }
     }
@@ -170,20 +220,21 @@ final class AppModel: ObservableObject {
     func handleRemoteNotification() async { await refreshAll() }
 
     func refreshAll() async {
-        for index in partners.indices {
-            let partner = partners[index]
+        for index in cloudPartners.indices {
+            let partner = cloudPartners[index]
             guard let events = try? await relay.fetchNewEvents(bond: partner.bond, myUserID: myUserID) else { continue }
+            guard index < cloudPartners.count, cloudPartners[index].id == partner.id else { continue }
             history.append(contentsOf: events.touches)
             if !events.messages.isEmpty {
                 messagesByBond[partner.id, default: []].append(contentsOf: events.messages)
             }
-            if let name = events.partnerName { partners[index].displayName = name }
-            if let color = events.partnerColorRGB { partners[index].colorRGB = color }
-            if let online = events.presenceOnline { partners[index].online = online }
-            if let seen = events.presenceLastSeen { partners[index].lastSeen = seen }
+            if let name = events.partnerName { cloudPartners[index].displayName = name }
+            if let color = events.partnerColorRGB { cloudPartners[index].colorRGB = color }
+            if let online = events.presenceOnline { cloudPartners[index].online = online }
+            if let seen = events.presenceLastSeen { cloudPartners[index].lastSeen = seen }
             if let lat = events.presenceLat, let lng = events.presenceLng {
-                partners[index].latitude = lat
-                partners[index].longitude = lng
+                cloudPartners[index].latitude = lat
+                cloudPartners[index].longitude = lng
             }
 
             // Only the selected partner's touches/heartbeat drive the bracelet.
@@ -212,7 +263,8 @@ final class AppModel: ObservableObject {
     }
 
     private func relayHeartbeat(_ bpm: Int) async {
-        guard sharingHeartbeat, let bond = activeBond else { return }
+        // Heartbeat is an iCloud-only feature; the original backend has no heartbeat relay.
+        guard sharingHeartbeat, let bond = activeBond, !bond.legacy else { return }
         try? await relay.sendHeartbeat(bpm: bpm, bond: bond, senderID: myUserID)
     }
 }

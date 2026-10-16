@@ -32,15 +32,20 @@ struct MeaningsView: View {
                     }
                     .padding(.top, 8)
 
-                    if store.meanings.isEmpty {
+                    if model.currentMeanings.isEmpty {
                         Text("You can start adding touches to your Touch Language.")
                             .foregroundStyle(Theme.subtitle)
                             .padding(.top, 40)
                             .frame(maxWidth: .infinity, alignment: .center)
                     }
 
-                    ForEach(store.meanings) { meaning in
+                    ForEach(model.currentMeanings) { meaning in
                         meaningCard(meaning)
+                            .contextMenu {
+                                Button(role: .destructive) {
+                                    Task { await model.deleteMeaning(meaning) }
+                                } label: { Label("Delete", systemImage: "trash") }
+                            }
                     }
                     Color.clear.frame(height: 90)
                 }
@@ -48,7 +53,7 @@ struct MeaningsView: View {
             }
         }
         .sheet(isPresented: $showAdd) {
-            AddMeaningView { store.meanings.append($0) }
+            AddMeaningView { meaning in Task { await model.addMeaning(meaning) } }
         }
     }
 

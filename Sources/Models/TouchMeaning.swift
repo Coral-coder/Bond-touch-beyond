@@ -14,9 +14,12 @@ struct TouchMeaning: Identifiable, Codable, Equatable {
     var pattern: [Int]   // inter-tap gaps in ms
     /// Freshly added meanings show a "New" badge until sent, as in the original.
     var isNew: Bool = false
+    /// The meaning's id on the original Bond backend, for meanings synced with an
+    /// original-app partner (nil for iCloud-only meanings).
+    var serverID: String? = nil
 
     init(id: UUID = UUID(), label: String, emoji: String, colorRGB: Int,
-         endColorRGB: Int? = nil, pattern: [Int], isNew: Bool = false) {
+         endColorRGB: Int? = nil, pattern: [Int], isNew: Bool = false, serverID: String? = nil) {
         self.id = id
         self.label = label
         self.emoji = emoji
@@ -24,6 +27,7 @@ struct TouchMeaning: Identifiable, Codable, Equatable {
         self.endColorRGB = endColorRGB ?? colorRGB
         self.pattern = pattern
         self.isNew = isNew
+        self.serverID = serverID
     }
 
     /// The original app's library starts empty; meanings come from the partner adding them

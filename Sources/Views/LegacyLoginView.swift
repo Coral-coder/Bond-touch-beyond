@@ -5,6 +5,7 @@ import SwiftUI
 /// PIN by email → confirm. On success the account's email and session are stored.
 struct LegacyLoginView: View {
     @EnvironmentObject var store: LocalStore
+    @EnvironmentObject var model: AppModel
 
     enum Stage { case email, link, done }
     @State private var stage: Stage = .email
@@ -73,11 +74,13 @@ struct LegacyLoginView: View {
             Label("Signed in", systemImage: "checkmark.seal.fill")
                 .font(.title2.bold()).foregroundStyle(Theme.accent)
             Text("Logged in as \(store.legacyEmail).").foregroundStyle(.white)
-            Text("Your original account is connected. Partner data sync is being wired up next.")
+            Text("Your original account is connected. Partners, invites, touches, Touch Language, greeting, encounters and presence sync with it alongside iCloud.")
                 .font(.footnote).foregroundStyle(Theme.subtitle)
+            Text("Status: \(model.legacyStatus)").font(.footnote.monospaced()).foregroundStyle(Theme.subtitle)
             Button(role: .destructive) {
                 store.legacyEmail = ""; store.legacyRefreshToken = ""; store.firebaseAuthToken = ""
                 store.useLegacyFirebase = false
+                model.resetLegacy()
                 stage = .email; email = ""; linkText = ""
             } label: { Text("Log out").foregroundStyle(Theme.danger) }
         }
@@ -118,6 +121,7 @@ struct LegacyLoginView: View {
             let fetchedEmail = (try? await BondBackend.currentUserEmail(bearer: session.idToken)) ?? ""
             store.legacyEmail = fetchedEmail.isEmpty ? email : fetchedEmail
             store.useLegacyFirebase = true
+            model.startLegacySync()
             stage = .done
         } catch {
             self.error = error.localizedDescription

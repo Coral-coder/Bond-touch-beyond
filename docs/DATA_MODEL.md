@@ -232,8 +232,9 @@ with `@Path`, `@Body`, `@Query`.
 - GET `bond/api/v3/user/consent` — getParentalConsentStatus
 
 **Bonds / partners:**
-- GET `bond/api/v3/bonds/details` — getBonds
-- GET (partner list) — getPartnersDetails
+- GET `bond/api/v4/bonds` — getBonds → `{bonds: [Bond]}` (partners, sent/received invites,
+  received touches, meanings, greeting, encounter; see §3e)
+- GET `bond/api/v3/bonds/details` — getPartnersDetails → `[{bondId, location, battery, sharing, chatInfo}]`
 - POST `bond/api/v4/bonds` — createBond
 - POST `bond/api/v4/bonds/{id}/accept` — acceptBond
 - DELETE `bond/api/v3/bonds/{id}` — cancelBond
@@ -311,6 +312,26 @@ identity is entirely Firebase Auth.
 
 Own OkHttp client, no Firebase auth interceptor: POST `alias`, POST `profile`,
 POST `track`.
+
+### 3e. Request / response bodies (Gson field names)
+
+- **Bond** (`getBonds` item): `bondId`, `email`, `firebaseId`, `phoneNumber`, `status`
+  (`REQUESTED` sent by me · `RECEIVED` sent to me · `BONDED` · `NONE`), `profile {name, color,
+  hasImage, version}`, `settings {color, icon}`, `touches [{id, meaning, message {timestamp,
+  pattern, generation}}]`, `meanings [MeaningDto]`, `presence`, `dashboardMessage`,
+  `dashboardMessageModified`, `encounterDateTimestamp`, `encounterDateModified`,
+  `invitationTimestamp`, `lastSeenTouchId`, `touchDevice`, `isIos`, `versionOS`.
+- **sendTouch** body `{timestamp, pattern: [ms on/off], generation}` → `{id, meaning}`.
+  `generation` serialises as `"2"` (SECOND) or `"3"` (THIRD); THIRD only for the BTM bracelet.
+- **MeaningDto / createMeaning / updateMeaning**: `{id, name, pattern, startColor, endColor,
+  generation, favourite, favouriteCreatedTimestamp}`; colours are Android ARGB ints.
+- **createBond** `{email}`; **updatePartnerSettings** `{color, icon}`; **updatePartnerMessage**
+  `{message}`; **updatePartnerEncounterDate** `{timestamp}`.
+- **updateUserInfo** `{online}` → `{partners: [{bondId, online}]}`.
+- **updateUserDetailsLocation** `{lat, lng, timezone}`; **updateUserDetailsSharing** `{sharing}`.
+- **getUser / updateUser**: `{email, appVersion, fwVersion, fwVersionHeart, isIos, touchDevice,
+  profile {name, color, hasImage, version}}` (+ `bypassFlags` on GET).
+- **sendChatMessage** `{type, content}` → `{id, timestamp}`; `content` is Signal ciphertext.
 
 ### 3d. Realtime transport — Firebase RTDB
 

@@ -17,7 +17,9 @@ struct BondTouchBeyondApp: App {
                 .task { await model.bootstrap() }
                 .onAppear { appDelegate.model = model }
                 .onChange(of: scenePhase) { phase in
-                    Task { await model.setOnline(phase == .active) }
+                    // Brief `.inactive` moments (Control Centre, alerts) don't count as leaving.
+                    if phase == .active { Task { await model.setActive(true) } }
+                    if phase == .background { Task { await model.setActive(false) } }
                 }
         }
     }

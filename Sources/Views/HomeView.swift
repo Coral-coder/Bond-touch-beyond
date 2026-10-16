@@ -65,7 +65,7 @@ struct HomeView: View {
         }
         .sheet(isPresented: $editingGreeting) {
             GreetingEditor(text: $greetingDraft) {
-                store.setGreeting(greetingDraft, for: model.selectedPartnerID)
+                model.setGreeting(greetingDraft, for: model.selectedPartnerID)
             }
             .presentationDetents([.height(240)])
         }

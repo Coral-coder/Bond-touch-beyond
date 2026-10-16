@@ -5,6 +5,7 @@ import SwiftUI
 struct EncountersView: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject var store: LocalStore
+    @EnvironmentObject var model: AppModel
     let bondID: String?
 
     @State private var date = Calendar.current.date(byAdding: .day, value: 1, to: Date()) ?? Date()
@@ -44,7 +45,7 @@ struct EncountersView: View {
                     }
 
                     Button {
-                        store.setNextMeeting(date, for: bondID); dismiss()
+                        model.setNextMeeting(date, for: bondID); dismiss()
                     } label: {
                         Text(daysLeft == nil ? "Set next encounter" : "Update date")
                             .font(.headline).frame(maxWidth: .infinity).frame(height: Metric.buttonHeight)
@@ -55,7 +56,7 @@ struct EncountersView: View {
 
                     if daysLeft != nil {
                         Button(role: .destructive) {
-                            store.setNextMeeting(nil, for: bondID); dismiss()
+                            model.setNextMeeting(nil, for: bondID); dismiss()
                         } label: {
                             Text("Remove").foregroundStyle(Theme.danger)
                         }

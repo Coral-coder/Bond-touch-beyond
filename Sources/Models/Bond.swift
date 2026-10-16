@@ -10,4 +10,7 @@ struct Bond: Identifiable, Equatable {
     /// True for an invite the user created that no partner has accepted yet. Pending
     /// bonds are not shown as active partners — only as a cancellable invite.
     var pending: Bool = false
+    /// True for a bond on the original Bond Touch backend (a partner using the original
+    /// app); its `id` is the server `bondId`. False for an iCloud (CloudKit zone) bond.
+    var legacy: Bool = false
 }

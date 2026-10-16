@@ -10,12 +10,17 @@ struct DebugView: View {
 
     private var legacyActive: Bool { store.useLegacyFirebase && !store.firebaseAuthToken.isEmpty }
 
+    private var tokenExpiryText: String {
+        guard let exp = BondBackend.tokenExpiry(store.firebaseAuthToken) else { return "—" }
+        return exp.formatted(date: .abbreviated, time: .standard)
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
                     section("Active data backend") {
-                        row("Reads / writes", legacyActive ? "Original Firebase (bridge)" : "CloudKit (iCloud)")
+                        row("Reads / writes", legacyActive ? "CloudKit (iCloud) + original Bond API, in parallel" : "CloudKit (iCloud)")
                         row("CloudKit container", AppConfig.cloudContainerID)
                         row("My CloudKit user ID", model.myUserID.isEmpty ? "—" : model.myUserID)
                     }
@@ -24,6 +29,9 @@ struct DebugView: View {
                         row("Signed in", store.legacyEmail.isEmpty ? "No" : store.legacyEmail)
                         row("ID token present", store.firebaseAuthToken.isEmpty ? "No" : "Yes")
                         row("Bridge enabled", store.useLegacyFirebase ? "Yes" : "No")
+                        row("Sync status", model.legacyStatus)
+                        row("Last sync", model.legacyLastSync?.formatted(date: .omitted, time: .standard) ?? "—")
+                        row("Token expires", tokenExpiryText)
                         row("Project", BondBackend.projectId)
                         row("Realtime Database", BondBackend.rtdbURL)
                         row("REST API", BondBackend.apiBase.absoluteString)
@@ -35,13 +43,13 @@ struct DebugView: View {
                     section("Partners (\(model.partners.count))") {
                         if model.partners.isEmpty { row("—", "none") }
                         ForEach(model.partners) { p in
-                            row(p.displayName, "\(p.online ? "online" : "offline") · zone \(p.bond.id)")
+                            row(p.displayName, "\(p.bond.legacy ? "Bond API" : "iCloud") · \(p.online ? "online" : "offline") · \(p.bond.legacy ? "bondId" : "zone") \(p.bond.id)")
                         }
                     }
 
                     if !model.pendingBonds.isEmpty {
                         section("Pending invites (\(model.pendingBonds.count))") {
-                            ForEach(model.pendingBonds) { b in row("Pending", b.id) }
+                            ForEach(model.pendingBonds) { b in row(b.legacy ? "Pending (Bond API)" : "Pending (iCloud)", b.id) }
                         }
                     }
 

@@ -16,6 +16,15 @@ struct ChatView: View {
             HStack { Spacer(); PartnerBar(); Spacer() }
                 .padding(.horizontal, 20).padding(.top, 8).padding(.bottom, 6)
 
+            if model.selectedPartner?.bond.legacy == true {
+                Text(AppModel.legacyChatUnsupported)
+                    .font(.footnote).foregroundStyle(Theme.subtitle)
+                    .padding(12).frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.white.opacity(0.06))
+                    .clipShape(RoundedRectangle(cornerRadius: Metric.cornerMedium))
+                    .padding(.horizontal, 16)
+            }
+
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 14) {

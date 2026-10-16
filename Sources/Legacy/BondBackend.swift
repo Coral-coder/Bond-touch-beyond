@@ -107,7 +107,7 @@ enum BondBackend {
     // MARK: - Bond API
 
     @discardableResult
-    private static func bond(_ path: String, method: String = "POST", bearer: String?,
+    static func bond(_ path: String, method: String = "POST", bearer: String?,
                              body: [String: Any]? = nil) async throws -> Data {
         var req = URLRequest(url: apiBase.appendingPathComponent(path))
         req.httpMethod = method
@@ -170,6 +170,7 @@ enum BondBackend {
 
     /// Account-level GET endpoints (no path parameters).
     static let accountReadPaths = [
+        "bond/api/v4/bonds",
         "bond/api/v3/user",
         "bond/api/v3/user/details",
         "bond/api/v3/user/status",
@@ -180,7 +181,7 @@ enum BondBackend {
     ]
 
     private static func bondIds(bearer: String) async -> [String] {
-        var req = URLRequest(url: apiBase.appendingPathComponent("bond/api/v3/bonds/details"))
+        var req = URLRequest(url: apiBase.appendingPathComponent("bond/api/v4/bonds"))
         req.httpMethod = "GET"
         req.setValue("Bearer " + bearer, forHTTPHeaderField: "Authorization")
         guard let (data, _) = try? await URLSession.shared.data(for: req) else { return [] }
