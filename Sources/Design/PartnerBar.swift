@@ -32,7 +32,7 @@ struct PartnerBar: View {
                 .foregroundStyle(.white)
         }
         .frame(width: 38, height: 38)
-        .overlay(Circle().stroke(active ? color : .clear, lineWidth: 2.5))
-        .shadow(color: active ? color.opacity(0.7) : .clear, radius: 6)
+        .overlay(Circle().stroke(active ? Theme.accent : .clear, lineWidth: 2.5))
+        .shadow(color: active ? Theme.accent.opacity(0.7) : .clear, radius: 6)
     }
 }
