@@ -1,48 +1,53 @@
 import SwiftUI
 
 enum AppTab: CaseIterable {
-    case home, touches, map, chat, settings
+    case home, touches, chat, map, settings
 
     var icon: String {
         switch self {
         case .home: return "house.fill"
-        case .touches: return "book.fill"
-        case .map: return "location.fill"
-        case .chat: return "message.fill"
+        case .touches: return "hand.tap.fill"
+        case .chat: return "bubble.left.and.bubble.right.fill"
+        case .map: return "map.fill"
         case .settings: return "gearshape.fill"
+        }
+    }
+
+    var title: String {
+        switch self {
+        case .home: return "Home"
+        case .touches: return "Language"
+        case .chat: return "Chat"
+        case .map: return "Map"
+        case .settings: return "Settings"
         }
     }
 }
 
-/// The floating pill tab bar at the bottom of the app.
+/// The floating glass tab bar at the bottom of the app.
 struct FloatingTabBar: View {
     @Binding var selection: AppTab
 
     var body: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: 2) {
             ForEach(AppTab.allCases, id: \.self) { tab in
                 Button {
                     selection = tab
                 } label: {
-                    Image(systemName: tab.icon)
-                        .font(.system(size: 20, weight: .semibold))
-                        .foregroundStyle(selection == tab ? Theme.accent : .white)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 44)
-                        .background(
-                            Capsule().fill(selection == tab ? Color.white.opacity(0.14) : .clear)
-                        )
+                    VStack(spacing: 2) {
+                        Image(systemName: tab.icon).font(.system(size: 19, weight: .semibold))
+                        Text(tab.title).font(Theme.font(10, .bold))
+                    }
+                    .foregroundStyle(selection == tab ? .white : Theme.subtitle.opacity(0.8))
+                    .frame(maxWidth: .infinity).frame(height: 52)
+                    .background(Capsule().fill(selection == tab ? Color.white.opacity(0.16) : .clear))
                 }
                 .buttonStyle(.plain)
+                .accessibilityAddTraits(selection == tab ? .isSelected : [])
             }
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 6)
-        .background(.ultraThinMaterial)
-        .background(Theme.bgTop.opacity(0.5))
-        .clipShape(Capsule())
-        .overlay(Capsule().stroke(Color.white.opacity(0.12), lineWidth: 1))
-        .padding(.horizontal, 24)
-        .shadow(color: .black.opacity(0.3), radius: 10, y: 4)
+        .padding(.horizontal, 6).padding(.vertical, 6)
+        .glass(Capsule())
+        .padding(.horizontal, 16)
     }
 }

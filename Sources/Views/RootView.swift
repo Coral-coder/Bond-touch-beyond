@@ -7,7 +7,7 @@ struct RootView: View {
 
     var body: some View {
         ZStack {
-            Theme.background
+            AppBackground()
             content
         }
         .preferredColorScheme(.dark)

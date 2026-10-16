@@ -78,6 +78,7 @@ extension AppModel {
             // Presence and partner details change slowly; refresh them every few cycles.
             if legacyCycle % 4 == 1 { await legacyRefreshDetails(token: token) }
             if legacyCycle % 8 == 1 { await legacySetOnline(true) }
+            if legacyCycle == 1 { loadMyPhoto() }
             legacyLastSync = Date()
             legacyStatus = "Synced"
         } catch {
@@ -115,6 +116,10 @@ extension AppModel {
             // Partner colour: your custom colour for them, else their profile colour.
             let color = BondBackend.rgb(fromAndroid: settings["color"])
                 ?? BondBackend.rgb(fromAndroid: profile["color"]) ?? 0xFF4081
+            if (profile["hasImage"] as? Bool) == true {
+                loadPartnerPhoto(bondID: id, uid: (b["firebaseId"] as? String) ?? "",
+                                 version: (profile["version"] as? NSNumber)?.int64Value ?? 0)
+            }
             // Keep the presence / location learned by the slower refreshes.
             let known = legacyPartners.first { $0.id == id }
             partners.append(Partner(bond: bond, displayName: bond.partnerName, colorRGB: color,

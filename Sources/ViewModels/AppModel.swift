@@ -3,6 +3,7 @@ import Combine
 import CoreLocation
 import Foundation
 import SwiftUI
+import UIKit
 
 /// Ties the iCloud relay, the bracelet, HealthKit, and local storage together, and owns
 /// the app state the views render. Supports multiple partners.
@@ -35,6 +36,11 @@ final class AppModel: ObservableObject {
     var chatSessionAttempts: [String: Date] = [:]
     var chatMaintenanceDone = false
     @Published var legacyChatStatus = ""
+
+    // Profile photos (see AppModel+Photos).
+    @Published var partnerPhotos: [String: UIImage] = [:]
+    @Published var myPhoto: UIImage?
+    var photoRequests: Set<String> = []
 
     /// Every partner — iCloud and original backend.
     var partners: [Partner] { cloudPartners + legacyPartners }

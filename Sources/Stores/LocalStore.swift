@@ -38,6 +38,21 @@ final class LocalStore: ObservableObject {
     @Published var legacyRefreshToken: String {
         didSet { UserDefaults.standard.set(legacyRefreshToken, forKey: Key.legacyRefresh.rawValue) }
     }
+    /// Per-partner "use their photo as the background" (bond id → on/off; on by default).
+    @Published var photoBackgrounds: [String: Bool] {
+        didSet { save(photoBackgrounds, for: .photoBg) }
+    }
+    /// Background photo blur radius ("softness"), in points.
+    @Published var backgroundSoftness: Double {
+        didSet { UserDefaults.standard.set(backgroundSoftness, forKey: Key.bgSoftness.rawValue) }
+    }
+    /// Length of the touch bar's recording window, seconds (the bracelet's is 5–10 s).
+    @Published var touchWindowSeconds: Double {
+        didSet { UserDefaults.standard.set(touchWindowSeconds, forKey: Key.touchWindow.rawValue) }
+    }
+
+    func photoBackground(for bondID: String) -> Bool { photoBackgrounds[bondID] ?? true }
+
     /// The user turned on end-to-end encrypted chat with original-app partners on this phone.
     @Published var legacyChatEnabled: Bool {
         didSet { UserDefaults.standard.set(legacyChatEnabled, forKey: Key.legacyChat.rawValue) }
@@ -91,7 +106,7 @@ final class LocalStore: ObservableObject {
         greetings[bondID] = text
     }
 
-    private enum Key: String { case meanings, vibration, dnd, profile, fbEnabled, fbURL, fbToken, greetings, encounters, psPasscode, legacyEmail, legacyRefresh, legacyChat }
+    private enum Key: String { case meanings, vibration, dnd, profile, fbEnabled, fbURL, fbToken, greetings, encounters, psPasscode, legacyEmail, legacyRefresh, legacyChat, photoBg, bgSoftness, touchWindow }
 
     init() {
         self.meanings = LocalStore.load([TouchMeaning].self, for: .meanings) ?? TouchMeaning.starters
@@ -105,6 +120,9 @@ final class LocalStore: ObservableObject {
         self.legacyEmail = UserDefaults.standard.string(forKey: Key.legacyEmail.rawValue) ?? ""
         self.legacyRefreshToken = UserDefaults.standard.string(forKey: Key.legacyRefresh.rawValue) ?? ""
         self.legacyChatEnabled = UserDefaults.standard.bool(forKey: Key.legacyChat.rawValue)
+        self.photoBackgrounds = LocalStore.load([String: Bool].self, for: .photoBg) ?? [:]
+        self.backgroundSoftness = (UserDefaults.standard.object(forKey: Key.bgSoftness.rawValue) as? Double) ?? 18
+        self.touchWindowSeconds = (UserDefaults.standard.object(forKey: Key.touchWindow.rawValue) as? Double) ?? 5
         self.greetings = LocalStore.load([String: String].self, for: .greetings) ?? [:]
         self.encounters = LocalStore.load([String: Date].self, for: .encounters) ?? [:]
         self.privateSpacePasscodeHash = UserDefaults.standard.string(forKey: Key.psPasscode.rawValue)
