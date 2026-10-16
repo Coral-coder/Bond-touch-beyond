@@ -13,6 +13,8 @@ settings:
     DEVELOPMENT_TEAM: ""
     CODE_SIGN_STYLE: Automatic
     GENERATE_INFOPLIST_FILE: NO
+    ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+    TARGETED_DEVICE_FAMILY: "1"   # iPhone only (avoids iPad icon/orientation requirements)
 
 targets:
   BondTouchBeyond:
@@ -29,6 +31,7 @@ targets:
         NSBluetoothAlwaysUsageDescription: Bond Touch Beyond uses Bluetooth to talk to your bracelet.
         NSBluetoothPeripheralUsageDescription: Bond Touch Beyond uses Bluetooth to talk to your bracelet.
         NSHealthShareUsageDescription: Bond Touch Beyond reads your heart rate so you can send your live heartbeat to your partner's bracelet.
+        NSHealthUpdateUsageDescription: Bond Touch Beyond does not write to Health; this permission is required by the HealthKit framework.
         UIBackgroundModes:
           - bluetooth-central
           - remote-notification
