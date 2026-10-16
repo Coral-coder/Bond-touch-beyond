@@ -10,6 +10,7 @@ on:
       - "Sources/**"
       - "ThirdParty/**"
       - "scripts/**"
+      - "Watch/**"
       - ".github/workflows/ios-build-check.yml"
   pull_request:
     paths:

@@ -43,6 +43,8 @@ final class AppModel: ObservableObject {
     @Published var partnerPhotos: [String: UIImage] = [:]
     @Published var myPhoto: UIImage?
     var photoRequests: Set<String> = []
+    /// The Apple Watch link (touch bar + meanings on the watch).
+    let watch = WatchBridge()
 
     /// Every partner — iCloud and original backend.
     var partners: [Partner] { cloudPartners + legacyPartners }
@@ -84,6 +86,7 @@ final class AppModel: ObservableObject {
                                      colorRGB: self.store.profile.colorRGB)
             }
         }
+        watch.start(self)
     }
 
     // MARK: - Presence (live location)
