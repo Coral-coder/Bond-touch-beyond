@@ -34,6 +34,20 @@ final class LocalStore: ObservableObject {
     @Published var greetings: [String: String] {
         didSet { save(greetings, for: .greetings) }
     }
+    /// Per-partner "next time we meet" date (the Encounters countdown), keyed by bond id.
+    @Published var encounters: [String: Date] {
+        didSet { save(encounters, for: .encounters) }
+    }
+
+    func nextMeeting(for bondID: String?) -> Date? {
+        guard let bondID else { return nil }
+        return encounters[bondID]
+    }
+
+    func setNextMeeting(_ date: Date?, for bondID: String?) {
+        guard let bondID else { return }
+        if let date { encounters[bondID] = date } else { encounters.removeValue(forKey: bondID) }
+    }
 
     static let defaultGreeting = "Hello,\nthis is us"
 
@@ -47,7 +61,7 @@ final class LocalStore: ObservableObject {
         greetings[bondID] = text
     }
 
-    private enum Key: String { case meanings, vibration, dnd, profile, fbEnabled, fbURL, fbToken, greetings }
+    private enum Key: String { case meanings, vibration, dnd, profile, fbEnabled, fbURL, fbToken, greetings, encounters }
 
     init() {
         self.meanings = LocalStore.load([TouchMeaning].self, for: .meanings) ?? TouchMeaning.starters
@@ -59,6 +73,7 @@ final class LocalStore: ObservableObject {
         self.firebaseDatabaseURL = UserDefaults.standard.string(forKey: Key.fbURL.rawValue) ?? ""
         self.firebaseAuthToken = UserDefaults.standard.string(forKey: Key.fbToken.rawValue) ?? ""
         self.greetings = LocalStore.load([String: String].self, for: .greetings) ?? [:]
+        self.encounters = LocalStore.load([String: Date].self, for: .encounters) ?? [:]
     }
 
     var legacyFirebase: LegacyFirebaseClient? {

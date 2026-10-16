@@ -7,10 +7,19 @@ struct HomeView: View {
     @EnvironmentObject var store: LocalStore
     @State private var showHeart = false
     @State private var showPeople = false
+    @State private var showEncounters = false
     @State private var editingGreeting = false
     @State private var greetingDraft = ""
 
     private var partner: Partner? { model.selectedPartner }
+
+    private var daysToNextMeeting: Int? {
+        guard let date = store.nextMeeting(for: model.selectedPartnerID) else { return nil }
+        let cal = Calendar.current
+        let days = cal.dateComponents([.day], from: cal.startOfDay(for: Date()),
+                                      to: cal.startOfDay(for: date)).day ?? 0
+        return max(0, days)
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -50,6 +59,9 @@ struct HomeView: View {
         }
         .sheet(isPresented: $showPeople) {
             NavigationStack { PeopleView().navigationTitle("People") }
+        }
+        .sheet(isPresented: $showEncounters) {
+            EncountersView(bondID: model.selectedPartnerID)
         }
         .sheet(isPresented: $editingGreeting) {
             GreetingEditor(text: $greetingDraft) {
@@ -94,9 +106,18 @@ struct HomeView: View {
             }
             .frame(maxWidth: .infinity)
 
-            Image(systemName: "heart.text.square")
-                .font(.system(size: 26)).foregroundStyle(Theme.accent)
-                .padding(.top, 44)
+            Button { showEncounters = true } label: {
+                VStack(spacing: 4) {
+                    Image(systemName: "calendar")
+                        .font(.system(size: 24)).foregroundStyle(Theme.accent)
+                    if let days = daysToNextMeeting {
+                        Text(days == 0 ? "Today" : "\(days)d")
+                            .font(.caption2.bold()).foregroundStyle(Theme.accent)
+                    }
+                }
+            }
+            .buttonStyle(.plain)
+            .padding(.top, 40)
 
             if let partner {
                 VStack(spacing: 8) {
