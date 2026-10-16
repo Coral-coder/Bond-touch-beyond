@@ -10,6 +10,27 @@ enum FirebaseStorage {
 
     struct NotFound: Error {}
 
+    /// The project enforces Firebase App Check on Storage: only the official Bond Touch app
+    /// (attested by Apple App Attest) may read or write it. This app can't, and doesn't try
+    /// to get around it.
+    struct AppCheckBlocked: LocalizedError {
+        var errorDescription: String? {
+            "The original Bond Touch servers only let the official Bond Touch app use their file storage (Firebase App Check), so encrypted chat keys and photos can't be exchanged from this app. Touches, Touch Language, greeting, encounters and presence still sync."
+        }
+    }
+
+    /// Records that App Check blocked a request (shown in the debug panel).
+    static var appCheckBlocked = false
+
+    private static func failure(_ code: Int, _ body: Data, _ what: String) -> Error {
+        let text = String(data: body, encoding: .utf8) ?? ""
+        if (code == 401 || code == 403) && text.contains("App Check") {
+            appCheckBlocked = true
+            return AppCheckBlocked()
+        }
+        return BondBackend.BackendError(message: "Storage HTTP \(code) for \(what): \(text)")
+    }
+
     private static func objectURL(_ bucket: String, _ path: String, media: Bool) -> URL? {
         // The object name is one path segment: every "/" must be percent-encoded.
         var allowed = CharacterSet.urlPathAllowed
@@ -26,9 +47,7 @@ enum FirebaseStorage {
         let (data, resp) = try await URLSession.shared.data(for: req)
         let code = (resp as? HTTPURLResponse)?.statusCode ?? 0
         if code == 404 { throw NotFound() }
-        guard code < 400 else {
-            throw BondBackend.BackendError(message: "Storage HTTP \(code) for \(path): \(String(data: data, encoding: .utf8) ?? "")")
-        }
+        guard code < 400 else { throw failure(code, data, path) }
         return data
     }
 
@@ -44,8 +63,6 @@ enum FirebaseStorage {
         req.httpBody = data
         let (body, resp) = try await URLSession.shared.data(for: req)
         let code = (resp as? HTTPURLResponse)?.statusCode ?? 0
-        guard code < 400 else {
-            throw BondBackend.BackendError(message: "Storage upload HTTP \(code) for \(path): \(String(data: body, encoding: .utf8) ?? "")")
-        }
+        guard code < 400 else { throw failure(code, body, path) }
     }
 }

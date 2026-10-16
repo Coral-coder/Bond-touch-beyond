@@ -76,6 +76,7 @@ struct ChatView: View {
             Label("Private, end-to-end encrypted chat", systemImage: "lock.fill")
                 .font(.headline).foregroundStyle(.white)
             Text("Chat with \(model.selectedPartner?.displayName ?? "your partner") uses the same Signal encryption as the original app. Turning it on gives this phone its own chat keys, so:")
+                .fixedSize(horizontal: false, vertical: true)
                 .font(.subheadline).foregroundStyle(Theme.subtitle)
             Text("• Messages sent before today can't be read here (they were encrypted for your old phone's keys).\n• The original app on another phone stops receiving your chat.")
                 .font(.footnote).foregroundStyle(Theme.subtitle)

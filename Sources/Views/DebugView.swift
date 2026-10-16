@@ -34,6 +34,8 @@ struct DebugView: View {
                             ? "On · registration \(model.chat.store.state.registrationId) · sessions \(model.chat.store.state.sessions.count)"
                             : "Off")
                         if !model.legacyChatStatus.isEmpty { row("Chat status", model.legacyChatStatus) }
+                        row("Firebase Storage", FirebaseStorage.appCheckBlocked
+                            ? "Blocked by App Check (official app only)" : "No App Check block seen")
                         row("Last sync", model.legacyLastSync?.formatted(date: .omitted, time: .standard) ?? "—")
                         row("Token expires", tokenExpiryText)
                         row("Project", BondBackend.projectId)
