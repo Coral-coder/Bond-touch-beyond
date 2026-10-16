@@ -160,17 +160,28 @@ enum BondGATT {
         [1, 0x19], [1, 0x1B], [1, 0x41], [1, 0x42], [1, 0x49, 0x01], [1, 0x1C]
     ].map { (ffb1, Data($0)) }
 
-    /// A whole heartbeat for a Bond Touch More as ONE touch message: for each beat the full
-    /// bar lights and both motors buzz together for 150 ms; at most 10 s (200 samples). The
-    /// bracelet renders light and vibration in sync, with a single short Bluetooth burst.
+    /// A whole heartbeat for a Bond Touch More as ONE touch message, shaped like a real
+    /// heart: each beat is a big "lub" (the whole bar lights and both motors buzz, 150 ms)
+    /// then, ~150 ms later, a smaller "dub" (just the centre, 100 ms), then a rest to the
+    /// next beat. At most 10 s (200 samples); light and vibration render in sync.
     static func v3Heartbeat(bpm: Int, seconds: Double, rgb: Int) -> [(CBUUID, Data)] {
         let period = max(3, Int((60.0 / Double(max(bpm, 30))) * 1000) / TouchPattern.sampleMs)
         let total = min(TouchPattern.maxSamples, Int(seconds * 1000) / TouchPattern.sampleMs)
-        let fullBar = (8 << 4) | 0   // two "fingers" at 0 and 8: the whole bar
+        let fullBar = (8 << 4) | 0   // two "fingers" at 0 and 8: the whole bar (the big lub)
+        let centre = 0xF0 | 4        // one finger at the centre: the small dub
+        let lub = 3, gap = 3, dub = 2
         var samples: [Int] = []
         while samples.count < total {
-            samples += [fullBar, fullBar, fullBar]
-            samples += Array(repeating: TouchPattern.none, count: period - 3)
+            if period >= lub + gap + dub + 1 {
+                samples += Array(repeating: fullBar, count: lub)
+                samples += Array(repeating: TouchPattern.none, count: gap)
+                samples += Array(repeating: centre, count: dub)
+                samples += Array(repeating: TouchPattern.none, count: period - lub - gap - dub)
+            } else {
+                // Too fast to fit a lub-dub; one beat per period.
+                samples += Array(repeating: fullBar, count: min(lub, period))
+                samples += Array(repeating: TouchPattern.none, count: max(0, period - lub))
+            }
         }
         return v3TouchFrames(samples: Array(samples.prefix(total)), startRGB: rgb, endRGB: rgb)
     }

@@ -342,11 +342,23 @@ final class AppModel: ObservableObject {
         sendingHeartbeat = true
         defer { Task { @MainActor in try? await Task.sleep(nanoseconds: 10_000_000_000); self.sendingHeartbeat = false } }
         if bond.legacy {
-            // 10 s of beats as an on/off pattern: a 120 ms press per beat.
+            // 10 s of heartbeats as an on/off pattern, shaped like a real heart: each beat is
+            // a big "lub" press (150 ms), a short gap, a smaller "dub" press (90 ms), then a
+            // rest to the next beat. On the partner's bracelet it buzzes lub-dub, lub-dub.
             let period = 60_000 / max(bpm, 30)
             let beats = max(1, 10_000 / period)
             var pattern: [Int] = []
-            for i in 0..<beats { pattern.append(120); if i < beats - 1 { pattern.append(max(period - 120, 80)) } }
+            let lubDub = period >= 150 + 150 + 90 + 80
+            for i in 0..<beats {
+                pattern.append(150)                                   // lub (on)
+                if lubDub {
+                    pattern.append(150)                               // gap (off)
+                    pattern.append(90)                                // dub (on)
+                    if i < beats - 1 { pattern.append(max(period - 390, 80)) }  // rest (off)
+                } else if i < beats - 1 {
+                    pattern.append(max(period - 150, 80))             // rest (off)
+                }
+            }
             await sendTouch(pattern: pattern, generation: 2, colorRGB: 0xE85D75, toBondID: bond.id)
         } else {
             do { try await relay.sendHeartbeat(bpm: bpm, bond: bond, senderID: myUserID) }

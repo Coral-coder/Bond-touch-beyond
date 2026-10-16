@@ -68,11 +68,17 @@ struct HeartView: View {
         .screenBackground()
     }
 
-    /// A heartbeat-shaped size: a quick swell at the start of each beat, then rest.
+    /// A heartbeat-shaped size: a big "lub" swell, then a smaller "dub" swell, then rest —
+    /// like a real heart.
     private func pulse(at date: Date) -> CGFloat {
         let phase = date.timeIntervalSince(beatStart).truncatingRemainder(dividingBy: beatInterval) / beatInterval
-        let swell = phase < 0.3 ? sin(phase / 0.3 * .pi) : 0
-        return 1 + 0.08 * CGFloat(swell)
+        func bump(_ start: Double, _ width: Double) -> Double {
+            guard phase >= start, phase < start + width else { return 0 }
+            return sin((phase - start) / width * .pi)
+        }
+        let lub = bump(0, 0.18) * 0.10
+        let dub = bump(0.26, 0.15) * 0.05
+        return 1 + CGFloat(lub + dub)
     }
 
     private var beatInterval: Double {
