@@ -71,8 +71,22 @@ final class CloudRelay {
         _ = try await privateDB.modifyRecords(saving: [root, share], deleting: [])
         try await installZoneSubscription(in: privateDB, zoneID: zoneID)
 
-        let bond = Bond(id: zoneID.zoneName, partnerName: "Pending…", isOwner: true)
+        let bond = Bond(id: zoneID.zoneName, partnerName: "Pending…", isOwner: true, pending: true)
         return (bond, share)
+    }
+
+    /// Deletes a bond: an owner's invite/zone is removed from the private DB; a bond shared
+    /// with us is left by removing its zone from the shared DB.
+    func deleteBond(_ bond: Bond) async throws {
+        if bond.isOwner {
+            let zoneID = CKRecordZone.ID(zoneName: bond.id, ownerName: CKCurrentUserDefaultName)
+            _ = try await privateDB.modifyRecordZones(saving: [], deleting: [zoneID])
+        } else {
+            let zones = (try? await sharedDB.allRecordZones()) ?? []
+            if let z = zones.first(where: { $0.zoneID.zoneName == bond.id }) {
+                _ = try await sharedDB.modifyRecordZones(saving: [], deleting: [z.zoneID])
+            }
+        }
     }
 
     /// Accepts an incoming share (partner side). Call from the scene delegate's
@@ -91,20 +105,34 @@ final class CloudRelay {
     /// with them (shared DB). Bond zone names start with "bond-".
     func loadBonds() async throws -> [Bond] {
         var bonds: [Bond] = []
-        for (db, owner) in [(privateDB, true), (sharedDB, false)] {
-            let zones = (try? await db.allRecordZones()) ?? []
-            for zone in zones where zone.zoneID.zoneName.hasPrefix("bond-") {
-                // On a shared zone the root's ownerName is the partner (the creator). On a
-                // zone we created it's our own name, so don't use it as the partner name —
-                // the partner's Profile record (fetched later) fills that in.
-                var name = "Partner"
-                if !owner,
-                   let root = try? await db.record(for: CKRecord.ID(recordName: "root", zoneID: zone.zoneID)),
-                   let ownerName = root["ownerName"] as? String {
-                    name = ownerName
+
+        // Zones we created (private DB). These are "pending" invites until a partner has
+        // actually accepted the share — an unaccepted invite is NOT shown as a partner.
+        let privateZones = (try? await privateDB.allRecordZones()) ?? []
+        for zone in privateZones where zone.zoneID.zoneName.hasPrefix("bond-") {
+            var pending = true
+            if let root = try? await privateDB.record(for: CKRecord.ID(recordName: "root", zoneID: zone.zoneID)),
+               let shareRef = root.share,
+               let shareRecord = try? await privateDB.record(for: shareRef.recordID),
+               let share = shareRecord as? CKShare {
+                pending = !share.participants.contains {
+                    $0.acceptanceStatus == .accepted && $0.role != .owner
                 }
-                bonds.append(Bond(id: zone.zoneID.zoneName, partnerName: name, isOwner: owner))
             }
+            bonds.append(Bond(id: zone.zoneID.zoneName, partnerName: "Partner",
+                              isOwner: true, pending: pending))
+        }
+
+        // Zones shared with us (shared DB) — accepted by definition. The root's ownerName is
+        // the partner (its creator).
+        let sharedZones = (try? await sharedDB.allRecordZones()) ?? []
+        for zone in sharedZones where zone.zoneID.zoneName.hasPrefix("bond-") {
+            var name = "Partner"
+            if let root = try? await sharedDB.record(for: CKRecord.ID(recordName: "root", zoneID: zone.zoneID)),
+               let ownerName = root["ownerName"] as? String {
+                name = ownerName
+            }
+            bonds.append(Bond(id: zone.zoneID.zoneName, partnerName: name, isOwner: false, pending: false))
         }
         return bonds
     }

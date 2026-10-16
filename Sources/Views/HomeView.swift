@@ -98,15 +98,32 @@ struct HomeView: View {
                 .font(.system(size: 26)).foregroundStyle(Theme.accent)
                 .padding(.top, 44)
 
-            VStack(spacing: 8) {
-                AvatarRing(name: partner?.displayName ?? "Partner",
-                           ringColor: Color(rgbInt: partner?.colorRGB ?? 0xAEE63C), size: 120)
-                Text(partner?.displayName ?? "Partner")
-                    .font(.headline).foregroundStyle(.white)
-                Text(partner?.online == true ? "Online" : "Offline")
-                    .font(.caption).foregroundStyle(Theme.subtitle)
+            if let partner {
+                VStack(spacing: 8) {
+                    AvatarRing(name: partner.displayName,
+                               ringColor: Color(rgbInt: partner.colorRGB), size: 120)
+                    Text(partner.displayName)
+                        .font(.headline).foregroundStyle(.white)
+                    Text(partner.online ? "Online" : "Offline")
+                        .font(.caption).foregroundStyle(Theme.subtitle)
+                }
+                .frame(maxWidth: .infinity)
+            } else {
+                Button { showPeople = true } label: {
+                    VStack(spacing: 8) {
+                        ZStack {
+                            Circle().strokeBorder(style: StrokeStyle(lineWidth: 2, dash: [6]))
+                                .foregroundStyle(Theme.subtitle).frame(width: 120, height: 120)
+                            Image(systemName: "plus").font(.system(size: 34, weight: .semibold))
+                                .foregroundStyle(Theme.accent)
+                        }
+                        Text("Add a partner").font(.headline).foregroundStyle(.white)
+                        Text("Not connected").font(.caption).foregroundStyle(Theme.subtitle)
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.plain)
             }
-            .frame(maxWidth: .infinity)
         }
         .padding(.vertical, 8)
     }

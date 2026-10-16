@@ -8,6 +8,8 @@ import SwiftUI
 @MainActor
 final class AppModel: ObservableObject {
     @Published var partners: [Partner] = []
+    /// Invites the user created that no partner has accepted yet (not active partners).
+    @Published var pendingBonds: [Bond] = []
     @Published var selectedPartnerID: String?
     @Published var history: [TouchMessage] = []                  // sent + received touches
     @Published var messagesByBond: [String: [ChatMessage]] = [:] // chat per bond
@@ -42,7 +44,9 @@ final class AppModel: ObservableObject {
         }
         do {
             myUserID = try await relay.currentUserID()
-            partners = (try await relay.loadBonds()).map { Partner(bond: $0) }
+            let bonds = try await relay.loadBonds()
+            partners = bonds.filter { !$0.pending }.map { Partner(bond: $0) }
+            pendingBonds = bonds.filter { $0.pending }
             if selectedPartnerID == nil { selectedPartnerID = partners.first?.id }
             ready = true
             statusLine = "Ready."
@@ -66,11 +70,23 @@ final class AppModel: ObservableObject {
     func createBond() async {
         do {
             let (bond, share) = try await relay.createBond(displayName: store.profile.name.isEmpty ? "Me" : store.profile.name)
-            partners.append(Partner(bond: bond))
-            selectedPartnerID = bond.id
+            // A created invite is pending until the partner accepts — it is not a partner yet.
+            pendingBonds.append(bond)
             pendingShare = share
         } catch {
             statusLine = "Couldn't create bond: \(error.localizedDescription)"
+        }
+    }
+
+    /// Removes a partner or cancels a pending invite, deleting its CloudKit zone.
+    func removeBond(_ bond: Bond) async {
+        do {
+            try await relay.deleteBond(bond)
+            partners.removeAll { $0.id == bond.id }
+            pendingBonds.removeAll { $0.id == bond.id }
+            if selectedPartnerID == bond.id { selectedPartnerID = partners.first?.id }
+        } catch {
+            statusLine = "Couldn't remove: \(error.localizedDescription)"
         }
     }
 
