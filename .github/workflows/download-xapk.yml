@@ -1,8 +1,11 @@
-# Downloads the latest Bond Touch Android XAPK (com.impossible.bondtouch) from APKPure and
-# keeps it as a workflow artifact. Run it by hand (Actions → Download Bond Touch XAPK → Run
-# workflow); it also runs every Monday so a newer version is picked up, and on any push that
-# changes this file. Tick "release" to also
-# attach the file to a GitHub release tagged apk-<versionName>.
+# Downloads the Bond Touch Android XAPK (com.impossible.bondtouch) from APKPure and keeps it as
+# a workflow artifact. Run it by hand (Actions → Download Bond Touch XAPK → Run workflow); it also
+# runs on any push that changes this file. By default it fetches versionCode 490 for armeabi-v7a
+# on Android 10 (SDK 29), i.e.
+#   https://d.apkpure.com/b/XAPK/com.impossible.bondtouch?versionCode=490&nc=armeabi-v7a&sv=29
+# Clear the version code to get the latest version instead; clear the ABI or SDK to drop them
+# from the request. Tick "release" to also attach the file to a GitHub release tagged
+# apk-<versionName>.
 #
 # An XAPK is a zip holding the base APK, split APKs and a manifest.json; the workflow checks
 # that what came back really is one (APKPure answers blocked requests with an HTML page), reads
@@ -12,16 +15,22 @@ name: Download Bond Touch XAPK
 on:
   workflow_dispatch:
     inputs:
-      version:
-        description: "Version to fetch (leave as latest for the newest)"
+      version_code:
+        description: "versionCode to fetch (empty for the latest version)"
         required: false
-        default: latest
+        default: "490"
+      abi:
+        description: "CPU ABI (nc), e.g. armeabi-v7a or arm64-v8a; empty for any"
+        required: false
+        default: armeabi-v7a
+      sdk:
+        description: "Android SDK level of the device (sv); empty for any"
+        required: false
+        default: "29"
       release:
         description: "Also publish the file as a GitHub release"
         type: boolean
         default: false
-  schedule:
-    - cron: "17 6 * * 1"
   push:
     paths: [.github/workflows/download-xapk.yml]
 
@@ -37,15 +46,25 @@ jobs:
     steps:
       - name: Download XAPK
         env:
-          VERSION: ${{ inputs.version || 'latest' }}
+          VERSION_CODE: ${{ inputs.version_code }}
+          ABI: ${{ inputs.abi }}
+          SDK: ${{ inputs.sdk }}
         run: |
           set -euo pipefail
           mkdir -p out
+          # A push has no inputs, so it uses the same defaults as a manual run. On a manual run an
+          # input left empty is dropped from the request.
+          if [ "$GITHUB_EVENT_NAME" != workflow_dispatch ]; then
+            VERSION_CODE=490 ABI=armeabi-v7a SDK=29
+          fi
+          if [ -n "$VERSION_CODE" ]; then query="versionCode=${VERSION_CODE}"; else query="version=latest"; fi
+          if [ -n "$ABI" ]; then query="${query}&nc=${ABI}"; fi
+          if [ -n "$SDK" ]; then query="${query}&sv=${SDK}"; fi
           ua="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0 Safari/537.36"
           ok=
           # XAPK first; the plain APK endpoint is the fallback for versions shipped without splits.
           for kind in XAPK APK; do
-            url="https://d.apkpure.com/b/${kind}/${PACKAGE}?version=${VERSION}"
+            url="https://d.apkpure.com/b/${kind}/${PACKAGE}?${query}"
             for attempt in 1 2 3 4; do
               echo "::group::$kind attempt $attempt: $url"
               rm -f out/download
