@@ -115,7 +115,8 @@ extension AppModel {
     func appendChat(_ messages: [ChatMessage], bondID: String) {
         var list = messagesByBond[bondID] ?? []
         let known = Set(list.map(\.id))
-        let fresh = messages.filter { !known.contains($0.id) }
+        // Private Space keeps 72 hours — don't bring back older ones a server re-sends.
+        let fresh = messages.filter { !known.contains($0.id) && Date().timeIntervalSince($0.sentAt) < ChatArchive.lifetime }
         guard !fresh.isEmpty else { return }
         list += fresh
         list.sort { $0.sentAt < $1.sentAt }

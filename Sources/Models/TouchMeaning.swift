@@ -19,6 +19,9 @@ struct TouchMeaning: Identifiable, Codable, Equatable {
     var serverID: String? = nil
     /// Pattern format: 3 = 50 ms position samples (touch bar), nil/2 = on/off milliseconds.
     var generation: Int? = nil
+    /// Starred in the Touch Library (synced with the original backend's `favourite`).
+    /// Optional so meanings saved before this field existed still load.
+    var favourite: Bool? = nil
 
     var touchGeneration: Int { generation == 3 ? 3 : 2 }
 

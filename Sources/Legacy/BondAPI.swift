@@ -198,7 +198,8 @@ extension BondBackend {
             "startColor": androidColor(fromRGB: m.colorRGB),
             "endColor": androidColor(fromRGB: m.endColorRGB),
             "generation": m.touchGeneration == 3 ? "3" : "2",
-            "favourite": false
+            // Send back what the server has — always sending false wiped the partner's star.
+            "favourite": m.favourite ?? false
         ]
     }
 
@@ -225,10 +226,12 @@ extension BondBackend {
     static func meaning(from j: [String: Any]) -> TouchMeaning? {
         guard let id = j["id"] as? String else { return nil }
         let start = rgb(fromAndroid: j["startColor"]) ?? 0xFF2E74
-        return TouchMeaning(label: (j["name"] as? String) ?? "Touch", emoji: "",
-                            colorRGB: start, endColorRGB: rgb(fromAndroid: j["endColor"]) ?? start,
-                            pattern: pattern(j["pattern"]), serverID: id,
-                            generation: generation(j["generation"]))
+        var m = TouchMeaning(label: (j["name"] as? String) ?? "Touch", emoji: "",
+                             colorRGB: start, endColorRGB: rgb(fromAndroid: j["endColor"]) ?? start,
+                             pattern: pattern(j["pattern"]), isNew: (j["isNew"] as? Bool) ?? false,
+                             serverID: id, generation: generation(j["generation"]))
+        m.favourite = j["favourite"] as? Bool
+        return m
     }
 
     // MARK: - User / presence

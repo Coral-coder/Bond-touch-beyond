@@ -274,6 +274,9 @@ final class AppModel: ObservableObject {
     /// sync loop runs only while the app is active.
     func setActive(_ active: Bool) async {
         if active {
+            // Private Space messages and photos are kept 72 hours.
+            var chats = messagesByBond
+            if ChatArchive.expire(&chats) { messagesByBond = chats; ChatArchive.save(chats) }
             await refreshICloudStatus()   // the user may have just signed into iCloud
             updateKeepAlive()
             startLegacySync()

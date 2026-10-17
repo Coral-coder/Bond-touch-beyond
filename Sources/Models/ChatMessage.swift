@@ -58,7 +58,29 @@ enum ChatArchive {
 
     static func load() -> [String: [ChatMessage]] {
         guard let data = try? Data(contentsOf: file) else { return [:] }
-        return (try? JSONDecoder().decode([String: [ChatMessage]].self, from: data)) ?? [:]
+        var messages = (try? JSONDecoder().decode([String: [ChatMessage]].self, from: data)) ?? [:]
+        if expire(&messages) { save(messages) }
+        return messages
+    }
+
+    /// How long Private Space keeps messages and photos, as the original app (72 hours).
+    static let lifetime: TimeInterval = 72 * 3600
+
+    /// Drops messages older than `lifetime` — and deletes their photos from the phone.
+    /// Returns true when anything was removed.
+    @discardableResult
+    static func expire(_ messages: inout [String: [ChatMessage]], now: Date = Date()) -> Bool {
+        var removed = false
+        for (bond, list) in messages {
+            let (keep, drop) = list.reduce(into: ([ChatMessage](), [ChatMessage]())) { acc, m in
+                if now.timeIntervalSince(m.sentAt) < lifetime { acc.0.append(m) } else { acc.1.append(m) }
+            }
+            guard !drop.isEmpty else { continue }
+            for m in drop { if let f = m.imageFile { try? FileManager.default.removeItem(at: imageURL(f)) } }
+            messages[bond] = keep
+            removed = true
+        }
+        return removed
     }
 
     static func save(_ messages: [String: [ChatMessage]]) {

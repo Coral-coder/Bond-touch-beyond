@@ -7,6 +7,7 @@ struct MeaningsView: View {
     @EnvironmentObject var model: AppModel
     @EnvironmentObject var store: LocalStore
     @State private var showAdd = false
+    @State private var pendingDelete: TouchMeaning?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -43,7 +44,7 @@ struct MeaningsView: View {
                         meaningCard(meaning)
                             .contextMenu {
                                 Button(role: .destructive) {
-                                    Task { await model.deleteMeaning(meaning) }
+                                    pendingDelete = meaning
                                 } label: { Label("Delete", systemImage: "trash") }
                             }
                     }
@@ -53,12 +54,31 @@ struct MeaningsView: View {
             }
         }
         .fullScreenCover(isPresented: $showAdd) { ComposeTouchView(mode: .createMeaning) }
+        // As the original: confirm, since a meaning is shared with the partner.
+        .confirmationDialog("Delete \"\(pendingDelete?.label ?? "meaning")\"?",
+                            isPresented: Binding(get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } }),
+                            titleVisibility: .visible) {
+            Button("Delete", role: .destructive) {
+                if let m = pendingDelete { Task { await model.deleteMeaning(m) } }
+                pendingDelete = nil
+            }
+        } message: { Text("This meaning will disappear for both of you.") }
     }
 
     @ViewBuilder private func meaningCard(_ meaning: TouchMeaning) -> some View {
         GlassCard {
             HStack(spacing: 12) {
-                Image(systemName: "play.circle").foregroundStyle(Theme.subtitle)
+                // Replays the meaning on your own bracelet (or the phone, if it isn't connected).
+                Button {
+                    model.feel(TouchMessage(senderID: model.myUserID, pattern: meaning.pattern,
+                                            generation: meaning.touchGeneration, colorRGB: meaning.colorRGB,
+                                            endColorRGB: meaning.endColorRGB,
+                                            meaningLabel: meaning.label, meaningEmoji: meaning.emoji))
+                } label: {
+                    Image(systemName: "play.circle.fill").font(.system(size: 26)).foregroundStyle(Theme.accent)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Play \(meaning.label) on your bracelet")
                 VStack(alignment: .leading, spacing: 8) {
                     HStack(spacing: 8) {
                         Text(meaning.label).font(.headline).foregroundStyle(.white)
