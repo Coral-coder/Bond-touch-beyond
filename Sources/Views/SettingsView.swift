@@ -353,11 +353,34 @@ private struct DoNotDisturbView: View {
             GlassCard {
                 Toggle("Do not disturb", isOn: $store.doNotDisturb).foregroundStyle(.white).tint(Theme.accent)
             }
-            Text("When on, incoming touches won't buzz your bracelet.")
+            GlassCard {
+                VStack(spacing: 12) {
+                    Toggle("Every day", isOn: $store.dndScheduled).foregroundStyle(.white).tint(Theme.accent)
+                    if store.dndScheduled {
+                        DatePicker("From", selection: time($store.dndFrom), displayedComponents: .hourAndMinute)
+                            .foregroundStyle(.white)
+                        DatePicker("To", selection: time($store.dndTo), displayedComponents: .hourAndMinute)
+                            .foregroundStyle(.white)
+                    }
+                }
+            }
+            Text(store.quiet() ? "Quiet now: incoming touches won't buzz your bracelet or phone. They're still saved in your history."
+                               : "When on, incoming touches won't buzz your bracelet or phone. They're still saved in your history.")
                 .font(.footnote).foregroundStyle(Theme.subtitle)
             Spacer()
         }
         .padding(20).navigationTitle("Do not disturb")
+    }
+
+    /// Minutes after midnight as a time of day for the picker.
+    private func time(_ minutes: Binding<Int>) -> Binding<Date> {
+        Binding(get: {
+            Calendar.current.date(bySettingHour: minutes.wrappedValue / 60, minute: minutes.wrappedValue % 60,
+                                  second: 0, of: Date()) ?? Date()
+        }, set: {
+            let c = Calendar.current.dateComponents([.hour, .minute], from: $0)
+            minutes.wrappedValue = (c.hour ?? 0) * 60 + (c.minute ?? 0)
+        })
     }
 }
 

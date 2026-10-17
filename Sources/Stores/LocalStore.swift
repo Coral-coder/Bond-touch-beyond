@@ -17,6 +17,27 @@ final class LocalStore: ObservableObject {
     @Published var doNotDisturb: Bool {
         didSet { UserDefaults.standard.set(doNotDisturb, forKey: Key.dnd.rawValue) }
     }
+    /// Scheduled Do Not Disturb, as the original: every day From → To (minutes after
+    /// midnight; default 22:00 → 07:00, crossing midnight).
+    @Published var dndScheduled: Bool = UserDefaults.standard.bool(forKey: "dndScheduled") {
+        didSet { UserDefaults.standard.set(dndScheduled, forKey: "dndScheduled") }
+    }
+    @Published var dndFrom: Int = UserDefaults.standard.object(forKey: "dndFrom") as? Int ?? 22 * 60 {
+        didSet { UserDefaults.standard.set(dndFrom, forKey: "dndFrom") }
+    }
+    @Published var dndTo: Int = UserDefaults.standard.object(forKey: "dndTo") as? Int ?? 7 * 60 {
+        didSet { UserDefaults.standard.set(dndTo, forKey: "dndTo") }
+    }
+
+    /// Whether incoming touches are kept quiet right now: Do Not Disturb is on, or the
+    /// schedule covers this minute.
+    func quiet(at date: Date = Date()) -> Bool {
+        if doNotDisturb { return true }
+        guard dndScheduled, dndFrom != dndTo else { return false }
+        let c = Calendar.current.dateComponents([.hour, .minute], from: date)
+        let now = (c.hour ?? 0) * 60 + (c.minute ?? 0)
+        return dndFrom < dndTo ? (now >= dndFrom && now < dndTo) : (now >= dndFrom || now < dndTo)
+    }
     /// The local user's profile (name, colour, default pattern).
     @Published var profile: UserProfile {
         didSet { save(profile, for: .profile) }

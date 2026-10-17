@@ -388,6 +388,26 @@ extension AppModel {
         }
     }
 
+    /// Saves an edited meaning (name, emoji, colours, favourite): on the original backend for
+    /// an original-app partner, else in the local library.
+    func updateMeaning(_ meaning: TouchMeaning) async {
+        if let bond = selectedPartner?.bond, bond.legacy, let serverID = meaning.serverID {
+            let before = legacyMeanings[bond.id]
+            if let i = legacyMeanings[bond.id]?.firstIndex(where: { $0.serverID == serverID }) {
+                legacyMeanings[bond.id]?[i] = meaning
+            }
+            do {
+                let token = try await legacyToken()
+                try await BondBackend.updateMeaning(bondId: bond.id, meaningId: serverID, meaning, bearer: token)
+            } catch {
+                legacyMeanings[bond.id] = before
+                statusLine = "Couldn't save touch: \(error.localizedDescription)"
+            }
+            return
+        }
+        if let i = store.meanings.firstIndex(where: { $0.id == meaning.id }) { store.meanings[i] = meaning }
+    }
+
     func deleteMeaning(_ meaning: TouchMeaning) async {
         guard let bond = selectedPartner?.bond, bond.legacy, let serverID = meaning.serverID else {
             store.meanings.removeAll { $0.id == meaning.id }

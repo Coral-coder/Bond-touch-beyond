@@ -672,8 +672,12 @@ final class AppModel: ObservableObject {
     func deliver(_ touch: TouchMessage) {
         // A heartbeat is live: it plays only within 2 minutes (it's still kept in history).
         let maxAge: TimeInterval = touch.heartbeatBPM == nil ? 15 * 60 : 120
-        guard !store.doNotDisturb, Date().timeIntervalSince(touch.sentAt) < maxAge,
+        guard Date().timeIntervalSince(touch.sentAt) < maxAge,
               deliveredTouchIDs.insert(touch.id).inserted else { return }
+        if store.quiet() {
+            NetLog.shared.log(.recv, "Do Not Disturb — touch not played", partners.first { $0.id == touch.bondID }?.displayName ?? "")
+            return
+        }
         feel(touch)
     }
 

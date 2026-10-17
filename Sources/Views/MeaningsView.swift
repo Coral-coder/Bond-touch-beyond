@@ -8,6 +8,14 @@ struct MeaningsView: View {
     @EnvironmentObject var store: LocalStore
     @State private var showAdd = false
     @State private var pendingDelete: TouchMeaning?
+    @State private var editing: TouchMeaning?
+
+    /// Favourites first, as the original library.
+    private var sorted: [TouchMeaning] {
+        model.currentMeanings.enumerated()
+            .sorted { ($0.element.favourite == true ? 0 : 1, $0.offset) < ($1.element.favourite == true ? 0 : 1, $1.offset) }
+            .map(\.element)
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -40,9 +48,14 @@ struct MeaningsView: View {
                             .frame(maxWidth: .infinity, alignment: .center)
                     }
 
-                    ForEach(model.currentMeanings) { meaning in
+                    ForEach(sorted) { meaning in
                         meaningCard(meaning)
                             .contextMenu {
+                                Button { editing = meaning } label: { Label("Edit", systemImage: "pencil") }
+                                Button { toggleFavourite(meaning) } label: {
+                                    Label(meaning.favourite == true ? "Remove from favourites" : "Favourite",
+                                          systemImage: meaning.favourite == true ? "star.slash" : "star")
+                                }
                                 Button(role: .destructive) {
                                     pendingDelete = meaning
                                 } label: { Label("Delete", systemImage: "trash") }
@@ -54,6 +67,9 @@ struct MeaningsView: View {
             }
         }
         .fullScreenCover(isPresented: $showAdd) { ComposeTouchView(mode: .createMeaning) }
+        .sheet(item: $editing) { m in
+            EditMeaningSheet(meaning: m) { edited in Task { await model.updateMeaning(edited) } }
+        }
         // As the original: confirm, since a meaning is shared with the partner.
         .confirmationDialog("Delete \"\(pendingDelete?.label ?? "meaning")\"?",
                             isPresented: Binding(get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } }),
@@ -62,7 +78,11 @@ struct MeaningsView: View {
                 if let m = pendingDelete { Task { await model.deleteMeaning(m) } }
                 pendingDelete = nil
             }
-        } message: { Text("This meaning will disappear for both of you.") }
+        } message: {
+            // An original-app partner shares the library on the server; iCloud ones are per phone.
+            Text(model.selectedPartner?.bond.legacy == true ? "This meaning will disappear for both of you."
+                                                            : "This meaning will be removed from your Touch Language.")
+        }
     }
 
     @ViewBuilder private func meaningCard(_ meaning: TouchMeaning) -> some View {
@@ -83,6 +103,13 @@ struct MeaningsView: View {
                     HStack(spacing: 8) {
                         Text(meaning.label).font(.headline).foregroundStyle(.white)
                         if meaning.isNew { newBadge }
+                        Button { toggleFavourite(meaning) } label: {
+                            Image(systemName: meaning.favourite == true ? "star.fill" : "star")
+                                .font(.system(size: 14, weight: .bold))
+                                .foregroundStyle(meaning.favourite == true ? Theme.amber : Theme.subtitle)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(meaning.favourite == true ? "Remove \(meaning.label) from favourites" : "Favourite \(meaning.label)")
                     }
                     TouchViz(pattern: meaning.pattern, generation: meaning.touchGeneration,
                              colorRGB: meaning.colorRGB, endColorRGB: meaning.endColorRGB)
@@ -109,8 +136,69 @@ struct MeaningsView: View {
             .background(Capsule().fill(Color.white.opacity(0.85)))
     }
 
+    private func toggleFavourite(_ meaning: TouchMeaning) {
+        var m = meaning
+        m.favourite = !(meaning.favourite ?? false)
+        Task { await model.updateMeaning(m) }
+    }
+
     private func clearNew(_ meaning: TouchMeaning) {
         guard let i = store.meanings.firstIndex(where: { $0.id == meaning.id }), store.meanings[i].isNew else { return }
         store.meanings[i].isNew = false
+    }
+}
+
+/// Rename a meaning (20 characters, as the original), change its emoji or its colours.
+private struct EditMeaningSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let meaning: TouchMeaning
+    let onSave: (TouchMeaning) -> Void
+    @State private var label = ""
+    @State private var emoji = ""
+    @State private var start: Color = .pink
+    @State private var end: Color = .pink
+
+    private static let maxName = 20
+    private var trimmed: String { label.trimmingCharacters(in: .whitespaces) }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    TextField("Name", text: $label)
+                        .onChange(of: label) { if $0.count > Self.maxName { label = String($0.prefix(Self.maxName)) } }
+                    TextField("Emoji", text: $emoji)
+                        .onChange(of: emoji) { if $0.count > 2 { emoji = String($0.prefix(2)) } }
+                } footer: { Text("\(label.count)/\(Self.maxName)") }
+                Section("Colours") {
+                    ColorPicker("Start", selection: $start, supportsOpacity: false)
+                    ColorPicker("End", selection: $end, supportsOpacity: false)
+                    TouchViz(pattern: meaning.pattern, generation: meaning.touchGeneration,
+                             colorRGB: start.rgbInt, endColorRGB: end.rgbInt)
+                }
+            }
+            .navigationTitle("Edit touch")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        var m = meaning
+                        m.label = trimmed
+                        m.emoji = emoji
+                        m.colorRGB = start.rgbInt
+                        m.endColorRGB = end.rgbInt
+                        onSave(m)
+                        dismiss()
+                    }
+                    .disabled(trimmed.isEmpty)
+                }
+            }
+        }
+        .onAppear {
+            label = meaning.label; emoji = meaning.emoji
+            start = Color(rgbInt: meaning.colorRGB); end = Color(rgbInt: meaning.endColorRGB)
+        }
+        .preferredColorScheme(.dark)
     }
 }
