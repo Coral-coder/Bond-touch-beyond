@@ -98,7 +98,7 @@ extension AppModel {
             store.chatLinks.removeValue(forKey: legacyID)
         }
         let before = Set(cloudPending.map(\.id))
-        await createBond()
+        await createBond(forExistingPartner: true)
         if let new = cloudPending.first(where: { !before.contains($0.id) }) {
             store.chatLinks[legacyID] = new.id
         }

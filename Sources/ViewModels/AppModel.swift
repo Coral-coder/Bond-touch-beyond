@@ -3,6 +3,7 @@ import Combine
 import CoreLocation
 import Foundation
 import UserNotifications
+import StoreKit
 import SwiftUI
 import UIKit
 
@@ -524,7 +525,17 @@ final class AppModel: ObservableObject {
     /// Creates an iCloud bond and its invite link. Returns an error message when it can't
     /// (chiefly: not signed into iCloud), so the UI can show it instead of a dead end.
     @discardableResult
-    func createBond() async -> String? {
+    /// As the original: at most three partners — the bracelet has three partner slots.
+    static let maxPartners = 3
+    private var partnerLimitMessage: String? {
+        partners.count + cloudPending.count >= Self.maxPartners
+            ? "You can have up to \(Self.maxPartners) partners — one for each of the bracelet's slots. Remove one in My people first."
+            : nil
+    }
+
+    /// `forExistingPartner`: an invite to move an original-app partner (already counted) to iCloud.
+    func createBond(forExistingPartner: Bool = false) async -> String? {
+        if !forExistingPartner, let full = partnerLimitMessage { return full }
         iCloudStatus = await relay.accountStatusMessage()
         if let msg = iCloudStatus { return msg }
         if myUserID.isEmpty { myUserID = (try? await relay.currentUserID()) ?? "" }
@@ -549,6 +560,9 @@ final class AppModel: ObservableObject {
         let code = CloudRelay.normalize(rawCode)
         if store.cloudBondCodes[code] == true {
             return "That's your own invite code — send it to your partner so they can join."
+        }
+        if store.cloudBondCodes[code] == nil, partners.count >= Self.maxPartners, let full = partnerLimitMessage {
+            return full
         }
         if store.cloudBondCodes[code] == false, cloudPartners.contains(where: { $0.id == code }) {
             selectedPartnerID = code      // already paired with this code
@@ -651,6 +665,7 @@ final class AppModel: ObservableObject {
             } else {
                 let seq = try await relay.sendTouch(touch, bond: bond)
                 updateHistory(touch.id) { $0.delivery = .sent; $0.ringSeq = seq }
+                askForRatingIfDue()
                 NetLog.shared.log(.ok, "Touch → iCloud accepted", "\(bond.partnerName)")
                 // Wake their phone right away (CloudKit's own push can lag in deep sleep).
                 let me = store.profile.name.isEmpty ? "Someone" : store.profile.name
@@ -668,6 +683,16 @@ final class AppModel: ObservableObject {
             statusLine = "Send failed: \(error.localizedDescription)"
             NetLog.shared.log(.fail, "Send touch failed (\(route))", error.localizedDescription)
         }
+    }
+
+    /// Once, after 25 touches sent, the App Store rating prompt (iOS decides whether to show it).
+    private func askForRatingIfDue() {
+        let count = UserDefaults.standard.integer(forKey: "TouchesSent") + 1
+        UserDefaults.standard.set(count, forKey: "TouchesSent")
+        guard count == 25, UIApplication.shared.applicationState == .active,
+              let scene = UIApplication.shared.connectedScenes.first(where: { $0.activationState == .foregroundActive }) as? UIWindowScene
+        else { return }
+        SKStoreReviewController.requestReview(in: scene)
     }
 
     /// Changes one history entry and saves.
