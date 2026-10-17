@@ -1,0 +1,40 @@
+# The widget target and entitlement, to paste back into project.yml once the App Group exists.
+#
+# App entitlements (targets.BondTouchBeyond.entitlements.properties):
+#   com.apple.security.application-groups:
+#     - group.$(APP_BUNDLE_ID)
+# App dependency: - target: BondTouchBeyondWidget
+
+  # Home-screen widget: the partner and up to 10 meanings; tap one to send it (iOS 17 in the
+  # background via SendMeaningIntent, iOS 16 through the app). Embedded in the iOS app; reads
+  # the snapshot the app keeps in the shared App Group.
+  BondTouchBeyondWidget:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: Widget
+      - path: Sources/Shared
+      - path: Sources/Design/Theme.swift
+      - path: Sources/Design/TouchViz.swift
+      - path: Sources/Models/TouchPattern.swift
+      - path: Sources/Views/Color+RGB.swift
+    info:
+      path: Widget/Info.plist
+      properties:
+        CFBundleDisplayName: Bond Touch Beyond
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        BTAppGroup: group.$(APP_BUNDLE_ID)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    entitlements:
+      path: Widget/BondTouchBeyondWidget.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.$(APP_BUNDLE_ID)
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(APP_BUNDLE_ID).widget
+        SKIP_INSTALL: YES
+        # Sources/Shared/SendMeaningIntent.swift queues the send instead of calling the app.
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: $(inherited) WIDGET_EXTENSION
