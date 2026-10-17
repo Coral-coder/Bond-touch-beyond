@@ -280,10 +280,11 @@ struct HomeView: View {
         return Array(model.history.filter { $0.bondID == id }.suffix(40).reversed())
     }
 
-    /// Recent touches — the only scrolling region on Home. A fixed header, then the list.
+    /// Recent touches — the only scrolling region on Home: a framed glass panel with a fixed
+    /// header, and the touches scrolling inside it (clipped to the frame, faded at its edges).
     @ViewBuilder private var feed: some View {
         let touches = partnerHistory
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 8) {
             if partner != nil {
                 HStack {
                     Text("Recent touches with \(partner?.displayName ?? "partner")")
@@ -294,30 +295,41 @@ struct HomeView: View {
                             .font(Theme.font(11)).foregroundStyle(Theme.subtitle).labelStyle(.titleAndIcon)
                     }
                 }
-                .padding(.horizontal, 22)
-                if !touches.isEmpty { summary(touches) }
+                .padding(.horizontal, 16)
+                if !touches.isEmpty { summary(touches).padding(.horizontal, -6) }
             }
             if touches.isEmpty {
                 if partner != nil {
                     Text("No touches yet with \(partner?.displayName ?? "partner"). Send one above.")
                         .font(Theme.font(13)).foregroundStyle(Theme.subtitle)
-                        .frame(maxWidth: .infinity).padding(.top, 12)
+                        .frame(maxWidth: .infinity).padding(.vertical, 24)
                 }
                 Spacer(minLength: 0)
             } else {
-                ScrollView(showsIndicators: false) {
-                    VStack(alignment: .leading, spacing: 14) {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 12) {
                         ForEach(touches) { touch in
                             SwipeToSave(onSave: { meaningName = ""; meaningFromTouch = touch }) {
                                 touchRow(touch)
                             }
                         }
-                        Color.clear.frame(height: 96) // room for the floating tab bar
                     }
-                    .padding(.horizontal, 18)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 10)
                 }
+                .scrollIndicators(.visible)
+                .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                // Rows fade out at the frame's top and bottom edges instead of being cut.
+                .mask(LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: .black, location: 0.04),
+                                             .init(color: .black, location: 0.96), .init(color: .clear, location: 1)],
+                                     startPoint: .top, endPoint: .bottom))
             }
         }
+        .padding(.top, 14).padding(.bottom, 6)
+        .frame(maxWidth: .infinity, minHeight: 220, maxHeight: .infinity, alignment: .top)
+        .glass(cornerRadius: 26)
+        .padding(.horizontal, 12)
+        .padding(.bottom, 92)   // clear of the floating tab bar
     }
 
     /// "Last sent 5 min ago · Last received 2 hr ago", as the original's history header.
