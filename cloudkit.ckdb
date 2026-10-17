@@ -1,18 +1,126 @@
 DEFINE SCHEMA
 
-    -- Bond Touch Beyond iCloud relay (public database).
-    --
-    -- Each kind of data has its own record type. Everything is in the encrypted `payload`
-    -- field (AES-GCM, key derived on the phones from the invite code, which never goes to
-    -- iCloud). Record names are opaque IDs derived from the code, and records are read by
-    -- name only — so no QUERYABLE / SORTABLE indexes are needed.
-    --
-    -- The other fields are from the earlier schema already deployed to Production; they're
-    -- kept so this import only ADDS (Production doesn't allow removing fields). They're unused.
-    --
-    -- Import in the CloudKit Console (Development schema), then Deploy Schema Changes to
-    -- Production. An import REPLACES the whole schema, so this file is complete — including
-    -- CloudKit's own built-in Users type, which can't be removed.
+    RECORD TYPE Bond (
+        "___createTime" TIMESTAMP,
+        "___createdBy"  REFERENCE,
+        "___etag"       STRING,
+        "___modTime"    TIMESTAMP,
+        "___modifiedBy" REFERENCE,
+        "___recordID"   REFERENCE,
+        ownerName       STRING,
+        payload         BYTES,
+        GRANT READ, WRITE TO "_creator",
+        GRANT READ, CREATE TO "_icloud"
+    );
+
+    RECORD TYPE Cursor (
+        "___createTime" TIMESTAMP,
+        "___createdBy"  REFERENCE,
+        "___etag"       STRING,
+        "___modTime"    TIMESTAMP,
+        "___modifiedBy" REFERENCE,
+        "___recordID"   REFERENCE,
+        payload         BYTES,
+        GRANT READ, WRITE TO "_creator",
+        GRANT READ, CREATE TO "_icloud"
+    );
+
+    RECORD TYPE Heartbeat (
+        "___createTime" TIMESTAMP,
+        "___createdBy"  REFERENCE,
+        "___etag"       STRING,
+        "___modTime"    TIMESTAMP,
+        "___modifiedBy" REFERENCE,
+        "___recordID"   REFERENCE,
+        bpm             INT64,
+        payload         BYTES,
+        senderID        STRING,
+        sentAt          TIMESTAMP,
+        GRANT READ, WRITE TO "_creator",
+        GRANT READ, CREATE TO "_icloud"
+    );
+
+    RECORD TYPE Message (
+        "___createTime" TIMESTAMP,
+        "___createdBy"  REFERENCE,
+        "___etag"       STRING,
+        "___modTime"    TIMESTAMP,
+        "___modifiedBy" REFERENCE,
+        "___recordID"   REFERENCE,
+        colorRGB        INT64,
+        image           ASSET,
+        kind            STRING,
+        payload         BYTES,
+        senderID        STRING,
+        sentAt          TIMESTAMP,
+        text            STRING,
+        GRANT READ, WRITE TO "_creator",
+        GRANT READ, CREATE TO "_icloud"
+    );
+
+    RECORD TYPE Photo (
+        "___createTime" TIMESTAMP,
+        "___createdBy"  REFERENCE,
+        "___etag"       STRING,
+        "___modTime"    TIMESTAMP,
+        "___modifiedBy" REFERENCE,
+        "___recordID"   REFERENCE,
+        payload         BYTES,
+        GRANT READ, WRITE TO "_creator",
+        GRANT READ, CREATE TO "_icloud"
+    );
+
+    RECORD TYPE Presence (
+        "___createTime" TIMESTAMP,
+        "___createdBy"  REFERENCE,
+        "___etag"       STRING,
+        "___modTime"    TIMESTAMP,
+        "___modifiedBy" REFERENCE,
+        "___recordID"   REFERENCE,
+        lat             DOUBLE,
+        lng             DOUBLE,
+        online          INT64,
+        payload         BYTES,
+        senderID        STRING,
+        sentAt          TIMESTAMP,
+        GRANT READ, WRITE TO "_creator",
+        GRANT READ, CREATE TO "_icloud"
+    );
+
+    RECORD TYPE Profile (
+        "___createTime" TIMESTAMP,
+        "___createdBy"  REFERENCE,
+        "___etag"       STRING,
+        "___modTime"    TIMESTAMP,
+        "___modifiedBy" REFERENCE,
+        "___recordID"   REFERENCE,
+        colorRGB        INT64,
+        name            STRING,
+        payload         BYTES,
+        photo           ASSET,
+        senderID        STRING,
+        sentAt          TIMESTAMP,
+        GRANT READ, WRITE TO "_creator",
+        GRANT READ, CREATE TO "_icloud"
+    );
+
+    RECORD TYPE Touch (
+        "___createTime" TIMESTAMP,
+        "___createdBy"  REFERENCE,
+        "___etag"       STRING,
+        "___modTime"    TIMESTAMP,
+        "___modifiedBy" REFERENCE,
+        "___recordID"   REFERENCE,
+        colorRGB        INT64,
+        endColorRGB     INT64,
+        generation      INT64,
+        pattern         BYTES,
+        payload         BYTES,
+        senderID        STRING,
+        sentAt          TIMESTAMP,
+        GRANT READ, WRITE TO "_creator",
+        GRANT READ, CREATE TO "_icloud"
+    );
 
     RECORD TYPE Users (
         "___createTime" TIMESTAMP,
@@ -20,90 +128,23 @@ DEFINE SCHEMA
         "___etag"       STRING,
         "___modTime"    TIMESTAMP,
         "___modifiedBy" REFERENCE,
-        "___recordID"   REFERENCE QUERYABLE,
+        "___recordID"   REFERENCE,
         roles           LIST<INT64>,
-        GRANT WRITE TO "_creator",
+        GRANT READ, WRITE TO "_creator",
         GRANT READ TO "_world"
     );
 
-    RECORD TYPE Bond (
-        ownerName   STRING,
-        payload     BYTES,
+    RECORD TYPE "cloudkit.share" (
+        "___createTime"               TIMESTAMP,
+        "___createdBy"                REFERENCE,
+        "___etag"                     STRING,
+        "___modTime"                  TIMESTAMP,
+        "___modifiedBy"               REFERENCE,
+        "___recordID"                 REFERENCE,
+        "cloudkit.thumbnailImageData" BYTES,
+        "cloudkit.title"              STRING,
+        "cloudkit.type"               STRING,
         GRANT WRITE TO "_creator",
         GRANT CREATE TO "_icloud",
-        GRANT READ TO "_icloud"
-    );
-
-    RECORD TYPE Profile (
-        senderID    STRING,
-        name        STRING,
-        colorRGB    INT64,
-        photo       ASSET,
-        sentAt      TIMESTAMP,
-        payload     BYTES,
-        GRANT WRITE TO "_creator",
-        GRANT CREATE TO "_icloud",
-        GRANT READ TO "_icloud"
-    );
-
-    RECORD TYPE Photo (
-        payload     BYTES,
-        GRANT WRITE TO "_creator",
-        GRANT CREATE TO "_icloud",
-        GRANT READ TO "_icloud"
-    );
-
-    RECORD TYPE Presence (
-        senderID    STRING,
-        online      INT64,
-        lat         DOUBLE,
-        lng         DOUBLE,
-        sentAt      TIMESTAMP,
-        payload     BYTES,
-        GRANT WRITE TO "_creator",
-        GRANT CREATE TO "_icloud",
-        GRANT READ TO "_icloud"
-    );
-
-    RECORD TYPE Heartbeat (
-        senderID    STRING,
-        bpm         INT64,
-        sentAt      TIMESTAMP,
-        payload     BYTES,
-        GRANT WRITE TO "_creator",
-        GRANT CREATE TO "_icloud",
-        GRANT READ TO "_icloud"
-    );
-
-    RECORD TYPE Touch (
-        senderID    STRING,
-        pattern     BYTES,
-        generation  INT64,
-        colorRGB    INT64,
-        endColorRGB INT64,
-        sentAt      TIMESTAMP,
-        payload     BYTES,
-        GRANT WRITE TO "_creator",
-        GRANT CREATE TO "_icloud",
-        GRANT READ TO "_icloud"
-    );
-
-    RECORD TYPE Message (
-        senderID    STRING,
-        kind        STRING,
-        text        STRING,
-        colorRGB    INT64,
-        sentAt      TIMESTAMP,
-        image       ASSET,
-        payload     BYTES,
-        GRANT WRITE TO "_creator",
-        GRANT CREATE TO "_icloud",
-        GRANT READ TO "_icloud"
-    );
-
-    RECORD TYPE Cursor (
-        payload     BYTES,
-        GRANT WRITE TO "_creator",
-        GRANT CREATE TO "_icloud",
-        GRANT READ TO "_icloud"
+        GRANT READ TO "_world"
     );
