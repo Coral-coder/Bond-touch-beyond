@@ -28,6 +28,7 @@ final class CloudRelay {
         var partnerName: String?
         var partnerColorRGB: Int?
         var partnerPhoto: Data?
+        var partnerPushToken: String?
     }
 
     private let container: CKContainer
@@ -196,9 +197,10 @@ final class CloudRelay {
                                    code: bond.id, senderID: senderID, payload: payload))
     }
 
-    func sendProfile(name: String, colorRGB: Int, photo: URL?, bond: Bond, senderID: String) async throws {
+    func sendProfile(name: String, colorRGB: Int, photo: URL?, pushToken: String? = nil,
+                     bond: Bond, senderID: String) async throws {
         let photoData = photo.flatMap { try? Data(contentsOf: $0) }
-        let body = ProfilePayload(name: name, colorRGB: colorRGB, photo: photoData)
+        let body = ProfilePayload(name: name, colorRGB: colorRGB, photo: photoData, pushToken: pushToken)
         guard let payload = BondCrypto.seal(body, code: bond.id) else { return }
         try await upsert(newRecord(Self.recordTypeProfile, name: "pf-\(bond.id)-\(senderID)",
                                    code: bond.id, senderID: senderID, payload: payload))
@@ -254,6 +256,7 @@ final class CloudRelay {
                     if sentAt > newestProfile, let p = BondCrypto.open(ProfilePayload.self, from: data, code: code) {
                         newestProfile = sentAt
                         events.partnerName = p.name; events.partnerColorRGB = p.colorRGB; events.partnerPhoto = p.photo
+                        events.partnerPushToken = p.pushToken
                     }
                 default: break
                 }
@@ -314,7 +317,7 @@ final class CloudRelay {
 private struct TouchPayload: Codable { let pattern: [Int]; let generation: Int; let colorRGB: Int; let endColorRGB: Int }
 private struct MessagePayload: Codable { let kind: String; let text: String; let colorRGB: Int; let image: Data? }
 private struct PresencePayload: Codable { let online: Bool; let lat: Double?; let lng: Double? }
-private struct ProfilePayload: Codable { let name: String; let colorRGB: Int; let photo: Data? }
+private struct ProfilePayload: Codable { let name: String; let colorRGB: Int; let photo: Data?; let pushToken: String? }
 
 enum CloudRelayError: LocalizedError {
     case bondNotFound

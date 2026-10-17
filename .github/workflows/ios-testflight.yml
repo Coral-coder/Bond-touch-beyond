@@ -136,6 +136,32 @@ jobs:
           chmod 600 "$RUNNER_TEMP/asc/AuthKey_$ASC_KEY_ID.p8"
           echo "ASC_KEY_PATH=$RUNNER_TEMP/asc/AuthKey_$ASC_KEY_ID.p8" >> "$GITHUB_ENV"
 
+      - name: Inject the APNs auth key (direct partner-to-partner push)
+        env:
+          APNS_KEY_ID: ${{ secrets.APNS_KEY_ID }}
+          APNS_TEAM_ID: ${{ secrets.APNS_TEAM_ID }}
+          APNS_KEY_P8: ${{ secrets.APNS_KEY_P8 }}
+        run: |
+          if [ -z "$APNS_KEY_P8" ] || [ -z "$APNS_KEY_ID" ] || [ -z "$APNS_TEAM_ID" ]; then
+            echo "No APNS_* secrets set — direct push stays dormant (CloudKit push still used)."
+            exit 0
+          fi
+          mkdir -p Sources/Push
+          {
+            echo 'import Foundation'
+            echo ''
+            echo '// Generated at build time from the APNS_* GitHub secrets. Not the committed source.'
+            echo 'enum APNsSecrets {'
+            echo "    static let keyID = \"$APNS_KEY_ID\""
+            echo "    static let teamID = \"$APNS_TEAM_ID\""
+            echo '    static let privateKeyP8 = """'
+            printf '%s\n' "$APNS_KEY_P8"
+            echo '"""'
+            echo '    static var isConfigured: Bool { !keyID.isEmpty && !teamID.isEmpty && !privateKeyP8.isEmpty }'
+            echo '}'
+          } > Sources/Push/APNsSecrets.swift
+          echo "APNs key injected (kid $APNS_KEY_ID) — direct push enabled for this build."
+
       - name: Select Xcode 26 or later
         run: |
           xcode=$(ls -d /Applications/Xcode_2[6-9]*.app /Applications/Xcode_[3-9][0-9]*.app 2>/dev/null | sort -V | tail -1)

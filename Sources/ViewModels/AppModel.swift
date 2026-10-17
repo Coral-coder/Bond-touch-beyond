@@ -47,6 +47,10 @@ final class AppModel: ObservableObject {
     @Published var partnerPhotos: [String: UIImage] = [:]
     @Published var myPhoto: UIImage?
     var photoRequests: Set<String> = []
+    /// This device's APNs token (set once iOS registers it), published to partners so they can
+    /// wake this phone directly. Each partner's token, by bond, for the same in reverse.
+    var myPushToken = ""
+    var partnerPushTokens: [String: String] = [:]
     /// Cloud bonds this device has already pushed its profile (incl. photo) to this session.
     var profileSyncedBondIDs: Set<String> = []
     /// The Apple Watch link (touch bar + meanings on the watch).
@@ -337,12 +341,43 @@ final class AppModel: ObservableObject {
             } else {
                 try await relay.sendTouch(touch, bond: bond)
                 NetLog.shared.log(.ok, "Touch → iCloud accepted", "\(bond.partnerName)")
+                // Wake their phone right away (CloudKit's own push can lag in deep sleep).
+                let me = store.profile.name.isEmpty ? "Someone" : store.profile.name
+                await pushPartner(bondID: bond.id, title: "\(me) touched you", body: "❤️")
             }
             recordTouch(touch)
         } catch {
             statusLine = "Send failed: \(error.localizedDescription)"
             NetLog.shared.log(.fail, "Send touch failed (\(route))", error.localizedDescription)
         }
+    }
+
+    /// Sends a saved meaning (Touch Language). For an original-app partner with a server
+    /// meaning id it goes through the Bond API (which lights their bracelet by id); otherwise
+    /// the meaning's pattern and colour are sent as a normal touch.
+    func sendMeaning(_ meaning: TouchMeaning, toBondID: String? = nil) async {
+        guard let bond = bond(for: toBondID) else { return }
+        if bond.legacy, let serverID = meaning.serverID {
+            let bg = UIApplication.shared.beginBackgroundTask(withName: "send-meaning")
+            defer { UIApplication.shared.endBackgroundTask(bg) }
+            let touch = TouchMessage(bondID: bond.id, senderID: myUserID, pattern: meaning.pattern,
+                                     generation: meaning.touchGeneration, colorRGB: meaning.colorRGB,
+                                     endColorRGB: meaning.endColorRGB)
+            NetLog.shared.log(.send, "Send meaning \"\(meaning.label)\" → \(bond.partnerName) (original Bond API)",
+                              "meaningId \(serverID)")
+            do {
+                try await BondBackend.sendMeaningTouch(bondId: bond.id, meaningId: serverID,
+                                                       bearer: try await legacyToken())
+                recordTouch(touch)
+            } catch {
+                statusLine = "Send failed: \(error.localizedDescription)"
+                NetLog.shared.log(.fail, "Send meaning failed", error.localizedDescription)
+            }
+            return
+        }
+        // iCloud, or a legacy meaning without a server id: send the pattern and colour.
+        await sendTouch(pattern: meaning.pattern, generation: meaning.touchGeneration,
+                        colorRGB: meaning.colorRGB, endColorRGB: meaning.endColorRGB, toBondID: toBondID)
     }
 
     // MARK: - Profile
@@ -355,7 +390,37 @@ final class AppModel: ObservableObject {
         legacyPublishProfile(name: p.name, colorRGB: p.colorRGB)
         for partner in cloudPartners {
             try? await relay.sendProfile(name: p.name, colorRGB: p.colorRGB, photo: myPhotoFileURL,
-                                         bond: partner.bond, senderID: myUserID)
+                                         pushToken: myPushToken, bond: partner.bond, senderID: myUserID)
+        }
+    }
+
+    /// iOS handed us a fresh APNs device token — remember it and push it out to partners so
+    /// they can wake this phone directly when they touch.
+    func updatePushToken(_ hex: String) {
+        guard hex != myPushToken else { return }
+        myPushToken = hex
+        Task { await publishProfile() }
+    }
+
+    /// Wakes a cloud partner's phone directly via APNs (no-op if their token or our key is
+    /// missing — CloudKit's own push still covers that case).
+    private func pushPartner(bondID: String, title: String, body: String) async {
+        guard let token = partnerPushTokens[bondID], !token.isEmpty else { return }
+        await APNsClient.shared.send(toDeviceToken: token, title: title, body: body, collapseID: "touch-\(bondID)")
+    }
+
+    /// Unbonds: deletes the iCloud bond (owner only) or cancels the original-app bond, and
+    /// drops the partner locally.
+    func removeBond(_ bond: Bond) async {
+        if bond.legacy { await legacyCancelBond(bond); return }
+        do {
+            try await relay.deleteBond(bond)
+            cloudPartners.removeAll { $0.id == bond.id }
+            cloudPending.removeAll { $0.id == bond.id }
+            store.cloudBondCodes[bond.id] = nil
+            if selectedPartnerID == bond.id { selectedPartnerID = partners.first?.id }
+        } catch {
+            statusLine = "Couldn't remove: \(error.localizedDescription)"
         }
     }
 
@@ -390,6 +455,7 @@ final class AppModel: ObservableObject {
             if let name = events.partnerName { cloudPartners[index].displayName = name }
             if let color = events.partnerColorRGB { cloudPartners[index].colorRGB = color }
             if let photo = events.partnerPhoto { setPartnerPhoto(photo, bondID: partner.id) }
+            if let token = events.partnerPushToken, !token.isEmpty { partnerPushTokens[partner.id] = token }
             if let online = events.presenceOnline { cloudPartners[index].online = online }
             if let seen = events.presenceLastSeen { cloudPartners[index].lastSeen = seen }
             if let lat = events.presenceLat, let lng = events.presenceLng {
@@ -450,7 +516,11 @@ final class AppModel: ObservableObject {
             }
             await sendTouch(pattern: pattern, generation: 2, colorRGB: 0xE85D75, toBondID: bond.id)
         } else {
-            do { try await relay.sendHeartbeat(bpm: bpm, bond: bond, senderID: myUserID) }
+            do {
+                try await relay.sendHeartbeat(bpm: bpm, bond: bond, senderID: myUserID)
+                let me = store.profile.name.isEmpty ? "Someone" : store.profile.name
+                await pushPartner(bondID: bond.id, title: "\(me)'s heartbeat", body: "💓 \(bpm) bpm")
+            }
             catch { statusLine = "Heartbeat failed: \(error.localizedDescription)"; return nil }
         }
         return bpm

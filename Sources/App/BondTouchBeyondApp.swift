@@ -1,6 +1,7 @@
 import CloudKit
 import SwiftUI
 import UIKit
+import UserNotifications
 
 @main
 struct BondTouchBeyondApp: App {
@@ -37,13 +38,39 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
 
     func application(_ application: UIApplication,
                      didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
-        application.registerForRemoteNotifications()
+        UNUserNotificationCenter.current().delegate = self
+        // Ask to show alert pushes (a partner's touch wakes the phone reliably as an alert);
+        // register for a device token either way so CloudKit's silent push still works.
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in
+            DispatchQueue.main.async { application.registerForRemoteNotifications() }
+        }
         return true
+    }
+
+    func application(_ application: UIApplication,
+                     didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
+        let hex = deviceToken.map { String(format: "%02x", $0) }.joined()
+        Task { @MainActor in model?.updatePushToken(hex) }
+    }
+
+    func application(_ application: UIApplication,
+                     didFailToRegisterForRemoteNotificationsWithError error: Error) {
+        NetLog.shared.log(.fail, "APNs: device token registration failed", error.localizedDescription)
     }
 
     func application(_ application: UIApplication,
                      didReceiveRemoteNotification userInfo: [AnyHashable: Any]) async -> UIBackgroundFetchResult {
         await model?.handleRemoteNotification()
         return .newData
+    }
+}
+
+extension AppDelegate: UNUserNotificationCenterDelegate {
+    /// Show a partner's push even while the app is foregrounded, and refresh when one arrives.
+    func userNotificationCenter(_ center: UNUserNotificationCenter,
+                                willPresent notification: UNNotification) async
+        -> UNNotificationPresentationOptions {
+        await model?.handleRemoteNotification()
+        return [.banner, .sound]
     }
 }
