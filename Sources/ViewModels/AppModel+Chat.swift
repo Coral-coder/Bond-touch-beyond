@@ -196,6 +196,7 @@ extension AppModel {
             var sent = msg
             sent.ringSeq = try await relay.sendChat(msg, bond: bond)
             appendChat([sent], bondID: bond.id)
+            await pushChat(bond)
         } catch {
             statusLine = "Message failed: \(error.localizedDescription)"
         }
@@ -214,9 +215,17 @@ extension AppModel {
             var sent = msg
             sent.ringSeq = try await relay.sendChat(msg, bond: bond)
             appendChat([sent], bondID: bond.id)
+            await pushChat(bond)
         } catch {
             statusLine = "Photo failed: \(error.localizedDescription)"
         }
+    }
+
+    /// Wakes the partner's phone so the message arrives now. The notification never shows
+    /// what was said — Private Space stays private on a lock screen.
+    private func pushChat(_ bond: Bond) async {
+        let me = store.profile.name.isEmpty ? "Someone" : store.profile.name
+        await pushPartner(bondID: bond.id, title: me, body: "New message in Private Space", group: "m")
     }
 
     // MARK: - Original-backend encrypted chat (disabled: App Check)

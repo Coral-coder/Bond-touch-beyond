@@ -746,7 +746,8 @@ final class AppModel: ObservableObject {
     /// A touch rides inside the push, sealed with the bond's key, so the partner's phone can
     /// play it on their bracelet the moment it wakes — no iCloud fetch first (a background
     /// wake only gets a few seconds). The bond is named by its opaque locator, never its code.
-    private func pushPartner(bondID: String, title: String, body: String, touch: TouchMessage? = nil) async {
+    func pushPartner(bondID: String, title: String, body: String, touch: TouchMessage? = nil,
+                     group: String = "t") async {
         guard let token = partnerPushTokens[bondID], !token.isEmpty else { return }
         // Their bracelet is connected → it plays the touch; don't buzz their phone too.
         let silent = partnerBraceletConnected[bondID] == true
@@ -754,7 +755,7 @@ final class AppModel: ObservableObject {
         var extra: [String: Any] = ["bl": locator]
         if let touch, let sealed = BondCrypto.seal(touch, code: bondID) { extra["bt"] = sealed.base64EncodedString() }
         await APNsClient.shared.send(toDeviceToken: token, title: title, body: body, silent: silent,
-                                     collapseID: "t-\(locator.prefix(16))", extra: extra)
+                                     collapseID: "\(group)-\(locator.prefix(16))", extra: extra)
     }
 
     /// The touch carried in a partner's push, decrypted with that bond's key.
