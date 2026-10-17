@@ -314,6 +314,8 @@ final class BraceletManager: NSObject, ObservableObject {
     private var heartbeatTimer: Timer?
     private var heartbeatWatchdog: Timer?
     private var heartbeatBPM = 0
+    /// A Bond Touch More is glowing between heartbeat spikes.
+    private var heartbeatGlow = false
     @Published private(set) var heartbeatActive = false
 
     /// CoreBluetooth's `connect` never times out, and service discovery / the pairing
@@ -573,8 +575,23 @@ final class BraceletManager: NSObject, ObservableObject {
         heartbeatActive = true
         let interval = 60.0 / Double(clamped)
         if gen == .v3 {
-            // The Bond Touch More plays the whole heartbeat itself, light + vibration in sync.
-            enqueue(BondGATT.v3Heartbeat(bpm: clamped, seconds: seconds, rgb: colorRGB))
+            // Bond Touch More: the band glows steadily between beats (light only, no motor);
+            // each beat is a short spike up and down the bar, which is all that vibrates.
+            // The glow is put back just after each spike has played.
+            heartbeatGlow = true
+            let beat: () -> Void = { [weak self] in
+                guard let self, self.gen == .v3 else { return }
+                self.enqueue(BondGATT.v3HeartbeatSpike(rgb: colorRGB))
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+                    guard let self, self.heartbeatGlow else { return }
+                    self.enqueue([BondGATT.v3Color(colorRGB)])
+                }
+            }
+            enqueue([BondGATT.v3Color(colorRGB)])
+            beat()
+            let timer = Timer(timeInterval: interval, repeats: true) { _ in beat() }
+            RunLoop.main.add(timer, forMode: .common)
+            heartbeatTimer = timer
             let end = Timer(timeInterval: seconds, repeats: false) { [weak self] _ in self?.stopHeartbeat() }
             RunLoop.main.add(end, forMode: .common)
             heartbeatWatchdog = end
@@ -595,6 +612,10 @@ final class BraceletManager: NSObject, ObservableObject {
     func stopHeartbeat() {
         heartbeatTimer?.invalidate(); heartbeatTimer = nil
         heartbeatWatchdog?.invalidate(); heartbeatWatchdog = nil
+        if heartbeatGlow {
+            heartbeatGlow = false
+            if gen == .v3 { enqueue([BondGATT.v3LedsOff]) }   // the glow goes out with the last beat
+        }
         heartbeatBPM = 0
         heartbeatActive = false
     }

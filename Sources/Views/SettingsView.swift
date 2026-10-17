@@ -44,7 +44,7 @@ struct SettingsView: View {
                                              set: { store.keepAliveInBackground = $0; model.updateKeepAlive() })) {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text("Stay connected in background").foregroundStyle(.white)
-                                Text("Receive and send touches with the phone locked. Needed for partners on the original app; shows the location indicator.")
+                                Text("Keeps the app running with the phone locked or the app closed, so every touch reaches your bracelet right away. Shows the location indicator.")
                                     .font(.caption).foregroundStyle(Theme.subtitle)
                             }
                         }

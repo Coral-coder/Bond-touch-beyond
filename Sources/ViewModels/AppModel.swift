@@ -144,15 +144,16 @@ final class AppModel: ObservableObject {
     @Published var braceletDoubleTaps = 0
     private let heartbeatSound = HeartbeatSound()
 
-    /// Plays a heartbeat: on a Bond Touch More the EKG itself (the light rests mid-band and
-    /// jumps up and down on each beat, the motors following); on other bracelets a pulse per
-    /// beat; with no bracelet, on the phone. On screen it's a live EKG with a beep per beat.
+    /// Plays a heartbeat: on a Bond Touch More the band glows between beats and each beat is
+    /// a spike up and down the bar (the only part that vibrates); on other bracelets a pulse
+    /// per beat; with no bracelet, on the phone. On screen it's a live EKG with a beep per beat.
     func feelHeartbeat(_ touch: TouchMessage, bpm: Int) {
         let foreground = UIApplication.shared.applicationState == .active
         let seconds = 5.0
         if bracelet.isReady {
-            if bracelet.isThirdGeneration { _ = bracelet.play(touch, holdIfOffline: false) }
-            else { bracelet.playHeartbeat(bpm: bpm, seconds: seconds, colorRGB: touch.colorRGB) }
+            // Every bracelet beats it from the phone; a Bond Touch More glows between beats
+            // and only buzzes on each beat's spike.
+            bracelet.playHeartbeat(bpm: bpm, seconds: seconds, colorRGB: touch.colorRGB)
         } else if foreground {
             haptics.playHeartbeat(bpm: bpm, seconds: seconds)
         }
@@ -295,10 +296,13 @@ final class AppModel: ObservableObject {
     /// A weak reference so the scene delegate can route an accepted CloudKit share invite in.
     static weak var shared: AppModel?
 
-    /// Whether the app needs to keep running in the background: on in Settings and some
-    /// partner is on the original servers (iCloud partners wake the app with pushes).
+    /// Whether the app keeps running in the background: on in Settings and there's a partner.
+    /// iCloud partners also wake the app with pushes, but iOS throttles those (and drops them
+    /// once the app is swiped away), so a touch could sit unplayed until the app was opened.
+    /// Kept running, the app keeps checking iCloud and plays every touch on the bracelet.
     var needsBackgroundKeepAlive: Bool {
-        store.keepAliveInBackground && legacySignedIn && hasOriginalOnlyPartners
+        guard store.keepAliveInBackground else { return false }
+        return !cloudPartners.isEmpty || (legacySignedIn && hasOriginalOnlyPartners)
     }
 
     func updateKeepAlive() {
@@ -387,6 +391,7 @@ final class AppModel: ObservableObject {
             if selectedPartnerID == nil { selectedPartnerID = partners.first?.id }
             ready = true
             statusLine = "Ready."
+            if inForeground { updateKeepAlive() }   // background running can only start in the foreground
             await publishProfile()
             await setOnline(inForeground)
             await refreshAll()
@@ -422,8 +427,9 @@ final class AppModel: ObservableObject {
             startCloudPolling()
             await processWidgetRequests()   // sends the widget queued while the app wasn't running
         } else if keeper.running {
-            // Kept alive in the background: keep syncing and stay online.
-            stopCloudPolling()            // cloud bonds wake on push, not a background poll
+            // Kept alive in the background: keep syncing iCloud (pushes alone can be throttled
+            // or dropped) and stay online, so touches still reach the bracelet.
+            startCloudPolling()
         } else {
             stopLegacySync()
             stopCloudPolling()
@@ -517,7 +523,9 @@ final class AppModel: ObservableObject {
         guard cloudPollTask == nil, !cloudPartners.isEmpty || !cloudPending.isEmpty else { return }
         cloudPollTask = Task { [weak self] in
             while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 4_000_000_000)
+                // Every 4 s on screen; every 8 s kept running in the background (battery).
+                let background = UIApplication.shared.applicationState == .background
+                try? await Task.sleep(nanoseconds: background ? 8_000_000_000 : 4_000_000_000)
                 if Task.isCancelled { break }
                 await self?.refreshAll()
             }

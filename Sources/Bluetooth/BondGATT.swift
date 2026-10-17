@@ -594,6 +594,13 @@ enum BondGATT {
         (ffb1, Data([1, 0x4B, 0x00, 0x00] + be3(rgb)))
     }
 
+    /// One heartbeat on a Bond Touch More bar: a 200 ms spike — up to the top of the bar and
+    /// down to the bottom (the EKG's R and S) — the only part that vibrates; between beats
+    /// the band just glows (`v3Color`).
+    static func v3HeartbeatSpike(rgb: Int) -> [(CBUUID, Data)] {
+        v3TouchFrames(samples: [6, 8, 0, 2].map { TouchPattern.sample([$0]) }, startRGB: rgb, endRGB: rgb)
+    }
+
     /// LEDs off: `[1, 0x4B, 0x01]` (h()).
     static let v3LedsOff: (CBUUID, Data) = (ffb1, Data([1, 0x4B, 0x01]))
 
