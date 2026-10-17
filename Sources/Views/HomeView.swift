@@ -532,6 +532,9 @@ private struct SwipeToSave<Content: View>: View {
     @ViewBuilder var content: () -> Content
 
     @State private var offset: CGFloat = 0
+    /// Decided at the start of each drag: sideways swipes reveal the action, anything
+    /// else is left to the scroll view.
+    @State private var horizontal: Bool?
     private let actionWidth: CGFloat = 92
     private let trigger: CGFloat = 150
 
@@ -553,13 +556,21 @@ private struct SwipeToSave<Content: View>: View {
 
             content()
                 .offset(x: offset)
-                .gesture(
+                // Simultaneous, so the history list still scrolls (an exclusive drag gesture on a
+                // row takes vertical drags away from the scroll view).
+                .simultaneousGesture(
                     DragGesture(minimumDistance: 12)
                         .onChanged { v in
+                            if horizontal == nil {
+                                horizontal = abs(v.translation.width) > abs(v.translation.height) * 1.5
+                            }
+                            guard horizontal == true else { return }
                             if v.translation.width < 0 { offset = max(v.translation.width, -trigger - 40) }
                             else if offset != 0 { offset = min(0, offset + v.translation.width) }
                         }
                         .onEnded { v in
+                            defer { horizontal = nil }
+                            guard horizontal == true else { return }
                             if -v.translation.width > trigger { fire() }
                             else {
                                 withAnimation(.spring(response: 0.3)) {
