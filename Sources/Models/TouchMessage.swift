@@ -35,6 +35,8 @@ struct TouchMessage: Identifiable, Codable, Equatable {
     var delivery: Delivery?
     /// Its number in this phone's iCloud touch ring (matched against the partner's Seen).
     var ringSeq: Int?
+    /// For a partner's touch: it arrived but didn't play (too old, or Do Not Disturb).
+    var missed: Bool?
 
     init(id: UUID = UUID(), bondID: String = "", senderID: String, pattern: [Int], generation: Int = 2,
          colorRGB: Int, endColorRGB: Int? = nil, sentAt: Date = Date(),
@@ -53,7 +55,7 @@ struct TouchMessage: Identifiable, Codable, Equatable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, bondID, senderID, pattern, generation, colorRGB, endColorRGB, sentAt, meaningLabel, meaningEmoji, heartbeatBPM, delivery, ringSeq
+        case id, bondID, senderID, pattern, generation, colorRGB, endColorRGB, sentAt, meaningLabel, meaningEmoji, heartbeatBPM, delivery, ringSeq, missed
     }
 
     init(from decoder: Decoder) throws {
@@ -71,6 +73,7 @@ struct TouchMessage: Identifiable, Codable, Equatable {
         heartbeatBPM = try c.decodeIfPresent(Int.self, forKey: .heartbeatBPM)
         delivery = try c.decodeIfPresent(Delivery.self, forKey: .delivery)
         ringSeq = try c.decodeIfPresent(Int.self, forKey: .ringSeq)
+        missed = try c.decodeIfPresent(Bool.self, forKey: .missed)
     }
 
     /// The pattern as on/off milliseconds (for generation-2 bracelets).

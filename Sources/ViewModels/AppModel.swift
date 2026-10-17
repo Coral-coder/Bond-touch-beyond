@@ -72,12 +72,14 @@ final class AppModel: ObservableObject {
     @Published var selectedPartnerID: String?
     @Published var history: [TouchMessage] = []                  // sent + received touches
     private var historyIDs: Set<UUID> = []
+    private var missedPending: Set<UUID> = []
 
     /// Adds touches to the feed, skipping ones already present (the backends re-fetch on
     /// each launch), sorting by time, and saving to disk so the feed survives app updates.
     func recordTouches(_ touches: [TouchMessage]) {
         var added = false
-        for t in touches where !historyIDs.contains(t.id) {
+        for var t in touches where !historyIDs.contains(t.id) {
+            if missedPending.remove(t.id) != nil { t.missed = true }
             history.append(t)
             historyIDs.insert(t.id)
             added = true
@@ -636,6 +638,12 @@ final class AppModel: ObservableObject {
         for t in recent { await resend(t) }
     }
 
+    /// A touch that arrived but didn't play. It may not be in history yet (the original
+    /// backend's sync delivers first), so it's flagged when it's added.
+    private func markMissed(_ id: UUID) {
+        if historyIDs.contains(id) { updateHistory(id) { $0.missed = true } } else { missedPending.insert(id) }
+    }
+
     /// Marks our touches the partner's phone has received as Seen.
     private func markSeen(bondID: String, upTo seen: Int) {
         var changed = false
@@ -714,10 +722,13 @@ final class AppModel: ObservableObject {
     func deliver(_ touch: TouchMessage) {
         // A heartbeat is live: it plays only within 2 minutes (it's still kept in history).
         let maxAge: TimeInterval = touch.heartbeatBPM == nil ? 15 * 60 : 120
-        guard Date().timeIntervalSince(touch.sentAt) < maxAge,
-              deliveredTouchIDs.insert(touch.id).inserted else { return }
-        if store.quiet() {
-            NetLog.shared.log(.recv, "Do Not Disturb — touch not played", partners.first { $0.id == touch.bondID }?.displayName ?? "")
+        guard deliveredTouchIDs.insert(touch.id).inserted else { return }
+        // Not played — too old, or Do Not Disturb: flagged Missed in history, as the original.
+        if Date().timeIntervalSince(touch.sentAt) >= maxAge || store.quiet() {
+            if store.quiet() {
+                NetLog.shared.log(.recv, "Do Not Disturb — touch not played", partners.first { $0.id == touch.bondID }?.displayName ?? "")
+            }
+            markMissed(touch.id)
             return
         }
         feel(touch)

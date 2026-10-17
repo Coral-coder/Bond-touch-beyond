@@ -295,6 +295,7 @@ struct HomeView: View {
                     }
                 }
                 .padding(.horizontal, 22)
+                if !touches.isEmpty { summary(touches) }
             }
             if touches.isEmpty {
                 if partner != nil {
@@ -317,6 +318,23 @@ struct HomeView: View {
                 }
             }
         }
+    }
+
+    /// "Last sent 5 min ago · Last received 2 hr ago", as the original's history header.
+    private func summary(_ touches: [TouchMessage]) -> some View {
+        let isMine: (TouchMessage) -> Bool = { $0.senderID == model.myUserID || $0.senderID == ChatMessage.legacySelf }
+        let sent = touches.first(where: isMine)?.sentAt
+        let received = touches.first(where: { !isMine($0) })?.sentAt
+        let missed = touches.filter { !isMine($0) && $0.missed == true }.count
+        func ago(_ d: Date?) -> String {
+            guard let d else { return "never" }
+            return d.formatted(.relative(presentation: .named, unitsStyle: .abbreviated))
+        }
+        var parts = ["Last sent \(ago(sent))", "Last received \(ago(received))"]
+        if missed > 0 { parts.append("\(missed) missed") }
+        return Text(parts.joined(separator: " · "))
+            .font(Theme.font(11)).foregroundStyle(Theme.subtitle)
+            .padding(.horizontal, 22)
     }
 
     /// Sending… / Sent / Seen / Failed (tap to send again), as the original.
@@ -381,6 +399,11 @@ struct HomeView: View {
                 Text(touch.sentAt.formatted(date: .omitted, time: .shortened))
                     .font(Theme.font(11)).foregroundStyle(Theme.subtitle)
                 if mine, let delivery = touch.delivery { deliveryLabel(touch, delivery) }
+                if !mine, touch.missed == true {
+                    Label("Missed", systemImage: "bell.slash.fill")
+                        .font(Theme.font(10, .bold)).foregroundStyle(Theme.amber)
+                        .accessibilityLabel("Missed: this touch arrived but didn't play")
+                }
                 Button { model.feel(touch) } label: {
                     Image(systemName: "play.fill").font(.system(size: 12, weight: .bold)).foregroundStyle(.white)
                         .frame(width: 30, height: 30).background(Circle().fill(.white.opacity(0.14)))
@@ -435,6 +458,9 @@ private struct GreetingEditor: View {
     @Binding var text: String
     let onSave: () -> Void
 
+    static let presets = ["Hey look it's us", "In touch with ourselves", "We're just a touch away",
+                          "You complete me", "Better together"]
+
     var body: some View {
         NavigationStack {
             VStack(alignment: .leading, spacing: 12) {
@@ -443,6 +469,18 @@ private struct GreetingEditor: View {
                 TextField("Greeting", text: $text, axis: .vertical)
                     .lineLimit(2...3)
                     .textFieldStyle(.roundedBorder)
+                // The original dashboard's ready-made messages.
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(Self.presets, id: \.self) { preset in
+                            Button(preset) { text = preset }
+                                .font(.footnote.weight(.semibold))
+                                .padding(.horizontal, 12).padding(.vertical, 7)
+                                .background(Capsule().fill(Color.accentColor.opacity(text == preset ? 0.35 : 0.15)))
+                                .buttonStyle(.plain)
+                        }
+                    }
+                }
                 Spacer()
             }
             .padding()
