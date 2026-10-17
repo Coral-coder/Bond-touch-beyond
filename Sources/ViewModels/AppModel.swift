@@ -157,6 +157,7 @@ final class AppModel: ObservableObject {
                                      colorRGB: self.store.profile.colorRGB)
             }
         }
+        watchBraceletForPresence()
         // A touch that didn't make it to the bracelet plays on the phone instead.
         bracelet.onPlayFailed = { [weak self] touch in
             Task { @MainActor in self?.haptics.play(touch) }
@@ -197,7 +198,8 @@ final class AppModel: ObservableObject {
         await legacyPushLocation(coord)
         for partner in cloudPartners {
             try? await relay.sendPresence(online: true, bond: partner.bond, senderID: myUserID,
-                                          latitude: coord.latitude, longitude: coord.longitude)
+                                          latitude: coord.latitude, longitude: coord.longitude,
+                                          braceletConnected: bracelet.isReady)
         }
     }
 
@@ -263,9 +265,38 @@ final class AppModel: ObservableObject {
     }
 
     func setOnline(_ online: Bool) async {
+        lastOnline = online
+        // Presence also tells the partner whether this bracelet is connected (they then send
+        // silent pushes), and keeps the shared location while location sharing is on.
+        let coord = sharingLocation ? location.coordinate : nil
         for partner in cloudPartners {
-            try? await relay.sendPresence(online: online, bond: partner.bond, senderID: myUserID)
+            try? await relay.sendPresence(online: online, bond: partner.bond, senderID: myUserID,
+                                          latitude: coord?.latitude, longitude: coord?.longitude,
+                                          braceletConnected: bracelet.isReady)
         }
+    }
+
+    private var lastOnline = true
+    /// Whether each cloud partner's bracelet is connected, from their presence.
+    var partnerBraceletConnected: [String: Bool] = [:]
+    private var braceletWatch: AnyCancellable?
+
+    /// When this bracelet connects or drops — also while the phone is locked (the Bluetooth
+    /// event wakes the app) — tell partners, so they know whether to buzz this phone.
+    private func watchBraceletForPresence() {
+        braceletWatch = bracelet.$state
+            .map { $0 == .connected }
+            .removeDuplicates()
+            .dropFirst()
+            .debounce(for: .seconds(2), scheduler: DispatchQueue.main)
+            .sink { [weak self] _ in
+                Task { @MainActor in
+                    guard let self, !self.cloudPartners.isEmpty else { return }
+                    let task = UIApplication.shared.beginBackgroundTask(withName: "bracelet-presence")
+                    await self.setOnline(self.lastOnline)
+                    UIApplication.shared.endBackgroundTask(task)
+                }
+            }
     }
 
     /// Starts polling iCloud bonds while foregrounded (no-op if already running, or if there's
@@ -447,7 +478,10 @@ final class AppModel: ObservableObject {
     /// missing — CloudKit's own push still covers that case).
     private func pushPartner(bondID: String, title: String, body: String) async {
         guard let token = partnerPushTokens[bondID], !token.isEmpty else { return }
-        await APNsClient.shared.send(toDeviceToken: token, title: title, body: body, collapseID: "touch-\(bondID)")
+        // Their bracelet is connected → it plays the touch; don't buzz their phone too.
+        let silent = partnerBraceletConnected[bondID] == true
+        await APNsClient.shared.send(toDeviceToken: token, title: title, body: body, silent: silent,
+                                     collapseID: "touch-\(bondID)")
     }
 
     /// Unbonds: deletes the iCloud bond (owner only) or cancels the original-app bond, and
@@ -516,6 +550,7 @@ final class AppModel: ObservableObject {
             if let photo = events.partnerPhoto { setPartnerPhoto(photo, bondID: partner.id) }
             if let token = events.partnerPushToken, !token.isEmpty { partnerPushTokens[partner.id] = token }
             if let online = events.presenceOnline { cloudPartners[index].online = online }
+            if let ready = events.partnerBraceletConnected { partnerBraceletConnected[partner.id] = ready }
             if let seen = events.presenceLastSeen { cloudPartners[index].lastSeen = seen }
             if let lat = events.presenceLat, let lng = events.presenceLng {
                 cloudPartners[index].latitude = lat

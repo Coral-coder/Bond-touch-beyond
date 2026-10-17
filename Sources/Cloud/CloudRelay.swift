@@ -37,6 +37,7 @@ actor CloudRelay {
         var presenceLastSeen: Date?
         var presenceLat: Double?
         var presenceLng: Double?
+        var partnerBraceletConnected: Bool?
         var partnerName: String?
         var partnerColorRGB: Int?
         var partnerPhoto: Data?
@@ -306,9 +307,10 @@ actor CloudRelay {
     }
 
     func sendPresence(online: Bool, bond: Bond, senderID: String,
-                      latitude: Double? = nil, longitude: Double? = nil) async throws {
+                      latitude: Double? = nil, longitude: Double? = nil, braceletConnected: Bool? = nil) async throws {
         try await put(mine(bond, "pr", .presence),
-                      seal(PresencePayload(online: online, lat: latitude, lng: longitude, sentAt: Date()), bond.id))
+                      seal(PresencePayload(online: online, lat: latitude, lng: longitude, sentAt: Date(),
+                                           bracelet: braceletConnected), bond.id))
     }
 
     func sendProfile(name: String, colorRGB: Int, photo: URL?, pushToken: String? = nil,
@@ -399,6 +401,7 @@ actor CloudRelay {
             events.presenceLastSeen = p.sentAt
             events.presenceLat = p.lat
             events.presenceLng = p.lng
+            events.partnerBraceletConnected = p.bracelet
         }
         if let rec = found[profileRef.id], isNew(rec), let p = open(ProfilePayload.self, rec, code) {
             events.partnerName = p.name
@@ -451,7 +454,14 @@ actor CloudRelay {
 private struct BondPayload: Codable { let name: String; let ownerID: String }
 private struct ProfilePayload: Codable { let name: String; let colorRGB: Int; let pushToken: String?; let photoHash: String? }
 private struct PhotoPayload: Codable { let data: Data }
-private struct PresencePayload: Codable { let online: Bool; let lat: Double?; let lng: Double?; let sentAt: Date }
+private struct PresencePayload: Codable {
+    let online: Bool
+    let lat: Double?
+    let lng: Double?
+    let sentAt: Date
+    /// Whether the sender's bracelet is connected (their partner then sends silent pushes).
+    var bracelet: Bool? = nil
+}
 private struct HeartbeatPayload: Codable { let bpm: Int; let sentAt: Date }
 private struct CursorPayload: Codable { let touch: Int; let message: Int }
 private struct TouchPayload: Codable {

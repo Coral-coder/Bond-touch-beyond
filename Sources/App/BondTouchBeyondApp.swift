@@ -66,11 +66,12 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
 }
 
 extension AppDelegate: UNUserNotificationCenterDelegate {
-    /// Show a partner's push even while the app is foregrounded, and refresh when one arrives.
+    /// With the app open, a partner's push refreshes at once and shows silently — the bracelet
+    /// (or the phone's own vibration, if it isn't connected) already plays the touch.
     func userNotificationCenter(_ center: UNUserNotificationCenter,
                                 willPresent notification: UNNotification) async
         -> UNNotificationPresentationOptions {
         await model?.handleRemoteNotification()
-        return [.banner, .sound]
+        return [.banner, .list]
     }
 }

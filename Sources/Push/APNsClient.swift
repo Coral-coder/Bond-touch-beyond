@@ -16,9 +16,12 @@ actor APNsClient {
     private let host = "https://api.push.apple.com"
     private var cachedToken: (jwt: String, madeAt: Date)?
 
-    /// Sends an alert push to one device token. Returns true on APNs 200.
+    /// Sends an alert push to one device token. Returns true on APNs 200. `silent` (used when
+    /// the partner's bracelet is connected and will play the touch itself): no sound or
+    /// vibration, and the notification goes quietly into Notification Center without lighting
+    /// the screen — still high priority with content-available, so it wakes the app at once.
     @discardableResult
-    func send(toDeviceToken deviceToken: String, title: String, body: String,
+    func send(toDeviceToken deviceToken: String, title: String, body: String, silent: Bool = false,
               topic: String = AppConfig.bundleID, collapseID: String? = nil) async -> Bool {
         guard APNsSecrets.isConfigured, !deviceToken.isEmpty else { return false }
         guard let jwt = currentToken() else {
@@ -35,14 +38,13 @@ actor APNsClient {
         request.setValue("10", forHTTPHeaderField: "apns-priority")
         if let collapseID { request.setValue(collapseID, forHTTPHeaderField: "apns-collapse-id") }
 
-        let payload: [String: Any] = [
-            "aps": [
-                "alert": ["title": title, "body": body],
-                "sound": "default",
-                "content-available": 1,
-                "interruption-level": "time-sensitive",
-            ]
+        var aps: [String: Any] = [
+            "alert": ["title": title, "body": body],
+            "content-available": 1,
+            "interruption-level": silent ? "passive" : "time-sensitive",
         ]
+        if !silent { aps["sound"] = "default" }
+        let payload: [String: Any] = ["aps": aps]
         request.httpBody = try? JSONSerialization.data(withJSONObject: payload)
 
         do {
