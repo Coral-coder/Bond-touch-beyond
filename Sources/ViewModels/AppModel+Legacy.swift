@@ -169,7 +169,10 @@ extension AppModel {
                                          generation: BondBackend.generation(msg["generation"]),
                                          colorRGB: meaning?.colorRGB ?? color,
                                          endColorRGB: meaning?.endColorRGB ?? color,
-                                         sentAt: Date(timeIntervalSince1970: ms / 1000))
+                                         sentAt: Date(timeIntervalSince1970: ms / 1000),
+                                         // The server names the meaning a touch was sent as.
+                                         meaningLabel: (meaningName?.isEmpty == false) ? meaningName : nil,
+                                         meaningEmoji: meaning?.emoji)
                 newTouches.append(touch)
                 if !firstSync, id == selectedPartnerID, !store.doNotDisturb { feel(touch) }
                 toAck.append((id, touchId))
@@ -332,16 +335,40 @@ extension AppModel {
         return store.meanings
     }
 
-    /// A saved meaning whose pattern closely matches this gen-3 touch, if any — so a
-    /// composed touch that's really "Love you" sends in that meaning's colour.
-    func closeMeaning(pattern: [Int], generation: Int) -> TouchMeaning? {
-        guard generation == 3 else { return nil }
+    /// A bond's Touch Language: the server's for an original-app partner, the local library
+    /// for an iCloud partner.
+    func meanings(for bond: Bond) -> [TouchMeaning] {
+        bond.legacy ? (legacyMeanings[bond.id] ?? []) : store.meanings
+    }
+
+    /// The saved meaning a touch closely matches, if any — so a touch that's really
+    /// "Love you" (made on the screen, the bracelet or the watch) is treated as it.
+    func matchingMeaning(pattern: [Int], generation: Int, in list: [TouchMeaning]) -> TouchMeaning? {
         var best: (TouchMeaning, Double)?
-        for m in currentMeanings where m.touchGeneration == 3 {
-            let score = TouchPattern.similarity(pattern, m.pattern)
-            if score >= 0.85, score > (best?.1 ?? 0) { best = (m, score) }
+        for m in list where !m.pattern.isEmpty {
+            let score = TouchPattern.matchScore(pattern, generation: generation, m.pattern, generation: m.touchGeneration)
+            if score >= TouchPattern.matchThreshold(generation, m.touchGeneration), score > (best?.1 ?? 0) {
+                best = (m, score)
+            }
         }
         return best?.0
+    }
+
+    /// For the touch bar: the selected partner's meaning this touch matches, if any.
+    func closeMeaning(pattern: [Int], generation: Int) -> TouchMeaning? {
+        matchingMeaning(pattern: pattern, generation: generation, in: currentMeanings)
+    }
+
+    /// The meaning to show over a touch on Home: the one it was sent / received as, or —
+    /// for older touches and ones that came without — a saved meaning it closely matches.
+    func meaningTag(for touch: TouchMessage) -> (label: String, emoji: String)? {
+        let list = partners.first { $0.id == touch.bondID }.map { meanings(for: $0.bond) } ?? store.meanings
+        if let label = touch.meaningLabel, !label.isEmpty {
+            let emoji = touch.meaningEmoji ?? list.first { $0.label == label }?.emoji ?? ""
+            return (label, emoji)
+        }
+        guard let m = matchingMeaning(pattern: touch.pattern, generation: touch.generation, in: list) else { return nil }
+        return (m.label, m.emoji)
     }
 
     func addMeaning(_ meaning: TouchMeaning) async {

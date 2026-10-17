@@ -448,27 +448,49 @@ final class AppModel: ObservableObject {
     /// Sends a touch to a bond (the selected partner when `toBondID` is nil): iCloud partners
     /// get an encrypted relay record, original-app partners go through the Bond API. Records
     /// it to the local feed either way.
+    ///
+    /// Unless `meaning` is given (or `matchMeaning` is false), the touch is first checked
+    /// against the partner's saved meanings: a close match is sent *as* that meaning — its
+    /// colours and name, and for an original-app partner by meaning id, so their bracelet
+    /// plays it as the meaning.
     func sendTouch(pattern: [Int], generation: Int = 2, colorRGB: Int, endColorRGB: Int? = nil,
-                   toBondID: String? = nil) async {
+                   toBondID: String? = nil, meaning given: TouchMeaning? = nil, matchMeaning: Bool = true) async {
         guard let bond = bond(for: toBondID) else { return }
         // Finish sending even if the app goes to the background meanwhile (e.g. a touch
         // made on the bracelet while the phone is locked).
         let bg = UIApplication.shared.beginBackgroundTask(withName: "send-touch")
         defer { UIApplication.shared.endBackgroundTask(bg) }
-        let touch = TouchMessage(bondID: bond.id, senderID: myUserID, pattern: pattern, generation: generation,
-                                 colorRGB: colorRGB, endColorRGB: endColorRGB)
+
+        let meaning = given ?? (matchMeaning ? matchingMeaning(pattern: pattern, generation: generation,
+                                                               in: meanings(for: bond)) : nil)
+        if let meaning, given == nil {
+            NetLog.shared.log(.ok, "Touch matches \"\(meaning.label)\" — sending it as that meaning")
+        }
+        // A meaning goes out as itself: its own pattern and colours.
+        let touch = TouchMessage(bondID: bond.id, senderID: myUserID,
+                                 pattern: meaning?.pattern ?? pattern,
+                                 generation: meaning?.touchGeneration ?? generation,
+                                 colorRGB: meaning?.colorRGB ?? colorRGB,
+                                 endColorRGB: meaning?.endColorRGB ?? endColorRGB,
+                                 meaningLabel: meaning?.label, meaningEmoji: meaning?.emoji)
         let route = bond.legacy ? "original Bond API" : "iCloud"
-        NetLog.shared.log(.send, "Send touch → \(bond.partnerName) (\(route))",
-                          "gen \(generation), \(pattern.count) samples")
+        NetLog.shared.log(.send, "Send \(meaning.map { "\"\($0.label)\"" } ?? "touch") → \(bond.partnerName) (\(route))",
+                          "gen \(touch.generation), \(touch.pattern.count) samples")
         do {
-            if bond.legacy {
+            if bond.legacy, let serverID = meaning?.serverID {
+                // The original app sends a saved meaning by id; the partner's bracelet then
+                // lights and buzzes it as that meaning.
+                try await BondBackend.sendMeaningTouch(bondId: bond.id, meaningId: serverID,
+                                                       bearer: try await legacyToken())
+            } else if bond.legacy {
                 try await legacySendTouch(touch, bond: bond)
             } else {
                 try await relay.sendTouch(touch, bond: bond)
                 NetLog.shared.log(.ok, "Touch → iCloud accepted", "\(bond.partnerName)")
                 // Wake their phone right away (CloudKit's own push can lag in deep sleep).
                 let me = store.profile.name.isEmpty ? "Someone" : store.profile.name
-                await pushPartner(bondID: bond.id, title: "\(me) touched you", body: "❤️")
+                let body = meaning.map { "\($0.emoji) \($0.label)".trimmingCharacters(in: .whitespaces) } ?? "❤️"
+                await pushPartner(bondID: bond.id, title: "\(me) touched you", body: body)
             }
             recordTouch(touch)
         } catch {
@@ -477,32 +499,12 @@ final class AppModel: ObservableObject {
         }
     }
 
-    /// Sends a saved meaning (Touch Language). For an original-app partner with a server
-    /// meaning id it goes through the Bond API (which lights their bracelet by id); otherwise
-    /// the meaning's pattern and colour are sent as a normal touch.
+    /// Sends a saved meaning (Touch Language) — by id to an original-app partner, as a
+    /// labelled touch over iCloud.
     func sendMeaning(_ meaning: TouchMeaning, toBondID: String? = nil) async {
-        guard let bond = bond(for: toBondID) else { return }
-        if bond.legacy, let serverID = meaning.serverID {
-            let bg = UIApplication.shared.beginBackgroundTask(withName: "send-meaning")
-            defer { UIApplication.shared.endBackgroundTask(bg) }
-            let touch = TouchMessage(bondID: bond.id, senderID: myUserID, pattern: meaning.pattern,
-                                     generation: meaning.touchGeneration, colorRGB: meaning.colorRGB,
-                                     endColorRGB: meaning.endColorRGB)
-            NetLog.shared.log(.send, "Send meaning \"\(meaning.label)\" → \(bond.partnerName) (original Bond API)",
-                              "meaningId \(serverID)")
-            do {
-                try await BondBackend.sendMeaningTouch(bondId: bond.id, meaningId: serverID,
-                                                       bearer: try await legacyToken())
-                recordTouch(touch)
-            } catch {
-                statusLine = "Send failed: \(error.localizedDescription)"
-                NetLog.shared.log(.fail, "Send meaning failed", error.localizedDescription)
-            }
-            return
-        }
-        // iCloud, or a legacy meaning without a server id: send the pattern and colour.
         await sendTouch(pattern: meaning.pattern, generation: meaning.touchGeneration,
-                        colorRGB: meaning.colorRGB, endColorRGB: meaning.endColorRGB, toBondID: toBondID)
+                        colorRGB: meaning.colorRGB, endColorRGB: meaning.endColorRGB,
+                        toBondID: toBondID, meaning: meaning)
     }
 
     // MARK: - Profile
@@ -666,7 +668,7 @@ final class AppModel: ObservableObject {
                     pattern.append(max(period - 150, 80))             // rest (off)
                 }
             }
-            await sendTouch(pattern: pattern, generation: 2, colorRGB: 0xE85D75, toBondID: bond.id)
+            await sendTouch(pattern: pattern, generation: 2, colorRGB: 0xE85D75, toBondID: bond.id, matchMeaning: false)
         } else {
             do {
                 try await relay.sendHeartbeat(bpm: bpm, bond: bond, senderID: myUserID)

@@ -78,6 +78,45 @@ enum TouchPattern {
         return Double(match) / Double(n)
     }
 
+    /// How alike two touches are, 0…1, in any mix of formats. Two touch-bar touches compare
+    /// timing *and* where on the bar (`similarity`); anything involving an on/off rhythm
+    /// (a gen-2 bracelet) compares the rhythm: same number of presses, similar length, and
+    /// presses lining up over time.
+    static func matchScore(_ a: [Int], generation ga: Int, _ b: [Int], generation gb: Int) -> Double {
+        if ga == 3, gb == 3 { return similarity(a, b) }
+        let ca = contact(ga == 3 ? a : samples(fromOnOff: a))
+        let cb = contact(gb == 3 ? b : samples(fromOnOff: b))
+        return rhythmSimilarity(ca, cb)
+    }
+
+    /// The score a touch needs to count as a saved meaning.
+    static func matchThreshold(_ ga: Int, _ gb: Int) -> Double { ga == 3 && gb == 3 ? 0.85 : 0.8 }
+
+    /// Finger down / up per 50 ms sample, trimmed to the touch.
+    private static func contact(_ samples: [Int]) -> [Bool] {
+        trimmed(samples).map { !fingers(in: $0).isEmpty }
+    }
+
+    private static func presses(_ c: [Bool]) -> Int {
+        var count = 0, prev = false
+        for on in c { if on && !prev { count += 1 }; prev = on }
+        return count
+    }
+
+    private static func rhythmSimilarity(_ a: [Bool], _ b: [Bool]) -> Double {
+        guard !a.isEmpty, !b.isEmpty, presses(a) == presses(b) else { return 0 }
+        let lengthRatio = Double(min(a.count, b.count)) / Double(max(a.count, b.count))
+        guard lengthRatio >= 0.6 else { return 0 }
+        let n = 40
+        func resample(_ s: [Bool]) -> [Bool] {
+            guard s.count > 1 else { return Array(repeating: s[0], count: n) }
+            return (0..<n).map { i in s[min(s.count - 1, Int((Double(i) / Double(n - 1)) * Double(s.count - 1) + 0.5))] }
+        }
+        let ra = resample(a), rb = resample(b)
+        let agreement = Double((0..<n).filter { ra[$0] == rb[$0] }.count) / Double(n)
+        return agreement * (0.8 + 0.2 * lengthRatio)
+    }
+
     /// The finger positions in one sample (empty when no finger is down).
     static func fingers(in sample: Int) -> [Int] {
         let lo = sample & 0x0F, hi = (sample >> 4) & 0x0F

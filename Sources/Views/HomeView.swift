@@ -321,10 +321,26 @@ struct HomeView: View {
 
     private func touchRow(_ touch: TouchMessage) -> some View {
         let mine = touch.senderID == model.myUserID || touch.senderID == ChatMessage.legacySelf
+        let meaning = model.meaningTag(for: touch)
         return HStack(spacing: 12) {
             TouchViz(pattern: touch.pattern, generation: touch.generation,
                      colorRGB: touch.colorRGB, endColorRGB: touch.endColorRGB, height: 64)
                 .frame(maxWidth: .infinity)
+                .overlay {
+                    // A touch that is a saved meaning wears its name right across it.
+                    if let meaning {
+                        HStack(spacing: 6) {
+                            if !meaning.emoji.isEmpty { Text(meaning.emoji).font(.system(size: 17)) }
+                            Text(meaning.label).font(Theme.font(16, .heavy)).lineLimit(1).minimumScaleFactor(0.7)
+                        }
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 14).padding(.vertical, 7)
+                        .background(Capsule().fill(.black.opacity(0.5)))
+                        .overlay(Capsule().stroke(Color(rgbInt: touch.colorRGB).opacity(0.9), lineWidth: 1.5))
+                        .shadow(color: Color(rgbInt: touch.colorRGB).opacity(0.6), radius: 8)
+                        .accessibilityLabel("Meaning: \(meaning.label)")
+                    }
+                }
             VStack(alignment: .trailing, spacing: 2) {
                 Text(mine ? "You" : (partner?.displayName ?? "Partner"))
                     .font(Theme.font(12, .bold)).foregroundStyle(.white)

@@ -21,9 +21,14 @@ struct TouchMessage: Identifiable, Codable, Equatable {
     let endColorRGB: Int
     /// When the sender created it.
     let sentAt: Date
+    /// The saved meaning this touch is ("Love you"), when it was sent as one or closely
+    /// matches one — shown over the touch on Home.
+    var meaningLabel: String?
+    var meaningEmoji: String?
 
     init(id: UUID = UUID(), bondID: String = "", senderID: String, pattern: [Int], generation: Int = 2,
-         colorRGB: Int, endColorRGB: Int? = nil, sentAt: Date = Date()) {
+         colorRGB: Int, endColorRGB: Int? = nil, sentAt: Date = Date(),
+         meaningLabel: String? = nil, meaningEmoji: String? = nil) {
         self.id = id
         self.bondID = bondID
         self.senderID = senderID
@@ -32,10 +37,12 @@ struct TouchMessage: Identifiable, Codable, Equatable {
         self.colorRGB = colorRGB
         self.endColorRGB = endColorRGB ?? colorRGB
         self.sentAt = sentAt
+        self.meaningLabel = meaningLabel
+        self.meaningEmoji = meaningEmoji
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, bondID, senderID, pattern, generation, colorRGB, endColorRGB, sentAt
+        case id, bondID, senderID, pattern, generation, colorRGB, endColorRGB, sentAt, meaningLabel, meaningEmoji
     }
 
     init(from decoder: Decoder) throws {
@@ -48,6 +55,8 @@ struct TouchMessage: Identifiable, Codable, Equatable {
         colorRGB = try c.decode(Int.self, forKey: .colorRGB)
         endColorRGB = try c.decodeIfPresent(Int.self, forKey: .endColorRGB) ?? colorRGB
         sentAt = try c.decode(Date.self, forKey: .sentAt)
+        meaningLabel = try c.decodeIfPresent(String.self, forKey: .meaningLabel)
+        meaningEmoji = try c.decodeIfPresent(String.self, forKey: .meaningEmoji)
     }
 
     /// The pattern as on/off milliseconds (for generation-2 bracelets).

@@ -393,8 +393,11 @@ struct ComposeTouchView: View {
                     colors = (store.profile.colorRGB, store.profile.colorRGB)
                 }
                 Task {
+                    // A close match to a saved meaning is sent as that meaning (unless you
+                    // picked your own colour for this touch).
                     await model.sendTouch(pattern: samples, generation: 3,
-                                          colorRGB: colors.0, endColorRGB: colors.1)
+                                          colorRGB: colors.0, endColorRGB: colors.1,
+                                          matchMeaning: !colorCustomized)
                 }
             }
         }
