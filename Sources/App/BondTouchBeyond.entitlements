@@ -2,6 +2,7 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<!-- Generated from project.yml (entitlements → properties) by XcodeGen; edit it there. -->
 	<key>com.apple.developer.icloud-container-identifiers</key>
 	<array>
 		<string>iCloud.$(CFBundleIdentifier)</string>
@@ -10,12 +11,10 @@
 	<array>
 		<string>CloudKit</string>
 	</array>
-	<!-- Production CloudKit. The Development build (24) created cloudkit.share in the
-	     Development schema; once that's deployed Development → Production, real invites
-	     resolve and accept here. Development share links don't resolve on the web, so
-	     Production is required for actual pairing. -->
 	<key>com.apple.developer.icloud-container-environment</key>
-	<string>Production</string>
+	<string>Development</string>
+	<key>com.apple.developer.ubiquity-kvstore-identifier</key>
+	<string>$(TeamIdentifierPrefix)$(CFBundleIdentifier)</string>
 	<key>aps-environment</key>
 	<string>production</string>
 	<key>com.apple.developer.healthkit</key>

@@ -1,60 +1,11 @@
 DEFINE SCHEMA
 
-    RECORD TYPE Bond (
-        bondID      STRING QUERYABLE,
-        ownerID     STRING,
+    -- The whole iCloud relay is one record type with one encrypted field. Records are read
+    -- by name only (no queries), so no QUERYABLE/SORTABLE indexes are needed.
+    -- Builds use the Development environment, which creates this type on first use; this
+    -- file is only for deploying to Production later.
+    RECORD TYPE BTItem (
         payload     BYTES,
-        sentAt      TIMESTAMP,
-        GRANT WRITE TO "_creator",
-        GRANT CREATE TO "_icloud",
-        GRANT READ TO "_world"
-    );
-
-    RECORD TYPE Touch (
-        bondID      STRING QUERYABLE,
-        senderID    STRING,
-        payload     BYTES,
-        sentAt      TIMESTAMP QUERYABLE SORTABLE,
-        GRANT WRITE TO "_creator",
-        GRANT CREATE TO "_icloud",
-        GRANT READ TO "_world"
-    );
-
-    RECORD TYPE Heartbeat (
-        bondID      STRING QUERYABLE,
-        senderID    STRING,
-        payload     BYTES,
-        sentAt      TIMESTAMP QUERYABLE SORTABLE,
-        GRANT WRITE TO "_creator",
-        GRANT CREATE TO "_icloud",
-        GRANT READ TO "_world"
-    );
-
-    RECORD TYPE Message (
-        bondID      STRING QUERYABLE,
-        senderID    STRING,
-        payload     BYTES,
-        sentAt      TIMESTAMP QUERYABLE SORTABLE,
-        GRANT WRITE TO "_creator",
-        GRANT CREATE TO "_icloud",
-        GRANT READ TO "_world"
-    );
-
-    RECORD TYPE Presence (
-        bondID      STRING QUERYABLE,
-        senderID    STRING,
-        payload     BYTES,
-        sentAt      TIMESTAMP QUERYABLE SORTABLE,
-        GRANT WRITE TO "_creator",
-        GRANT CREATE TO "_icloud",
-        GRANT READ TO "_world"
-    );
-
-    RECORD TYPE Profile (
-        bondID      STRING QUERYABLE,
-        senderID    STRING,
-        payload     BYTES,
-        sentAt      TIMESTAMP QUERYABLE SORTABLE,
         GRANT WRITE TO "_creator",
         GRANT CREATE TO "_icloud",
         GRANT READ TO "_world"

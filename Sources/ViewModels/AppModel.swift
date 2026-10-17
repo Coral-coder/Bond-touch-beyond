@@ -190,8 +190,11 @@ final class AppModel: ObservableObject {
         }
         do {
             myUserID = try await relay.currentUserID()
-            let bonds = try await relay.loadBonds(codes: Array(store.cloudBondCodes.keys), myUserID: myUserID)
-            await relay.ensureSubscriptions(codes: Array(store.cloudBondCodes.keys))   // wake only on our bonds
+            let bonds = await relay.loadBonds(roles: store.cloudBondCodes)
+            // Forget bonds the inviter has deleted (ones merely unreachable are still listed).
+            for code in store.cloudBondCodes.keys where !bonds.contains(where: { $0.id == code }) {
+                store.cloudBondCodes[code] = nil
+            }
             cloudPartners = bonds.filter { !$0.pending }.map { Partner(bond: $0) }
             cloudPartners.forEach { loadCachedPhoto(bondID: $0.id) }
             cloudPending = bonds.filter { $0.pending }
@@ -240,10 +243,10 @@ final class AppModel: ObservableObject {
         }
     }
 
-    /// Starts polling iCloud bonds while foregrounded (no-op if already running, or if no
-    /// cloud partners). A silent push still wakes the app from the background.
+    /// Starts polling iCloud bonds while foregrounded (no-op if already running, or if there's
+    /// no iCloud partner or open invite). A direct push wakes the app from the background.
     func startCloudPolling() {
-        guard cloudPollTask == nil, !cloudPartners.isEmpty else { return }
+        guard cloudPollTask == nil, !cloudPartners.isEmpty || !cloudPending.isEmpty else { return }
         cloudPollTask = Task { [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: 4_000_000_000)
@@ -269,10 +272,12 @@ final class AppModel: ObservableObject {
         if myUserID.isEmpty { myUserID = (try? await relay.currentUserID()) ?? "" }
         do {
             let (bond, url) = try await relay.createBond(
-                displayName: store.profile.name.isEmpty ? "Me" : store.profile.name, myUserID: myUserID)
+                displayName: store.profile.name.isEmpty ? "Me" : store.profile.name, myUserID: myUserID,
+                colorRGB: store.profile.colorRGB, pushToken: myPushToken)
             store.cloudBondCodes[bond.id] = true
             cloudPending.append(bond)
             pendingInviteURL = url
+            startCloudPolling()           // notice the moment the partner joins
             return nil
         } catch {
             statusLine = "Couldn't create bond: \(error.localizedDescription)"
@@ -282,21 +287,32 @@ final class AppModel: ObservableObject {
 
     /// Joins a bond by its code (typed, or from a tapped invite link).
     @discardableResult
-    func joinBond(code: String) async -> String? {
+    func joinBond(code rawCode: String) async -> String? {
+        let code = CloudRelay.normalize(rawCode)
+        if store.cloudBondCodes[code] == true {
+            return "That's your own invite code — send it to your partner so they can join."
+        }
+        if store.cloudBondCodes[code] == false, cloudPartners.contains(where: { $0.id == code }) {
+            selectedPartnerID = code      // already paired with this code
+            return nil
+        }
         iCloudStatus = await relay.accountStatusMessage()
         if let msg = iCloudStatus { return msg }
         if myUserID.isEmpty { myUserID = (try? await relay.currentUserID()) ?? "" }
         do {
-            let bond = try await relay.joinBond(code: code, displayName: store.profile.name.isEmpty ? "Me" : store.profile.name,
-                                                myUserID: myUserID)
-            store.cloudBondCodes[bond.id] = bond.isOwner
+            let me = store.profile.name.isEmpty ? "Me" : store.profile.name
+            let bond = try await relay.joinBond(code: code, displayName: me,
+                                                colorRGB: store.profile.colorRGB, pushToken: myPushToken)
+            store.cloudBondCodes[bond.id] = false
             if !cloudPartners.contains(where: { $0.id == bond.id }) { cloudPartners.append(Partner(bond: bond)) }
             cloudPending.removeAll { $0.id == bond.id }
             selectedPartnerID = bond.id
             profileSyncedBondIDs.remove(bond.id)
             await publishProfile()
-            await refreshAll()
+            await refreshAll()            // picks up the inviter's profile + push token
             startCloudPolling()
+            // Tell the inviter straight away (wakes their phone so it sees us join).
+            await pushPartner(bondID: bond.id, title: "\(me) connected with you", body: "You're paired 💞")
             return nil
         } catch {
             return error.localizedDescription
@@ -430,15 +446,33 @@ final class AppModel: ObservableObject {
 
     func refreshAll() async {
         defer { autoLinkPartners() }
+        // An invite we created: once the partner's profile appears, they've joined — make
+        // them a partner (no relaunch needed).
+        for bond in cloudPending {
+            guard let name = await relay.joinedPartnerName(bond) else { continue }
+            var joined = bond
+            joined.pending = false
+            joined.partnerName = name
+            cloudPending.removeAll { $0.id == bond.id }
+            if !cloudPartners.contains(where: { $0.id == joined.id }) { cloudPartners.append(Partner(bond: joined)) }
+            if selectedPartnerID == nil { selectedPartnerID = joined.id }
+            if pendingInviteURL.flatMap(CloudRelay.code(fromURL:)) == joined.id { pendingInviteURL = nil }
+            NetLog.shared.log(.ok, "\(name) joined your invite (iCloud)")
+        }
         // Make sure every cloud partner — including one who just accepted an invite — has
-        // this device's current profile (name, colour, photo) at least once per launch.
+        // this device's current profile (name, colour, photo, push token) once per launch.
         let unsent = cloudPartners.filter { !profileSyncedBondIDs.contains($0.id) }
         if !unsent.isEmpty {
             let p = store.profile
             for partner in unsent {
-                try? await relay.sendProfile(name: p.name, colorRGB: p.colorRGB, photo: myPhotoFileURL,
-                                             bond: partner.bond, senderID: myUserID)
-                profileSyncedBondIDs.insert(partner.id)
+                do {
+                    try await relay.sendProfile(name: p.name.isEmpty ? "Me" : p.name, colorRGB: p.colorRGB,
+                                                photo: myPhotoFileURL, pushToken: myPushToken,
+                                                bond: partner.bond, senderID: myUserID)
+                    profileSyncedBondIDs.insert(partner.id)   // only once it actually landed
+                } catch {
+                    NetLog.shared.log(.fail, "iCloud: profile not sent", error.localizedDescription)
+                }
             }
         }
         for index in cloudPartners.indices {
@@ -465,7 +499,10 @@ final class AppModel: ObservableObject {
 
             // Only the selected partner's touches/heartbeat drive the bracelet.
             if partner.id == selectedPartnerID, !store.doNotDisturb {
-                for touch in events.touches { bracelet.play(touch) }
+                // Only fresh touches buzz the band — not history fetched after a reinstall.
+                for touch in events.touches where Date().timeIntervalSince(touch.sentAt) < 120 {
+                    bracelet.play(touch)
+                }
                 // A heartbeat plays once, for 5 s — and only if it's fresh (not one that was
                 // sent long ago and is only now being fetched).
                 if let bpm = events.latestBPM, let at = events.latestBPMAt,

@@ -1,5 +1,6 @@
 import CoreBluetooth
 import Foundation
+import UIKit
 
 enum BraceletState: Equatable {
     case bluetoothOff
@@ -56,6 +57,23 @@ final class BraceletManager: NSObject, ObservableObject {
     /// we haven't reached `.connected` in time and recovers by cancelling and rescanning.
     private var connectWatchdog: Timer?
     private var connectAttempts = 0
+    /// True from didConnect until didDisconnect — the radio link is up (the handshake may
+    /// still be running). False while a pending connect is waiting for the bracelet.
+    private var linkUp = false
+    /// A touch that arrived while the bracelet was (re)connecting; played once it's back if
+    /// still fresh, instead of being dropped.
+    private var pendingPlay: (touch: TouchMessage, at: Date)?
+
+    /// The bracelet this phone pairs with, remembered across launches. A pending connect to
+    /// it by identifier is the only reconnect iOS completes in the background (a scan with no
+    /// service filter returns nothing there), so we always prefer it over scanning.
+    private static let savedIDKey = "BondBraceletID"
+    private var savedID: UUID? {
+        get { UserDefaults.standard.string(forKey: Self.savedIDKey).flatMap(UUID.init(uuidString:)) }
+        set { UserDefaults.standard.set(newValue?.uuidString, forKey: Self.savedIDKey) }
+    }
+
+    private var isForeground: Bool { UIApplication.shared.applicationState != .background }
 
     /// A bracelet found stuck in firmware-update (DFU) mode, waiting to be reflashed.
     struct DFUCandidate: Equatable {
@@ -89,8 +107,20 @@ final class BraceletManager: NSObject, ObservableObject {
         }
         if let peripheral = known.first { connect(peripheral); return }
 
+        // Our own bracelet, by identifier: a pending connect completes the moment it's in
+        // range — in the foreground or background — with no scan needed.
+        if let id = savedID, let peripheral = central.retrievePeripherals(withIdentifiers: [id]).first {
+            connect(peripheral)
+            if isForeground { scanAll() }   // also look fresh, in case it shows up under a new id
+            return
+        }
+
         // The bracelet does not advertise its vendor service UUID — scan all and filter by name.
         state = .scanning
+        scanAll()
+    }
+
+    private func scanAll() {
         central.scanForPeripherals(withServices: nil,
                                    options: [CBCentralManagerScanOptionAllowDuplicatesKey: false])
     }
@@ -104,17 +134,26 @@ final class BraceletManager: NSObject, ObservableObject {
         enterConnecting()
     }
 
+    /// The Settings "Disconnect bracelet" button: drop the link and stop auto-reconnecting.
     func disconnect() {
         clearConnectWatchdog()
-        if let bracelet { central.cancelPeripheralConnection(bracelet) }
+        let p = bracelet
+        bracelet = nil          // so didDisconnect doesn't reconnect it straight back
+        savedID = nil
+        if let p { central.cancelPeripheralConnection(p) }
+        resetConnectionState()
+        state = .disconnected
     }
 
     /// Force a fresh connection attempt — for the Settings "Reconnect" button when it's stuck.
+    /// Forgets the remembered bracelet so a new or reset one can be found.
     func reconnect() {
         clearConnectWatchdog()
         connectAttempts = 0
         if let bracelet { central.cancelPeripheralConnection(bracelet) }
         bracelet = nil
+        savedID = nil
+        linkUp = false
         resetConnectionState()
         state = .disconnected
         startScanning()
@@ -124,10 +163,9 @@ final class BraceletManager: NSObject, ObservableObject {
 
     /// Enters the connecting state and arms the watchdog. Called whenever a connect is
     /// started (fresh connect, auto-reconnect, or state restoration).
-    private func enterConnecting() {
+    private func enterConnecting(timeout: TimeInterval = 15) {
         state = .connecting
         connectWatchdog?.invalidate()
-        let timeout: TimeInterval = 15
         let t = Timer(timeInterval: timeout, repeats: false) { [weak self] _ in
             Task { @MainActor in self?.connectTimedOut() }
         }
@@ -141,7 +179,16 @@ final class BraceletManager: NSObject, ObservableObject {
         connectAttempts = 0
         let was = state
         state = .connected
+        if let id = bracelet?.identifier { savedID = id }
         if was != .connected { NetLog.shared.record(.ok, "Bracelet connected", gen.map { "\($0)" } ?? "") }
+        // A touch that came in while we were reconnecting: play it now if it's still fresh,
+        // after a moment for the pairing handshake to settle.
+        if let pending = pendingPlay {
+            pendingPlay = nil
+            if Date().timeIntervalSince(pending.at) < 120 {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in self?.play(pending.touch) }
+            }
+        }
     }
 
     private func clearConnectWatchdog() {
@@ -150,29 +197,37 @@ final class BraceletManager: NSObject, ObservableObject {
     }
 
     private func connectTimedOut() {
-        guard state == .connecting else { return }
+        guard state == .connecting, let p = bracelet else { return }
         connectAttempts += 1
-        NetLog.shared.record(.fail, "Bracelet stuck connecting — retrying", "attempt \(connectAttempts)")
-        // The link or the service discovery / handshake stalled. Cancel this attempt and
-        // start over with a clean slate (iOS sometimes hands back a half-open connection or
-        // a stale GATT cache; a fresh scan + connect clears it).
-        if let bracelet { central.cancelPeripheralConnection(bracelet) }
-        bracelet = nil
-        resetConnectionState()
-        state = .disconnected
-        // Brief backoff after repeated failures so we don't spin the radio.
-        let delay: TimeInterval = connectAttempts >= 3 ? 3 : 0.5
-        DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
-            guard let self, self.state == .disconnected else { return }
-            self.startScanning()
+        // Never give up on the bracelet: a pending connect is the only reconnect iOS completes
+        // in the background. (The old watchdog cancelled it and fell back to a scan — which
+        // returns nothing in the background — so one blip left the band dead until the app
+        // was opened.)
+        if linkUp || isForeground {
+            // The link is up but discovery/handshake stalled, or we're in the foreground with a
+            // possibly half-open attempt: cancel it and re-issue the connect immediately.
+            NetLog.shared.record(.fail, "Bracelet stuck connecting — retrying", "attempt \(connectAttempts)")
+            central.cancelPeripheralConnection(p)
+            resetConnectionState()
+            linkUp = false
+            central.connect(p, options: [CBConnectPeripheralOptionNotifyOnDisconnectionKey: true])
+            if isForeground { scanAll() }
         }
+        // Otherwise (background, no link) the pending connect just keeps waiting for the
+        // bracelet to come back in range — leave it, and check again later.
+        enterConnecting(timeout: min(15 * Double(connectAttempts + 1), 60))
     }
 
     // MARK: - Public actions
 
-    /// Plays a received touch: replays the rhythm and glows/buzzes in its colour.
+    /// Plays a received touch: replays the rhythm and glows/buzzes in its colour. If the
+    /// bracelet is reconnecting, the touch is held and played when it's back (if still fresh).
     func play(_ touch: TouchMessage) {
-        guard let gen else { return }
+        guard let gen, state == .connected else {
+            pendingPlay = (touch, Date())
+            NetLog.shared.record(.fail, "Bracelet not connected — touch held until it reconnects")
+            return
+        }
         enqueue(BondGATT.touchSend(gen, touch: touch))
         // The Bond Touch More renders the touch itself (LEDs + panned vibration); older
         // bracelets also get a glow + buzz in the touch's colour.
@@ -306,6 +361,10 @@ extension BraceletManager: CBCentralManagerDelegate {
             return
         }
         guard BondGATT.isBondName(advName) else { return }
+        // Already connecting to this one (e.g. the pending connect to our saved bracelet).
+        if peripheral == bracelet, state == .connecting || state == .connected { return }
+        // Stick to our own bracelet — don't grab a partner's sitting in the same room.
+        if let saved = savedID, peripheral.identifier != saved, bracelet != nil { return }
         connect(peripheral)
     }
 
@@ -315,10 +374,12 @@ extension BraceletManager: CBCentralManagerDelegate {
         bracelet = p
         p.delegate = self
         if p.state == .connected {
+            linkUp = true
             resetConnectionState()
             enterConnecting()
             p.discoverServices(nil)
         } else {
+            linkUp = false
             enterConnecting()
             central.connect(p, options: [CBConnectPeripheralOptionNotifyOnDisconnectionKey: true])
         }
@@ -337,29 +398,44 @@ extension BraceletManager: CBCentralManagerDelegate {
     }
 
     func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
+        linkUp = true
+        central.stopScan()
         resetConnectionState()
+        enterConnecting()            // fresh window for discovery + the pairing handshake
         peripheral.discoverServices(nil)
     }
 
     func centralManager(_ central: CBCentralManager, didFailToConnect peripheral: CBPeripheral,
                         error: Error?) {
-        clearConnectWatchdog()
-        state = .disconnected
-        startScanning()
+        linkUp = false
+        resetConnectionState()
+        NetLog.shared.record(.fail, "Bracelet connect failed — retrying", error?.localizedDescription ?? "")
+        guard peripheral == bracelet else { state = .disconnected; startScanning(); return }
+        // Keep a pending connect alive (a scan wouldn't work in the background); a short
+        // pause so an instant failure can't spin the radio.
+        state = .connecting
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
+            guard let self, self.bracelet == peripheral, !self.linkUp else { return }
+            self.central.connect(peripheral, options: [CBConnectPeripheralOptionNotifyOnDisconnectionKey: true])
+            self.enterConnecting()
+        }
     }
 
     func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral,
                         error: Error?) {
+        linkUp = false
         state = .disconnected
         resetConnectionState()
+        if error != nil { NetLog.shared.record(.fail, "Bracelet disconnected — reconnecting", error?.localizedDescription ?? "") }
         // Reconnect automatically (also in the background): a pending connect completes
         // whenever the bracelet comes back in range.
         if peripheral == bracelet {
             central.connect(peripheral, options: [CBConnectPeripheralOptionNotifyOnDisconnectionKey: true])
             enterConnecting()
         }
-        // Keep scanning meanwhile so a bracelet that rebooted into update mode is noticed.
-        central.scanForPeripherals(withServices: nil, options: [CBCentralManagerScanOptionAllowDuplicatesKey: false])
+        // In the foreground, also scan so a bracelet that rebooted into update mode is noticed
+        // (an unfiltered scan returns nothing in the background).
+        if isForeground { scanAll() }
     }
 
     private func resetConnectionState() {
