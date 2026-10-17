@@ -16,6 +16,11 @@ and our Swift code (October 2026). Sizes: S = small, M = medium, L = large.
 - Library: replay on own bracelet, delete confirmation.
 - Heartbeat as an EKG (bracelet light, screen, beep), in history; location sharing on by
   default and kept across reinstalls.
+- Home-screen widget (§2): partner name + photo and up to 10 meanings (favourites first)
+  with their touch drawn, in small / medium / large; on iOS 17 a tap sends in the background
+  and shows Sent / Failed for 5 s, on iOS 16 it opens the app, which sends it
+  (`Widget/`, `Sources/Shared/`, `AppModel+Widget.swift`; App Group `group.<bundle id>`).
+  No promo screen.
 
 ## 0. Broken — we claim or attempt it, but it doesn't work (fix first)
 

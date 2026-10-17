@@ -21,7 +21,9 @@ struct BondTouchBeyondApp: App {
                 .environmentObject(model.heart)
                 .environmentObject(model.recovery)
                 .onOpenURL { url in
-                    if CloudRelay.code(fromURL: url) != nil { model.handleOpenURL(url) }
+                    // A meaning tapped on the widget (iOS 16; iOS 17 sends without opening the app).
+                    if let request = WidgetShared.sendRequest(from: url) { Task { await model.sendFromWidget(request) } }
+                    else if CloudRelay.code(fromURL: url) != nil { model.handleOpenURL(url) }
                     else { model.recovery.handleOpened(url) }
                 }
                 .task { await model.bootstrap() }
