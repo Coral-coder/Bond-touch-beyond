@@ -41,6 +41,8 @@ actor CloudRelay {
         var partnerPushToken: String?
         /// The highest number of *our* touches the partner's phone has received ("Seen").
         var partnerSeenTouch: Int?
+        /// The same for our chat messages (read receipts).
+        var partnerSeenMessage: Int?
     }
 
     /// The record kinds, each its own CloudKit record type.
@@ -295,14 +297,16 @@ actor CloudRelay {
         return try await sendEvent(.touch, bond: bond) { (seq: Int) -> TouchPayload in var b = body; b.seq = seq; return b }
     }
 
-    func sendChat(_ message: ChatMessage, bond: Bond) async throws {
+    /// Sends a chat message; returns its number in this phone's message ring (read receipts).
+    @discardableResult
+    func sendChat(_ message: ChatMessage, bond: Bond) async throws -> Int {
         var image: Data?
         if message.kind == .image, let file = message.imageFile {
             image = try? Data(contentsOf: ChatArchive.imageURL(file))
         }
         let body = MessagePayload(id: message.id, sentAt: message.sentAt, kind: message.kind.rawValue,
                                   text: message.text, colorRGB: message.colorRGB, image: image)
-        _ = try await sendEvent(.message, bond: bond) { (seq: Int) -> MessagePayload in var b = body; b.seq = seq; return b }
+        return try await sendEvent(.message, bond: bond) { (seq: Int) -> MessagePayload in var b = body; b.seq = seq; return b }
     }
 
     func sendHeartbeat(bpm: Int, bond: Bond, senderID: String) async throws {
@@ -362,7 +366,8 @@ actor CloudRelay {
     private func writeCursor(_ bond: Bond) async throws {
         let cursor = CursorPayload(touch: UserDefaults.standard.integer(forKey: seqKey(bond.id, .touch)),
                                    message: UserDefaults.standard.integer(forKey: seqKey(bond.id, .message)),
-                                   seenTouch: UserDefaults.standard.integer(forKey: seenKey(bond.id, .touch)))
+                                   seenTouch: UserDefaults.standard.integer(forKey: seenKey(bond.id, .touch)),
+                                   seenMessage: UserDefaults.standard.integer(forKey: seenKey(bond.id, .message)))
         try await put(mine(bond, "cur", .cursor), seal(cursor, bond.id))
     }
 
@@ -429,6 +434,7 @@ actor CloudRelay {
         // The rings: fetch every slot between what we've seen and their newest numbers.
         let cursor = open(CursorPayload.self, found[cursorRef.id], code) ?? CursorPayload(touch: 0, message: 0)
         events.partnerSeenTouch = cursor.seenTouch
+        events.partnerSeenMessage = cursor.seenMessage
         let touchRange = pendingRange(.touch, code: code, newest: cursor.touch)
         let messageRange = pendingRange(.message, code: code, newest: cursor.message)
         let touchRefs = touchRange.map { r in r.map { ($0, theirs(bond, "t-\(slot($0))", .touch)) } } ?? []
@@ -456,8 +462,8 @@ actor CloudRelay {
             }
             if let touchRange { UserDefaults.standard.set(touchRange.upperBound, forKey: seenKey(code, .touch)) }
             if let messageRange { UserDefaults.standard.set(messageRange.upperBound, forKey: seenKey(code, .message)) }
-            // Tell the partner their touches arrived (their "Seen").
-            if touchRange != nil {
+            // Tell the partner their touches and messages arrived (their "Seen").
+            if touchRange != nil || messageRange != nil {
                 await loadCounters(bond)
                 try? await writeCursor(bond)
             }
@@ -496,7 +502,9 @@ struct PresenceInfo: Codable, Equatable {
 private struct HeartbeatPayload: Codable { let bpm: Int; let sentAt: Date }
 /// A phone's newest touch / message numbers, and the partner's touches it has received
 /// (so the partner can mark theirs Seen; optional so older builds read it).
-private struct CursorPayload: Codable { let touch: Int; let message: Int; var seenTouch: Int? = nil }
+private struct CursorPayload: Codable {
+    let touch: Int; let message: Int; var seenTouch: Int? = nil; var seenMessage: Int? = nil
+}
 private struct TouchPayload: Codable {
     var seq = 0
     let id: UUID

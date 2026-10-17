@@ -2,6 +2,7 @@ import CloudKit
 import Combine
 import CoreLocation
 import Foundation
+import UserNotifications
 import SwiftUI
 import UIKit
 
@@ -73,6 +74,8 @@ final class AppModel: ObservableObject {
     @Published var history: [TouchMessage] = []                  // sent + received touches
     private var historyIDs: Set<UUID> = []
     private var missedPending: Set<UUID> = []
+    /// Per iCloud bond: how far the partner's phone has received our chat messages.
+    @Published var partnerSeenMessage: [String: Int] = [:]
 
     /// Adds touches to the feed, skipping ones already present (the backends re-fetch on
     /// each launch), sorting by time, and saving to disk so the feed survives app updates.
@@ -242,11 +245,38 @@ final class AppModel: ObservableObject {
                 }
             }
             .store(in: &statusWatch)
+        // Low bracelet battery: one phone notification per discharge, as the original.
+        bracelet.$batteryPercent.combineLatest(bracelet.$charging)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] pct, charging in
+                Task { @MainActor in self?.checkBraceletBattery(pct, charging: charging == true) }
+            }
+            .store(in: &statusWatch)
         // The bracelet shows the user's own colour (sent at every pairing).
         bracelet.setUserColor(store.profile.colorRGB)
         watch.start(self)
         recovery.start(bracelet)
         AppModel.shared = self
+    }
+
+    private var batteryAlerted = UserDefaults.standard.bool(forKey: "BondBatteryAlerted") {
+        didSet { UserDefaults.standard.set(batteryAlerted, forKey: "BondBatteryAlerted") }
+    }
+
+    /// Notifies once when the bracelet runs low (its own low-battery level when it reports
+    /// one, else 15 %); re-armed once it's charging or back above 30 %.
+    private func checkBraceletBattery(_ pct: Int?, charging: Bool) {
+        guard let pct else { return }
+        if charging || pct >= 30 { batteryAlerted = false; return }
+        let low = bracelet.batteryAlert?.lowPercent ?? 15
+        guard pct <= low, !batteryAlerted else { return }
+        batteryAlerted = true
+        let content = UNMutableNotificationContent()
+        content.title = "Bracelet battery low"
+        content.body = "Your bracelet is at \(pct)%. Charge it soon so you don't miss any touches."
+        content.sound = .default
+        UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: "bracelet-battery", content: content, trigger: nil))
+        NetLog.shared.log(.fail, "Bracelet battery low", "\(pct)%")
     }
 
     /// A weak reference so the scene delegate can route an accepted CloudKit share invite in.
@@ -812,6 +842,7 @@ final class AppModel: ObservableObject {
             if let photo = events.partnerPhoto { setPartnerPhoto(photo, bondID: partner.id) }
             if let token = events.partnerPushToken, !token.isEmpty { partnerPushTokens[partner.id] = token }
             if let seen = events.partnerSeenTouch { markSeen(bondID: partner.id, upTo: seen) }
+            if let seen = events.partnerSeenMessage { partnerSeenMessage[partner.id] = seen }
             if let p = events.presence {
                 cloudPartners[index].presence = p
                 cloudPartners[index].online = p.online

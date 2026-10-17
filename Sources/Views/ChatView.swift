@@ -14,6 +14,7 @@ struct ChatView: View {
     @State private var shareError: String?
 
     private var messages: [ChatMessage] { model.chatMessages(for: model.selectedPartnerID) }
+    private var lastSeenID: UUID? { model.lastSeenMessageID(for: model.selectedPartnerID) }
     private var chatBondID: String? { model.chatBondID(for: model.selectedPartnerID) }
     private var needsLink: Bool { model.selectedPartner != nil && chatBondID == nil }
 
@@ -147,7 +148,9 @@ struct ChatView: View {
                 }
                 if !mine { Spacer(minLength: 40) }
             }
-            Text(msg.sentAt.formatted(date: .omitted, time: .shortened))
+            // "Seen" under our latest message the partner's phone has received.
+            Text(msg.sentAt.formatted(date: .omitted, time: .shortened)
+                 + (mine && msg.id == lastSeenID ? " · Seen" : ""))
                 .font(.caption2).foregroundStyle(Theme.subtitle)
                 .frame(maxWidth: .infinity, alignment: mine ? .trailing : .leading)
         }

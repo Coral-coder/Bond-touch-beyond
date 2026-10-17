@@ -124,6 +124,12 @@ extension AppModel {
         ChatArchive.save(messagesByBond)
     }
 
+    /// The id of our latest message the partner's phone has received, for a "Seen" under it.
+    func lastSeenMessageID(for partnerID: String?) -> UUID? {
+        guard let id = chatBondID(for: partnerID), let seen = partnerSeenMessage[id] else { return nil }
+        return (messagesByBond[id] ?? []).last { ($0.ringSeq ?? .max) <= seen }?.id
+    }
+
     /// Messages shown for a partner (their chat bond's history).
     func chatMessages(for partnerID: String?) -> [ChatMessage] {
         guard let id = chatBondID(for: partnerID) else { return [] }
@@ -142,8 +148,9 @@ extension AppModel {
         let msg = ChatMessage(bondID: bond.id, senderID: myUserID, kind: .text, text: trimmed,
                               colorRGB: store.profile.colorRGB)
         do {
-            try await relay.sendChat(msg, bond: bond)
-            appendChat([msg], bondID: bond.id)
+            var sent = msg
+            sent.ringSeq = try await relay.sendChat(msg, bond: bond)
+            appendChat([sent], bondID: bond.id)
         } catch {
             statusLine = "Message failed: \(error.localizedDescription)"
         }
@@ -159,8 +166,9 @@ extension AppModel {
         let msg = ChatMessage(bondID: bond.id, senderID: myUserID, kind: .image,
                               colorRGB: store.profile.colorRGB, imageFile: file)
         do {
-            try await relay.sendChat(msg, bond: bond)
-            appendChat([msg], bondID: bond.id)
+            var sent = msg
+            sent.ringSeq = try await relay.sendChat(msg, bond: bond)
+            appendChat([sent], bondID: bond.id)
         } catch {
             statusLine = "Photo failed: \(error.localizedDescription)"
         }

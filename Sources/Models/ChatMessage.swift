@@ -21,6 +21,8 @@ struct ChatMessage: Identifiable, Equatable, Codable {
     var serverID: String? = nil
     /// File name of a photo saved in the app's chat-media folder.
     var imageFile: String? = nil
+    /// For our own iCloud messages: its number in this phone's message ring (read receipts).
+    var ringSeq: Int? = nil
 
     init(id: UUID = UUID(), bondID: String, senderID: String, kind: Kind = .text,
          text: String = "", colorRGB: Int = 0xFF4081, sentAt: Date = Date(),
