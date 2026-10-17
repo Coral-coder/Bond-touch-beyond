@@ -141,7 +141,9 @@ private struct BraceletSettingsView: View {
 private struct BraceletSettingsContent: View {
     @EnvironmentObject var model: AppModel
     @EnvironmentObject var store: LocalStore
+    @EnvironmentObject var recovery: FirmwareRecovery
     @ObservedObject var bracelet: BraceletManager
+    @State private var confirmUpdate: BraceletManager.FirmwareUpdate?
     // The bracelet manager stores these; read here so the controls show the saved values.
     @AppStorage("BondVibrationLevel") private var level = 80
     @AppStorage("BondVibrationBalance") private var balance = 2
@@ -159,6 +161,7 @@ private struct BraceletSettingsContent: View {
             VStack(spacing: 16) {
                 ConnectView()
                 if bracelet.isReady { deviceCard }
+                if recovery.isUpdate, recovery.phase != .idle { updateStatusCard }
                 vibrationCard
                 colorCard
                 Button {
@@ -202,6 +205,7 @@ private struct BraceletSettingsContent: View {
                 row("Model", bracelet.modelNumber ?? (bracelet.isThirdGeneration ? "Bond Touch More" : "Bond Touch"))
                 row("Battery", batteryText)
                 row("Firmware", bracelet.firmwareVersion ?? "—")
+                if let update = bracelet.updateAvailable, !updateRunning { updateButton(update) }
                 if let alert = bracelet.batteryAlert {
                     HStack(spacing: 8) {
                         Text("Battery lights").foregroundStyle(Theme.subtitle)
@@ -212,6 +216,71 @@ private struct BraceletSettingsContent: View {
                         Text("critical \(alert.criticalPercent)%").foregroundStyle(.white)
                     }
                     .font(Theme.font(13))
+                }
+            }
+        }
+    }
+
+    // MARK: Firmware update
+
+    private var updateRunning: Bool {
+        switch recovery.phase {
+        case .restarting, .flashing: return true
+        default: return false
+        }
+    }
+
+    /// "Firmware 3.1.0 → Update to 3.1.1": confirmed first, then the bracelet restarts in
+    /// update mode and is flashed with the firmware built into the app.
+    private func updateButton(_ update: BraceletManager.FirmwareUpdate) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Button { confirmUpdate = update } label: {
+                Label("Update to \(update.latest)", systemImage: "arrow.down.circle.fill")
+            }
+            .buttonStyle(AccentButtonStyle(height: 40))
+            Text(bracelet.batteryAllowsUpdate
+                 ? "A new firmware version is available for your bracelet."
+                 : "Battery too low. Charge the bracelet above 40 % (or put it on its charger) to install the update.")
+                .font(.caption).foregroundStyle(bracelet.batteryAllowsUpdate ? Theme.subtitle : Theme.amber)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .alert("Update firmware to \(update.latest)?",
+               isPresented: Binding(get: { confirmUpdate != nil }, set: { if !$0 { confirmUpdate = nil } })) {
+            Button("Update") {
+                if let u = confirmUpdate { recovery.startUpdate(u) }
+                confirmUpdate = nil
+            }
+            Button("Cancel", role: .cancel) { confirmUpdate = nil }
+        } message: {
+            Text("Keep the bracelet close and the app open; the update takes a few minutes. The bracelet restarts and reconnects on its own.")
+        }
+    }
+
+    /// While an update runs the bracelet isn't connected, so its progress shows here (and
+    /// in the banner on every screen).
+    private var updateStatusCard: some View {
+        GlassCard {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Firmware update").font(Theme.font(15, .heavy)).foregroundStyle(.white)
+                switch recovery.phase {
+                case .restarting:
+                    Text("Restarting in update mode…").font(Theme.font(14)).foregroundStyle(Theme.subtitle)
+                    ProgressView().tint(Theme.accent)
+                case .flashing(_, let progress):
+                    Text("Updating… \(progress)%").font(Theme.font(14)).foregroundStyle(Theme.subtitle)
+                    ProgressView(value: Double(progress), total: 100).tint(Theme.accent)
+                case .done:
+                    Text("Update completed. Your bracelet's firmware is up to date.")
+                        .font(Theme.font(14)).foregroundStyle(Theme.lime)
+                case .failed(_, let message):
+                    Text("Failed to update the firmware. \(message)")
+                        .font(Theme.font(14)).foregroundStyle(Theme.danger)
+                        .fixedSize(horizontal: false, vertical: true)
+                case .idle, .needsFirmware:
+                    EmptyView()
+                }
+                if !updateRunning {
+                    Button("OK") { recovery.dismiss() }.buttonStyle(GlassButtonStyle(height: 40))
                 }
             }
         }

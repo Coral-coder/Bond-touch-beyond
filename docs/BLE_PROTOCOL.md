@@ -211,7 +211,8 @@ skipped while neither slot 2 nor 3 is active.
     kind 2 without the timing words.
   - `0x27` (39) ActConfigCommand (16 B): `[op, seq, param:u32LE@4, value:u32LE@8]`; user
     colour = param 1003 (palette ARGB), 1006 (LED id), then SaveConfig (8 B, `1000:u32LE@4`).
-  - `0x25` (37) DFU (8 B, `-1@4`); `0x29` (41) reboot (sent after 10 ACR_BUSY acks).
+  - `0x25` (37) DFU (8 B): `[0x25, 0x00, seq:u16LE, 0xFF, 0xFF, 0xFF, 0xFF]` (`-1:u32@4`);
+    `0x29` (41) reboot (sent after 10 ACR_BUSY acks).
 - Session: read `d3c0ff03` (firmware `[patch@0, minor@1]` → `1.minor.patch`), enable
   notify + read `d3c0ff06`; after the firmware read (if no update is needed) enable
   notifications on `d3c0ffa5`, `d3c0ffa4`, `d3c0ffa7` and write "12345678" to `d3c0ffa1`.
@@ -248,7 +249,8 @@ skipped while neither slot 2 nor 3 is active.
   - cmd `0x45` (69) user-menu/select: enable `[1, 0x45, 0x01]`; set menu
     `[1, 0x45, 0x00] + user1(4B) + user2(4B) + user3(4B)` where each user block =
     `[activeState:u8, r:u8, g:u8, b:u8]`.
-  - cmd `0x2A` (42) = DFU enter (`[1, 0x2A]`).
+  - cmd `0x2A` (42) = DFU enter (`[1, 0x2A]`); the original's startDfuMode sends the
+    firmware request `[1, 0x30]` first, then `[1, 0x2A]` (both at their exact length).
   - cmds `0x19, 0x1B, 0x41, 0x42, 0x49, 0x1C` written on CONNECTED to enable features/notifications.
   - cmds `0x43` / `0x44` = ANCS on/off.
 - **FFB2 touch frame** (BleBondManagerV3.g): header `[slot (MenuIndex 1…3), sampleCount,
@@ -391,10 +393,45 @@ factoryTestMode)`. Firmware thresholds: current/DFU-needed `1.0.3.10`, min suppo
 Both device types use **Nordic Secure DFU** (`no.nordicsemi.android.dfu`), feeding a
 firmware ZIP bundled as an app raw resource.
 
-- **Trigger (Bond Touch):** write the DFU-enter command on the running protocol —
-  v2/v4/mini `0x25` magic `[0x25, 0x00, 0x11, 0x22, 0x33, 0x44]` (zero-padded to 20) to
-  `d3c0ffa6`; v3 FFB1 `[0x01, 0x2A]`; v1 DfuCommand (`0x25`, 8 bytes) to `d3c0ffa6`. The bracelet reboots into its DFU bootloader
-  advertising one of the `*_DFU` names.
+- **Version check (after the firmware read):** `FirmwareHelper.a(current, latest)` —
+  current `0.0.0` (unreadable) → UNKNOWN; current < latest → FIRMWARE_UPDATE_NEEDED;
+  otherwise NO_UPDATE_NEEDED. Versions compare major, minor, patch in order. Parsing
+  (`FirmwareVersion(String)`): three dot-separated decimals; a two-part string is
+  `1.<hex>.<hex>`; anything else is 0.0.0. Firmware sources: v1 `d3c0ff03`
+  `[patch, minor]` → `1.minor.patch`; v2/v4/mini 2A26 string; v3 `0xAC` answer
+  `[0xAC, minor, major, generation]` → `generation.major.minor`.
+- **Latest firmware and bundled image per generation** (each manager's supported version,
+  `BleBondClient.Companion.a`; image chosen by device type in `DfuUpdateViewModel.n`):
+
+  | Generation | Latest | Original raw resource | Bundled here | Update-mode name |
+  |---|---|---|---|---|
+  | v1 classic (BT1) | 1.2.96 | `dfu_v260_hw203` ("2.60" hex = 1.2.96, legacy DFU 0.5, S130) | `bondTouch-hw203.zip` | `BOND_DFU` |
+  | v2 Bond Touch (BT2) | 2.7.9 | `dfu_v279_hw2g` | `bondTouch.zip` | `BOND_DFU` |
+  | v3 Bond Touch More (BTM) | 3.1.1 | `dfu_v311_hw3g` | `bondTouchMore.zip` | `BOND_M_DFU` |
+  | v4 Bond Touch 4 (BT4) | 2.0.3 | `dfu_v203_hw4g` | `bondTouch4.zip` | `BOND_4_DFU` |
+  | Bond Mini | 1.2.0 | `dfu_v120_hwmini` | `bondMini.zip` | `BOND_MINI_DFU` (or `BOND_4_DFU`) |
+
+- **"Firmware too old" gate:** on FIRMWARE_UPDATE_NEEDED the original stops the session
+  setup — v1 returns before the handshake, v2-base skips the OS bond / bonded settings
+  (S()), v3 skips FFB2 notifications and the settings (H()) — and the app shows "Firmware
+  update required" / "An update is necessary to connect to Bond Touch Bracelet." until it's
+  updated. (Bond Touch Beyond only offers the update and keeps the bracelet usable.)
+- **Battery:** the update screen refuses while connected with the battery at 40 % or less
+  (or flagged low): "Battery too low. Please charge your Bond Touch to install an update."
+  An unknown level (-1) doesn't block. Charging isn't an exception in the original (it is
+  in Bond Touch Beyond).
+- **Trigger (Bond Touch):** write the DFU-enter command on the running protocol (each
+  manager's `C()`, "startDfuMode"; the client first requests high connection priority and
+  arms a 15 s safety timer):
+  - v1: DfuCommand `[0x25, 0x00, seq:u16LE, 0xFF, 0xFF, 0xFF, 0xFF]` (8 bytes) to `d3c0ffa6`.
+  - v2/v4/mini: `[0x25, 0x00, 0x11, 0x22, 0x33, 0x44]` zero-padded to 20 bytes to `d3c0ffa6`.
+  - v3: `[0x01, 0x30]` (firmware request) then `[0x01, 0x2A]` to FFB1 (`d3c0ffb1`).
+
+  The bracelet reboots into its DFU bootloader advertising one of the `*_DFU` names. The
+  original then scans for it (8 s scans, up to 3) and gives up after 5 s if the command
+  isn't confirmed sent; Nordic DFU runs with `forceDfu`, 3 retries, no resume, and the
+  progress screen says "Please do not exit this screen or close the app until the update
+  is finished".
 - **DFU target address derivation:** take the connected MAC, increment the 48-bit
   address by 1, and separately XOR bytes[4] and bytes[5] with `0xAA` — both candidate
   DFU MAC addresses are scanned for. Advertised name is matched case-insensitively.

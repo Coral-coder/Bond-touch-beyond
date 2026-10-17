@@ -11,17 +11,28 @@ import NordicDFU
 /// The firmware belongs to Impossible Labs and is not shipped in this open-source app; the
 /// user imports the official file once (Files, or "Open in Bond Touch Beyond" from the
 /// share sheet). It is kept in Application Support, one file per bracelet model.
+///
+/// It also runs the firmware updates the user asks for (`startUpdate`): the connected
+/// bracelet is restarted in update mode, and when it reappears there it is flashed the
+/// same way, with the built-in file for its generation.
 @MainActor
 final class FirmwareRecovery: NSObject, ObservableObject {
     enum Phase: Equatable {
         case idle
         case needsFirmware(BraceletModel)
+        /// An update was started: waiting for the bracelet to come back in update mode.
+        case restarting(BraceletModel)
         case flashing(BraceletModel, progress: Int)
         case done(BraceletModel)
         case failed(BraceletModel, String)
     }
 
     @Published private(set) var phase: Phase = .idle
+    /// True while the phases are those of an update the user asked for (not a repair).
+    @Published private(set) var isUpdate = false
+    /// The update in progress: its model and the built-in file for the bracelet's generation.
+    private var intended: (model: BraceletModel, file: URL)?
+    private var restartTimeout: Timer?
     @Published private(set) var installed: [BraceletModel: String] = [:]   // model → file name
     /// A firmware file opened from another app whose model couldn't be guessed from its name.
     @Published var pendingImport: URL?
@@ -90,8 +101,9 @@ final class FirmwareRecovery: NSObject, ObservableObject {
     }
 
     /// Official firmware bundled in the app at build time (scripts/fetch-bracelet-firmware.sh),
-    /// in the order to try. The Bond Touch had two hardware revisions; its bootloader
-    /// rejects the wrong one safely, so both are tried.
+    /// in the order to try. Both the Bond Touch (v2) and the classic one on the older
+    /// hardware (v1) restart as BOND_DFU; a bootloader rejects the wrong image safely, so
+    /// both are tried.
     static func bundledFirmware(for model: BraceletModel) -> [URL] {
         let names = model == .bondTouch ? ["bondTouch", "bondTouch-hw203"] : [model.rawValue]
         return names.compactMap { Bundle.main.url(forResource: $0, withExtension: "zip") }
@@ -104,22 +116,69 @@ final class FirmwareRecovery: NSObject, ObservableObject {
         (installed[model] != nil ? [Self.url(for: model)] : []) + Self.bundledFirmware(for: model)
     }
 
+    /// Updates the connected bracelet to the firmware built into the app, as the original:
+    /// battery above 40 % (or on the charger), restart it in update mode, then — when it
+    /// reappears as BOND_…_DFU — flash it automatically with its generation's file.
+    func startUpdate(_ update: BraceletManager.FirmwareUpdate) {
+        guard let bracelet else { return }
+        switch phase {
+        case .restarting, .flashing: return
+        default: break
+        }
+        isUpdate = true
+        guard bracelet.batteryAllowsUpdate else {
+            phase = .failed(update.model, "Battery too low. Please charge your bracelet to install an update.")
+            return
+        }
+        guard bracelet.enterUpdateMode() else {
+            phase = .failed(update.model, "The bracelet isn't connected.")
+            return
+        }
+        intended = (update.model, update.file)
+        phase = .restarting(update.model)
+        // The original gives up when no bootloader shows up (3 scans of 8 s after the command).
+        restartTimeout?.invalidate()
+        let t = Timer(timeInterval: 45, repeats: false) { [weak self] _ in
+            Task { @MainActor in self?.restartTimedOut() }
+        }
+        RunLoop.main.add(t, forMode: .common)
+        restartTimeout = t
+    }
+
+    private func restartTimedOut() {
+        restartTimeout = nil
+        guard case .restarting(let m) = phase else { return }
+        intended = nil
+        phase = .failed(m, "The bracelet didn't restart in update mode.")
+        bracelet?.endUpdateHandoff()
+    }
+
     /// Reflashes a bracelet found in update mode — automatically, with the firmware that
-    /// matches its model. Each retry moves to the next candidate file.
+    /// matches its model (for an update we started, the built-in file for its generation
+    /// first). Each retry moves to the next candidate file.
     func recover(_ device: BraceletManager.DFUCandidate) {
         if case .flashing = phase { return }
-        let files = candidates(for: device.model)
-        guard !files.isEmpty else { phase = .needsFirmware(device.model); return }
+        var model = device.model
+        var files = candidates(for: model)
+        // A Bond Mini may restart as BOND_4_DFU (the original accepts BT4 or mini for it).
+        if let intended, intended.model == device.model || (intended.model == .bondMini && device.model == .bondTouch4) {
+            model = intended.model
+            files = [intended.file] + candidates(for: model).filter { $0 != intended.file }
+        }
+        isUpdate = intended != nil
+        guard !files.isEmpty else { phase = .needsFirmware(model); return }
         let attempt = attempts[device.id, default: 0]
         guard attempt < max(3, files.count * 2) else { return }
         attempts[device.id] = attempt + 1
         guard let data = try? Data(contentsOf: files[attempt % files.count]),
               let firmware = try? DFUFirmware(zipFile: data) else {
-            phase = .failed(device.model, "The firmware file couldn't be read.")
+            phase = .failed(model, "The firmware file couldn't be read.")
             return
         }
+        restartTimeout?.invalidate()
+        restartTimeout = nil
         bracelet?.pauseScanning()
-        phase = .flashing(device.model, progress: 0)
+        phase = .flashing(model, progress: 0)
         let initiator = DFUServiceInitiator(queue: .main).with(firmware: firmware)
         initiator.delegate = self
         initiator.progressDelegate = self
@@ -135,13 +194,18 @@ final class FirmwareRecovery: NSObject, ObservableObject {
     }
 
     func dismiss() {
-        if case .flashing = phase { return }
+        switch phase {
+        case .flashing, .restarting: return
+        default: break
+        }
         phase = .idle
+        isUpdate = false
+        intended = nil
     }
 
     private var currentModel: BraceletModel? {
         switch phase {
-        case .flashing(let m, _), .needsFirmware(let m), .done(let m), .failed(let m, _): return m
+        case .flashing(let m, _), .needsFirmware(let m), .restarting(let m), .done(let m), .failed(let m, _): return m
         case .idle: return nil
         }
     }
@@ -155,6 +219,7 @@ extension FirmwareRecovery: DFUServiceDelegate, DFUProgressDelegate {
             case .completed:
                 self.phase = .done(model)
                 self.controller = nil
+                self.intended = nil
                 self.bracelet?.resumeAfterRecovery()
             case .aborted:
                 self.phase = .failed(model, "The update was stopped.")

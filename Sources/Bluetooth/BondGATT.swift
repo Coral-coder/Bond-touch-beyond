@@ -310,6 +310,10 @@ enum BondGATT {
     /// LEDs off (h()).
     static let v2LedsOff: (CBUUID, Data) = ledAndMotor(strength: 0, vibMs: 0, ledMode: 4)
 
+    /// Restarts a v2 / v4 / mini in its update (DFU) bootloader (BleBondManagerV2Base.C,
+    /// "startDfuMode"): `[0x25, 0x00, 0x11, 0x22, 0x33, 0x44]`, zero-padded to 20, on ffa6.
+    static let v2EnterUpdateMode: (CBUUID, Data) = app([0x25, 0x00, 0x11, 0x22, 0x33, 0x44])
+
     /// The state characteristic (ffa4): `[bondState, chargingState, ledBusy, motorBusy, touchBusy]`.
     /// Bond states 0x82 WAITING_TOKEN, 0x83 WAITING_AUID, 0x84 OOBE (setup), 0x85 CONNECTED,
     /// 0x86 MSG, 0x87 FACTORY, 0x88 QUEUE_EXECUTING; charging 0 no, 1 charging, 2 full, 0xFF error.
@@ -420,6 +424,12 @@ enum BondGATT {
         mutating func previewColor(_ rgb: Int) -> (CBUUID, Data) { color(BondGATT.v1Palette(BondGATT.v1Led(rgb).id)) }
         /// LEDs off (h()).
         mutating func colorOff() -> (CBUUID, Data) { color(0) }
+
+        /// 0x25 DfuCommand (C()): `[0x25, 0, seq, 0xFFFFFFFF]`, 8 bytes — restarts the
+        /// bracelet in its update bootloader.
+        mutating func enterUpdateMode() -> (CBUUID, Data) {
+            Self.frame(BondGATT.u16le(37) + next() + [0xFF, 0xFF, 0xFF, 0xFF], 8)
+        }
     }
 
     /// The answer to the v1 PAIRED_SIGNAL event (19): a single byte 0x31 on ffa6.
@@ -584,6 +594,10 @@ enum BondGATT {
     /// LEDs off: `[1, 0x4B, 0x01]` (h()).
     static let v3LedsOff: (CBUUID, Data) = (ffb1, Data([1, 0x4B, 0x01]))
 
+    /// Restarts a Bond Touch More in its update bootloader, as the original's C(): the
+    /// firmware request `[1, 0x30]` (J()), then `[1, 0x2A]`, both at their exact length.
+    static let v3EnterUpdateMode: [(CBUUID, Data)] = [v3FirmwareRequest, (ffb1, Data([1, 0x2A]))]
+
     /// The bracelet's battery-alert settings, from the ack `[0x0A, 0x49, low %, R, G, B,
     /// critical %, R, G, B]` (asked for by the `[1, 0x49, 1]` sent on CONNECTED).
     struct BatteryAlertSettings: Equatable {
@@ -714,6 +728,52 @@ enum BondGATT {
     private static func u32leAt(_ b: [UInt8], _ i: Int) -> UInt32 {
         guard b.count >= i + 4 else { return 0 }
         return UInt32(b[i]) | (UInt32(b[i + 1]) << 8) | (UInt32(b[i + 2]) << 16) | (UInt32(b[i + 3]) << 24)
+    }
+}
+
+/// A firmware version as the original compares them (FirmwareVersion): three numbers,
+/// compared in order. A two-part string is a classic v1's "minor.patch" in hex ("2.60" =
+/// 1.2.96); anything else is 0.0.0 — unknown, never offered an update (FirmwareHelper.a).
+struct BondFirmwareVersion: Comparable, CustomStringConvertible {
+    let major: Int, minor: Int, patch: Int
+
+    init(_ major: Int, _ minor: Int, _ patch: Int) {
+        self.major = major; self.minor = minor; self.patch = patch
+    }
+
+    init(_ string: String) {
+        let parts = string.split(separator: ".").map(String.init)
+        if parts.count == 3, let a = Int(parts[0]), let b = Int(parts[1]), let c = Int(parts[2]) {
+            self.init(a, b, c)
+        } else if parts.count == 2, let b = Int(parts[0], radix: 16), let c = Int(parts[1], radix: 16) {
+            self.init(1, b, c)
+        } else {
+            self.init(0, 0, 0)
+        }
+    }
+
+    var isUnknown: Bool { major == 0 && minor == 0 && patch == 0 }
+    var description: String { "\(major).\(minor).\(patch)" }
+
+    static func < (a: BondFirmwareVersion, b: BondFirmwareVersion) -> Bool {
+        (a.major, a.minor, a.patch) < (b.major, b.minor, b.patch)
+    }
+}
+
+extension BondGeneration {
+    /// The newest firmware the original app ships for this generation (each manager's
+    /// "supported version", BleBondClient.Companion.a) and the bundled file that holds it
+    /// (DfuUpdateViewModel.n: BT1 → dfu_v260_hw203, BT2 → dfu_v279_hw2g, BTM → dfu_v311_hw3g,
+    /// BT4 → dfu_v203_hw4g, mini → dfu_v120_hwmini). Both classic v1 and v2 restart as
+    /// BOND_DFU; the v1's image is the older-hardware one ("2.60" = 1.2.96).
+    var latestFirmware: (model: BraceletModel, version: BondFirmwareVersion, file: String) {
+        switch self {
+        case .v1:   return (.bondTouch, BondFirmwareVersion(1, 2, 96), "bondTouch-hw203")
+        case .v2:   return (.bondTouch, BondFirmwareVersion(2, 7, 9), "bondTouch")
+        case .v3:   return (.bondTouchMore, BondFirmwareVersion(3, 1, 1), "bondTouchMore")
+        case .v4:   return (.bondTouch4, BondFirmwareVersion(2, 0, 3), "bondTouch4")
+        case .mini: return (.bondMini, BondFirmwareVersion(1, 2, 0), "bondMini")
+        }
     }
 }
 

@@ -25,25 +25,40 @@ struct RecoveryBanner: View {
                         catch { recovery.importError = "That file isn't a bracelet firmware package." }
                     }
                 }
+            case .restarting(let m):
+                card(icon: "arrow.triangle.2.circlepath", tint: Theme.accent,
+                     title: "Restarting your \(m.title) in update mode…",
+                     detail: "Please do not close the app until the update is finished. Keep the bracelet close.") {
+                    ProgressView().tint(Theme.accent)
+                }
             case .flashing(let m, let progress):
                 card(icon: "arrow.triangle.2.circlepath", tint: Theme.accent,
-                     title: "Repairing your \(m.title)… \(progress)%",
-                     detail: "Keep the phone next to the bracelet. This takes about a minute.") {
+                     title: "\(recovery.isUpdate ? "Updating" : "Repairing") your \(m.title)… \(progress)%",
+                     detail: recovery.isUpdate
+                        ? "Please do not close the app until the update is finished. Keep the bracelet close."
+                        : "Keep the phone next to the bracelet. This takes about a minute.") {
                     ProgressView(value: Double(progress), total: 100).tint(Theme.accent)
                 }
             case .done(let m):
                 card(icon: "checkmark.seal.fill", tint: Theme.lime,
-                     title: "\(m.title) repaired",
-                     detail: "It restarted with its official firmware and will reconnect on its own.") {
+                     title: "\(m.title) \(recovery.isUpdate ? "updated" : "repaired")",
+                     detail: recovery.isUpdate
+                        ? "Your bracelet's firmware is up to date. It will reconnect on its own."
+                        : "It restarted with its official firmware and will reconnect on its own.") {
                     Button("OK") { recovery.dismiss() }.buttonStyle(GlassButtonStyle(height: 40))
                 }
             case .failed(let m, let message):
                 card(icon: "xmark.octagon.fill", tint: Theme.danger,
-                     title: "Couldn't repair the \(m.title)",
+                     title: "Couldn't \(recovery.isUpdate ? "update" : "repair") the \(m.title)",
                      detail: message + " Put the bracelet on its charger, keep it close, and try again.") {
                     HStack(spacing: 10) {
                         Button("Try again") {
+                            // Still in update mode: flash it again; an update that never got
+                            // that far: start it over.
                             if let d = model.bracelet.dfuDevice { recovery.recover(d) }
+                            else if recovery.isUpdate, let update = model.bracelet.updateAvailable {
+                                recovery.startUpdate(update)
+                            }
                         }
                         .buttonStyle(AccentButtonStyle(height: 40))
                         Button("Close") { recovery.dismiss() }.buttonStyle(GlassButtonStyle(height: 40))

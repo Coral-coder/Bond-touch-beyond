@@ -46,6 +46,69 @@ final class BraceletManager: NSObject, ObservableObject {
     /// (the original shows "double-tap the flashing bracelet").
     @Published private(set) var needsSetupTap = false
 
+    /// A newer official firmware than the bracelet's, built into the app. Checked each time
+    /// the firmware is read, as the original's FirmwareHelper (older than the latest for its
+    /// generation → update). The original then refuses to use the bracelet until it's
+    /// updated; we only offer it.
+    struct FirmwareUpdate: Equatable {
+        let model: BraceletModel
+        let current: String
+        let latest: String
+        let file: URL
+    }
+    @Published private(set) var updateAvailable: FirmwareUpdate?
+
+    /// The original refuses an update at 40 % battery or less (DfuInfoViewModel); here it's
+    /// also allowed on the charger. An unknown level doesn't block, as in the original.
+    var batteryAllowsUpdate: Bool {
+        charging == true || (batteryPercent.map { $0 > 40 } ?? true)
+    }
+
+    /// Set once the bracelet was told to restart in update mode: it's not reconnected as a
+    /// bracelet until the updater is done with it (`resumeAfterRecovery`/`endUpdateHandoff`).
+    private var dfuHandoff = false
+
+    /// Restarts the bracelet in its update (DFU) bootloader, as the original's startDfuMode
+    /// (C()): v1 DfuCommand 0x25, v2/v4/mini `[0x25,0,0x11,0x22,0x33,0x44]`, Bond Touch More
+    /// `[1,0x30]` + `[1,0x2A]`. It then advertises BOND_…_DFU and `dfuDevice` hands it to the
+    /// updater. False if the bracelet isn't connected.
+    @discardableResult
+    func enterUpdateMode() -> Bool {
+        guard isReady, let gen else { return false }
+        dfuHandoff = true
+        dfuDevice = nil
+        switch gen {
+        case .v1: enqueue([v1.enterUpdateMode()])
+        case .v2, .v4, .mini: enqueue([BondGATT.v2EnterUpdateMode])
+        case .v3: enqueue(BondGATT.v3EnterUpdateMode)
+        }
+        NetLog.shared.record(.send, "Bracelet: restarting in update mode", firmwareVersion.map { "firmware \($0)" } ?? "")
+        return true
+    }
+
+    /// The bracelet never showed up in update mode: use it as a bracelet again.
+    func endUpdateHandoff() {
+        guard dfuHandoff else { return }
+        dfuHandoff = false
+        if !linkUp { startScanning() }
+    }
+
+    /// FirmwareHelper.a: an update is offered when the firmware is known and older than the
+    /// latest for the generation, and the app has that firmware built in.
+    private func checkFirmware() {
+        guard let gen, let fw = firmwareVersion else { updateAvailable = nil; return }
+        let latest = gen.latestFirmware
+        let current = BondFirmwareVersion(fw)
+        guard !current.isUnknown, current < latest.version,
+              let file = Bundle.main.url(forResource: latest.file, withExtension: "zip") else {
+            updateAvailable = nil
+            return
+        }
+        updateAvailable = FirmwareUpdate(model: latest.model, current: fw,
+                                         latest: latest.version.description, file: file)
+        NetLog.shared.record(.send, "Bracelet firmware update available", "\(fw) → \(latest.version)")
+    }
+
     // The user's bracelet settings, kept across launches and (re)applied after every pairing
     // (the original's UserBraceletData + SAVED_USER_INDEX).
     private let defaults = UserDefaults.standard
@@ -366,6 +429,7 @@ final class BraceletManager: NSObject, ObservableObject {
     func reconnect() {
         clearConnectWatchdog()
         connectAttempts = 0
+        dfuHandoff = false
         if let bracelet { central.cancelPeripheralConnection(bracelet) }
         bracelet = nil
         savedID = nil
@@ -663,6 +727,7 @@ final class BraceletManager: NSObject, ObservableObject {
                 .trimmingCharacters(in: CharacterSet.whitespacesAndNewlines.union(CharacterSet(charactersIn: "\0")))
             firmwareVersion = fw
             NetLog.shared.record(.ok, "Bracelet paired", "firmware \(fw)")
+            checkFirmware()
             devicePaired()
             v2AfterPairing()
         default:
@@ -816,6 +881,7 @@ final class BraceletManager: NSObject, ObservableObject {
         case BondGATT.v1Firmware:
             guard data.count >= 2 else { return }
             firmwareVersion = "1.\(data[data.startIndex + 1]).\(data[data.startIndex])"
+            checkFirmware()
             beginV1Handshake()
         case BondGATT.charFF06:
             if let pct = BondGATT.v1BatteryPercent(data) { batteryPercent = pct }
@@ -939,6 +1005,7 @@ final class BraceletManager: NSObject, ObservableObject {
             v3FirmwareRead = true
             firmwareVersion = "\(b[3]).\(b[2]).\(b[1])"
             NetLog.shared.record(.ok, "Bracelet paired", "firmware \(b[3]).\(b[2]).\(b[1])")
+            checkFirmware()
             enableV3TouchNotifications()
             if let p = bracelet, let battery = chars[BondGATT.batteryLevel] {
                 if battery.properties.contains(.read) { p.readValue(for: battery) }
@@ -1033,7 +1100,8 @@ extension BraceletManager: CBCentralManagerDelegate {
             }
             return
         }
-        guard BondGATT.isBondName(advName), !userPaused else { return }
+        // Restarting in update mode: the updater takes it from here.
+        guard BondGATT.isBondName(advName), !userPaused, !dfuHandoff else { return }
         // Already connecting to this one (e.g. the pending connect to our saved bracelet).
         if peripheral == bracelet, state == .connecting || state == .connected { return }
         if let current = bracelet, current != peripheral {
@@ -1074,6 +1142,7 @@ extension BraceletManager: CBCentralManagerDelegate {
 
     /// After a reflash: forget the DFU device and look for the bracelet again.
     func resumeAfterRecovery() {
+        dfuHandoff = false
         dfuDevice = nil
         state = .disconnected
         startScanning()
@@ -1114,8 +1183,9 @@ extension BraceletManager: CBCentralManagerDelegate {
         reportPlayFailed("bracelet disconnected")
         if error != nil { NetLog.shared.record(.fail, "Bracelet disconnected — reconnecting", error?.localizedDescription ?? "") }
         // Reconnect automatically (also in the background): a pending connect completes
-        // whenever the bracelet comes back in range.
-        if peripheral == bracelet {
+        // whenever the bracelet comes back in range. Not while it restarts in update mode —
+        // the updater connects to it then.
+        if peripheral == bracelet, !dfuHandoff {
             central.connect(peripheral, options: [CBConnectPeripheralOptionNotifyOnDisconnectionKey: true])
             enterConnecting()
         }

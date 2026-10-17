@@ -21,6 +21,10 @@ and our Swift code (October 2026). Sizes: S = small, M = medium, L = large.
   and shows Sent / Failed for 5 s, on iOS 16 it opens the app, which sends it
   (`Widget/`, `Sources/Shared/`, `AppModel+Widget.swift`; App Group `group.<bundle id>`).
   No promo screen.
+- Firmware updates (OTA): version check after the firmware read (v1 1.2.96, v2 2.7.9,
+  v3 3.1.1, v4 2.0.3, mini 1.2.0), "Update to …" on the bracelet's device card with
+  confirmation, battery above 40 % or charging, the original's update-mode command per
+  generation, then flashed automatically with the built-in firmware (offered, not forced).
 
 ## 0. Broken — we claim or attempt it, but it doesn't work (fix first)
 
