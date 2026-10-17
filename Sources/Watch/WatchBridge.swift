@@ -33,17 +33,50 @@ final class WatchBridge: NSObject, WCSessionDelegate {
         var meanings: [String: [[String: Any]]] = [:]
         for p in model.partners {
             let list = model.meanings(for: p.bond)
-            meanings[p.id] = list.map {
+            // Favourites first, as the original watch app.
+            let ordered = list.filter { $0.favourite == true } + list.filter { $0.favourite != true }
+            meanings[p.id] = ordered.map {
                 var d: [String: Any] = ["name": $0.label, "pattern": $0.pattern, "gen": $0.touchGeneration,
-                                        "start": $0.colorRGB, "end": $0.endColorRGB]
+                                        "start": $0.colorRGB, "end": $0.endColorRGB,
+                                        "fav": $0.favourite == true]
                 if let sid = $0.serverID { d["meaningId"] = sid }   // so it lights the partner's bracelet
                 return d
             }
         }
-        var context: [String: Any] = ["partners": partners, "meanings": meanings,
+        // Recent touches with each partner, for the watch's history page.
+        var history: [String: [[String: Any]]] = [:]
+        for p in model.partners {
+            history[p.id] = model.history.filter { $0.bondID == p.id }.suffix(15).map { Self.encode($0, model: model) }
+        }
+        var context: [String: Any] = ["partners": partners, "meanings": meanings, "history": history,
                                       "window": model.store.touchWindowSeconds]
         if let s = model.selectedPartnerID { context["selected"] = s }
         try? WCSession.default.updateApplicationContext(context)
+    }
+
+    /// A touch the phone just played: the watch plays it too (haptics) and lists it.
+    @MainActor
+    func forward(_ touch: TouchMessage) {
+        guard let model, WCSession.default.activationState == .activated,
+              WCSession.default.isPaired, WCSession.default.isWatchAppInstalled else { return }
+        var message = Self.encode(touch, model: model)
+        message["type"] = "received"
+        if WCSession.default.isReachable {
+            WCSession.default.sendMessage(message, replyHandler: nil) { _ in WCSession.default.transferUserInfo(message) }
+        } else {
+            WCSession.default.transferUserInfo(message)
+        }
+    }
+
+    @MainActor
+    private static func encode(_ t: TouchMessage, model: AppModel) -> [String: Any] {
+        let mine = t.senderID == model.myUserID || t.senderID == ChatMessage.legacySelf
+        var d: [String: Any] = ["id": t.id.uuidString, "bond": t.bondID, "pattern": t.pattern, "gen": t.generation,
+                                "start": t.colorRGB, "end": t.endColorRGB, "at": t.sentAt.timeIntervalSince1970,
+                                "mine": mine]
+        if let label = t.meaningLabel { d["label"] = label }
+        if let bpm = t.heartbeatBPM { d["bpm"] = bpm }
+        return d
     }
 
     private func handle(_ message: [String: Any]) {
@@ -57,8 +90,13 @@ final class WatchBridge: NSObject, WCSessionDelegate {
                 let gen = (message["gen"] as? Int) ?? 3
                 // A saved meaning carries its id, so send it as a meaning (lights the partner's band).
                 if let sid = message["meaningId"] as? String, !sid.isEmpty {
-                    let m = TouchMeaning(label: "Touch", emoji: "", colorRGB: start, endColorRGB: end,
-                                         pattern: pattern, serverID: sid, generation: gen)
+                    let m = TouchMeaning(label: (message["name"] as? String) ?? "Touch", emoji: "", colorRGB: start,
+                                         endColorRGB: end, pattern: pattern, serverID: sid, generation: gen)
+                    await model.sendMeaning(m, toBondID: bond)
+                } else if let name = message["name"] as? String,
+                          let p = model.partners.first(where: { $0.id == bond }),
+                          let m = model.meanings(for: p.bond).first(where: { $0.label == name }) {
+                    // An iCloud meaning: sent as itself, labelled.
                     await model.sendMeaning(m, toBondID: bond)
                 } else {
                     await model.sendTouch(pattern: pattern, generation: gen,

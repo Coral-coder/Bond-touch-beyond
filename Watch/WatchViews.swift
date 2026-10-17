@@ -25,6 +25,7 @@ struct WatchRootView: View {
             TabView {
                 WatchTouchBarView()
                 WatchMeaningsView()
+                WatchHistoryView()
             }
             .tabViewStyle(.page)
         }
@@ -199,8 +200,40 @@ struct WatchMeaningsView: View {
                                                          startPoint: .leading, endPoint: .trailing))
                                 .frame(width: 12, height: 12)
                             Text(m.name).font(.system(.body, design: .rounded).weight(.bold))
+                            if m.favourite { Spacer(); Image(systemName: "star.fill").font(.caption2).foregroundStyle(.yellow) }
                         }
                     }
+                }
+            }
+        }
+    }
+}
+
+/// Recent touches with the selected partner; tap one to feel it again.
+struct WatchHistoryView: View {
+    @EnvironmentObject var link: PhoneLink
+
+    var body: some View {
+        let list = (link.selected.flatMap { link.history[$0.id] } ?? []).reversed()
+        List {
+            Section("With \(link.selected?.name ?? "partner")") {
+                if list.isEmpty { Text("No touches yet").foregroundStyle(.secondary) }
+                ForEach(Array(list)) { t in
+                    Button { WatchHaptics.play(t) } label: {
+                        HStack(spacing: 8) {
+                            Image(systemName: t.bpm != nil ? "heart.fill" : (t.mine ? "arrow.up.right" : "arrow.down.left"))
+                                .foregroundStyle(Color(rgb: t.startRGB))
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(t.bpm.map { "\($0) BPM" } ?? t.label ?? (t.mine ? "You" : link.selected?.name ?? "Partner"))
+                                    .font(.system(.footnote, design: .rounded).weight(.bold))
+                                Text(t.sentAt.formatted(date: .omitted, time: .shortened))
+                                    .font(.caption2).foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Image(systemName: "play.fill").font(.caption2).foregroundStyle(accent)
+                        }
+                    }
+                    .accessibilityLabel("Feel it again")
                 }
             }
         }

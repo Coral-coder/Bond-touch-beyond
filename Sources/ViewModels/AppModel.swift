@@ -789,6 +789,7 @@ final class AppModel: ObservableObject {
             return
         }
         feel(touch)
+        watch.forward(touch)
     }
 
     /// Unbonds: deletes the iCloud bond (owner only) or cancels the original-app bond, and
