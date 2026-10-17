@@ -100,7 +100,7 @@ targets:
           - bluetooth-central
           - remote-notification
           - location
-        NSLocationAlwaysAndWhenInUseUsageDescription: Bond Touch Beyond keeps running in the background so touches from your partner reach your bracelet while your phone is locked, and shares your location with your partner if you turn that on.
+        NSLocationAlwaysAndWhenInUseUsageDescription: Bond Touch Beyond keeps running in the background so touches from your partner reach your bracelet while your phone is locked, shares your location with your partner if you turn that on, and tells your partner when you arrive at a place you saved.
         # Open official bracelet firmware (.zip) shared from Files or another app, so a
         # bracelet stuck in update mode can be repaired.
         CFBundleDocumentTypes:

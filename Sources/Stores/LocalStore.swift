@@ -61,6 +61,10 @@ final class LocalStore: ObservableObject {
     }
     /// iCloud bond codes this device belongs to (created or joined), persisted so bonds
     /// come back after relaunch. Maps code → true if we created it.
+    /// Saved places watched for arrival alerts.
+    @Published var savedPlaces: [SavedPlace] {
+        didSet { save(savedPlaces, for: .savedPlaces) }
+    }
     /// Each iCloud partner's shared Touch Language, keyed by bond (deleted ones kept as
     /// markers). A bond without one yet starts from `meanings`, the older single library.
     @Published var cloudMeanings: [String: [TouchMeaning]] {
@@ -155,7 +159,7 @@ final class LocalStore: ObservableObject {
         greetings[bondID] = text
     }
 
-    private enum Key: String { case meanings, vibration, dnd, profile, fbEnabled, fbURL, fbToken, greetings, encounters, psPasscode, legacyEmail, legacyRefresh, legacyChat, photoBg, bgSoftness, touchWindow, chatLinks, keepAlive, cloudBonds, cloudMeanings }
+    private enum Key: String { case meanings, vibration, dnd, profile, fbEnabled, fbURL, fbToken, greetings, encounters, psPasscode, legacyEmail, legacyRefresh, legacyChat, photoBg, bgSoftness, touchWindow, chatLinks, keepAlive, cloudBonds, cloudMeanings, savedPlaces }
 
     init() {
         self.meanings = LocalStore.load([TouchMeaning].self, for: .meanings) ?? TouchMeaning.starters
@@ -171,6 +175,7 @@ final class LocalStore: ObservableObject {
         self.legacyChatEnabled = UserDefaults.standard.bool(forKey: Key.legacyChat.rawValue)
         self.cloudBondCodes = LocalStore.load([String: Bool].self, for: .cloudBonds) ?? [:]
         self.cloudMeanings = LocalStore.load([String: [TouchMeaning]].self, for: .cloudMeanings) ?? [:]
+        self.savedPlaces = LocalStore.load([SavedPlace].self, for: .savedPlaces) ?? []
         self.photoBackgrounds = LocalStore.load([String: Bool].self, for: .photoBg) ?? [:]
         self.chatLinks = LocalStore.load([String: String].self, for: .chatLinks) ?? [:]
         // Prefer the iCloud-latched choice, then this device's, then the default (on).

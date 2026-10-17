@@ -194,6 +194,10 @@ final class AppModel: ObservableObject {
         bracelet.$state.receive(on: DispatchQueue.main).assign(to: &$braceletState)
         bracelet.$heartbeatActive.receive(on: DispatchQueue.main).assign(to: &$partnerHeartbeatActive)
         location.onUpdate = { [weak self] fix in Task { @MainActor in await self?.broadcastLocation(fix) } }
+        location.onArrive = { [weak self] id in Task { @MainActor in await self?.arrived(at: id) } }
+        store.$savedPlaces
+            .sink { [weak self] places in Task { @MainActor in self?.location.monitor(places) } }
+            .store(in: &statusWatch)
         // A touch made on the user's own bracelet: on a Bond Touch More it's for the partner
         // in the slot it was made in; otherwise for the selected partner.
         bracelet.onLocalTap = { [weak self] pattern, generation, slotBondID in
@@ -310,6 +314,25 @@ final class AppModel: ObservableObject {
         guard sharingLocation else { return }
         await legacyPushLocation(fix.coordinate)
         await publishPresence(force: false)   // throttled — fixes can arrive every few seconds
+    }
+
+    // MARK: - Saved places
+
+    /// Arrived at a saved place: every partner feels a touch saying so (once per place per
+    /// 30 minutes, so hovering at the edge doesn't repeat it).
+    private func arrived(at placeID: String) async {
+        guard let place = store.savedPlaces.first(where: { $0.id.uuidString == placeID }), place.notifyPartners else { return }
+        let key = "arrived-\(placeID)"
+        if let last = UserDefaults.standard.object(forKey: key) as? Date, Date().timeIntervalSince(last) < 30 * 60 { return }
+        UserDefaults.standard.set(Date(), forKey: key)
+        if !ready { await bootstrap() }
+        NetLog.shared.log(.send, "Arrived at \(place.name) — telling partners")
+        let arrival = TouchMeaning(label: "Arrived at \(place.name)", emoji: "📍", colorRGB: store.profile.colorRGB,
+                                   pattern: [120, 120, 120])     // two short taps
+        for partner in partners {
+            await sendTouch(pattern: arrival.pattern, generation: 2, colorRGB: arrival.colorRGB,
+                            toBondID: partner.id, meaning: arrival)
+        }
     }
 
     // MARK: - Lifecycle
@@ -633,6 +656,8 @@ final class AppModel: ObservableObject {
                 let me = store.profile.name.isEmpty ? "Someone" : store.profile.name
                 if let bpm = touch.heartbeatBPM {
                     await pushPartner(bondID: bond.id, title: "\(me)'s heartbeat", body: "💓 \(bpm) BPM", touch: touch)
+                } else if touch.meaningEmoji == "📍", let label = touch.meaningLabel {
+                    await pushPartner(bondID: bond.id, title: "\(me) arrived", body: "📍 \(label)", touch: touch)
                 } else {
                     let body = touch.meaningLabel.map { "\(touch.meaningEmoji ?? "") \($0)".trimmingCharacters(in: .whitespaces) } ?? "❤️"
                     await pushPartner(bondID: bond.id, title: "\(me) touched you", body: body, touch: touch)

@@ -6,6 +6,8 @@ import SwiftUI
 /// fits everyone again. Toggle your own location sharing at the top.
 struct MapTabView: View {
     @EnvironmentObject var model: AppModel
+    @EnvironmentObject var store: LocalStore
+    @State private var showPlaces = false
     @State private var region = MKCoordinateRegion(
         center: CLLocationCoordinate2D(latitude: 37.3349, longitude: -122.0090),
         span: MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05))
@@ -21,6 +23,7 @@ struct MapTabView: View {
         let id: String
         let partner: Partner?
         let coordinate: CLLocationCoordinate2D
+        var place: SavedPlace? = nil
     }
 
     private var pins: [Pin] {
@@ -32,9 +35,14 @@ struct MapTabView: View {
         return out
     }
 
+    /// People plus saved places (places don't count when fitting everyone in).
+    private var allPins: [Pin] {
+        pins + store.savedPlaces.map { Pin(id: "place-\($0.id)", partner: nil, coordinate: $0.coordinate, place: $0) }
+    }
+
     var body: some View {
         ZStack(alignment: .top) {
-            Map(coordinateRegion: $region, annotationItems: pins) { pin in
+            Map(coordinateRegion: $region, annotationItems: allPins) { pin in
                 MapAnnotation(coordinate: pin.coordinate) { annotation(pin) }
             }
             .ignoresSafeArea()
@@ -53,6 +61,12 @@ struct MapTabView: View {
                     .accessibilityLabel("Fit everyone")
                 }
                 HStack {
+                    Button { showPlaces = true } label: {
+                        Label("Places", systemImage: "mappin.and.ellipse")
+                            .font(Theme.font(13, .bold)).foregroundStyle(.white)
+                            .padding(.horizontal, 14).frame(height: 44).glass(Capsule())
+                    }
+                    .buttonStyle(.plain)
                     Spacer()
                     if let me = model.location.coordinate {
                         Button { focused = nil; zoom(to: Pin(id: "me", partner: nil, coordinate: me)) } label: {
@@ -77,10 +91,18 @@ struct MapTabView: View {
             }
             .padding(.horizontal, 16).padding(.top, 10)
         }
+        .sheet(isPresented: $showPlaces) { PlacesSheet(mapCenter: region.center) }
     }
 
     @ViewBuilder private func annotation(_ pin: Pin) -> some View {
-        if let p = pin.partner {
+        if let place = pin.place {
+            VStack(spacing: 2) {
+                Image(systemName: "mappin.circle.fill").font(.system(size: 22)).foregroundStyle(Theme.accent)
+                Text(place.name).font(Theme.font(10, .bold)).foregroundStyle(.white)
+                    .padding(.horizontal, 6).padding(.vertical, 2).background(Capsule().fill(.black.opacity(0.5)))
+            }
+            .accessibilityLabel("Saved place \(place.name)")
+        } else if let p = pin.partner {
             let selected = p.id == focused || (focused == nil && p.id == model.selectedPartnerID)
             Button { zoom(to: pin) } label: {
                 AvatarRing(name: p.displayName, ringColor: Color(rgbInt: p.colorRGB),
@@ -210,4 +232,55 @@ private struct LookAroundSheet: UIViewControllerRepresentable {
         MKLookAroundViewController(scene: scene)
     }
     func updateUIViewController(_ vc: MKLookAroundViewController, context: Context) { vc.scene = scene }
+}
+
+/// Saved places: arriving at one sends your partners a touch saying so ("📍 Arrived at Home").
+private struct PlacesSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject var model: AppModel
+    @EnvironmentObject var store: LocalStore
+    let mapCenter: CLLocationCoordinate2D
+    @State private var name = ""
+    @State private var useMapCentre = false
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    TextField("Name (Home, Work…)", text: $name)
+                    Picker("Where", selection: $useMapCentre) {
+                        Text("Where I am").tag(false)
+                        Text("Map centre").tag(true)
+                    }
+                    .pickerStyle(.segmented)
+                    Button("Save place") { add() }
+                        .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty
+                                  || (!useMapCentre && model.location.coordinate == nil))
+                } footer: {
+                    Text("When you arrive at a saved place, your partners feel a touch on their bracelet saying so. Needs location access set to Always.")
+                }
+                if !store.savedPlaces.isEmpty {
+                    Section("Saved") {
+                        ForEach($store.savedPlaces) { $place in
+                            Toggle(isOn: $place.notifyPartners) {
+                                Label(place.name, systemImage: "mappin.circle.fill")
+                            }
+                        }
+                        .onDelete { store.savedPlaces.remove(atOffsets: $0) }
+                    }
+                }
+            }
+            .navigationTitle("Places")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
+        }
+        .preferredColorScheme(.dark)
+    }
+
+    private func add() {
+        let at = useMapCentre ? mapCenter : (model.location.coordinate ?? mapCenter)
+        store.savedPlaces.append(SavedPlace(name: name.trimmingCharacters(in: .whitespaces),
+                                            latitude: at.latitude, longitude: at.longitude))
+        name = ""
+    }
 }
