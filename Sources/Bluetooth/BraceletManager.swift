@@ -96,6 +96,7 @@ final class BraceletManager: NSObject, ObservableObject {
 
     func startScanning() {
         guard central.state == .poweredOn else { state = .bluetoothOff; return }
+        userPaused = false
 
         // A bracelet already connected at the system level will not appear in a scan; ask
         // for it directly by its services, then by battery service filtered on name.
@@ -105,17 +106,22 @@ final class BraceletManager: NSObject, ObservableObject {
             known = central.retrieveConnectedPeripherals(withServices: [BondGATT.batteryService])
                 .filter { BondGATT.isBondName($0.name) }
         }
-        if let peripheral = known.first { connect(peripheral); return }
+        if let peripheral = known.first {
+            NetLog.shared.record(.send, "Bracelet: already connected to iOS — attaching")
+            connect(peripheral); return
+        }
 
         // Our own bracelet, by identifier: a pending connect completes the moment it's in
         // range — in the foreground or background — with no scan needed.
         if let id = savedID, let peripheral = central.retrievePeripherals(withIdentifiers: [id]).first {
+            NetLog.shared.record(.send, "Bracelet: reconnecting to saved bracelet")
             connect(peripheral)
             if isForeground { scanAll() }   // also look fresh, in case it shows up under a new id
             return
         }
 
         // The bracelet does not advertise its vendor service UUID — scan all and filter by name.
+        NetLog.shared.record(.send, "Bracelet: scanning")
         state = .scanning
         scanAll()
     }
@@ -127,6 +133,7 @@ final class BraceletManager: NSObject, ObservableObject {
 
     private func connect(_ peripheral: CBPeripheral) {
         if let old = bracelet, old != peripheral { central.cancelPeripheralConnection(old) }
+        if bracelet != peripheral { connectStartedAt = Date() }
         bracelet = peripheral
         peripheral.delegate = self
         central.stopScan()
@@ -134,9 +141,17 @@ final class BraceletManager: NSObject, ObservableObject {
         enterConnecting()
     }
 
+    /// When we started trying to reach the current bracelet (to let a different one take over
+    /// if the remembered one never answers).
+    private var connectStartedAt: Date?
+    /// Set by "Disconnect bracelet": don't reconnect on our own until Reconnect or a relaunch.
+    private var userPaused = false
+
     /// The Settings "Disconnect bracelet" button: drop the link and stop auto-reconnecting.
     func disconnect() {
         clearConnectWatchdog()
+        userPaused = true
+        central.stopScan()
         let p = bracelet
         bracelet = nil          // so didDisconnect doesn't reconnect it straight back
         savedID = nil
@@ -203,18 +218,31 @@ final class BraceletManager: NSObject, ObservableObject {
         // in the background. (The old watchdog cancelled it and fell back to a scan — which
         // returns nothing in the background — so one blip left the band dead until the app
         // was opened.)
-        if linkUp || isForeground {
-            // The link is up but discovery/handshake stalled, or we're in the foreground with a
-            // possibly half-open attempt: cancel it and re-issue the connect immediately.
-            NetLog.shared.record(.fail, "Bracelet stuck connecting — retrying", "attempt \(connectAttempts)")
+        guard central.state == .poweredOn else { enterConnecting(timeout: 30); return }
+        if linkUp {
+            // The link is up but discovery / the handshake stalled: drop it. didDisconnect
+            // re-issues the connect.
+            NetLog.shared.record(.fail, "Bracelet handshake stalled — reconnecting", "attempt \(connectAttempts)")
+            central.cancelPeripheralConnection(p)
+        } else if isForeground {
+            // Foreground, possibly a half-open attempt: cancel it, let any fresh discovery take
+            // over at once, and re-issue the connect after a beat (a connect sent in the same
+            // instant as a cancel can be swallowed).
+            NetLog.shared.record(.fail, "Bracelet not answering — retrying", "attempt \(connectAttempts)")
             central.cancelPeripheralConnection(p)
             resetConnectionState()
-            linkUp = false
+            connectStartedAt = .distantPast
+            scanAll()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+                guard let self, self.bracelet == p, !self.linkUp, self.state != .connected else { return }
+                self.central.connect(p, options: [CBConnectPeripheralOptionNotifyOnDisconnectionKey: true])
+            }
+        } else {
+            // Background, no link: make sure a pending connect really exists (one issued before
+            // Bluetooth powered on is silently dropped) without cancelling it. Calling connect
+            // on an already-pending peripheral is harmless.
             central.connect(p, options: [CBConnectPeripheralOptionNotifyOnDisconnectionKey: true])
-            if isForeground { scanAll() }
         }
-        // Otherwise (background, no link) the pending connect just keeps waiting for the
-        // bracelet to come back in range — leave it, and check again later.
         enterConnecting(timeout: min(15 * Double(connectAttempts + 1), 60))
     }
 
@@ -342,7 +370,16 @@ extension BraceletManager: CBCentralManagerDelegate {
     func centralManagerDidUpdateState(_ central: CBCentralManager) {
         switch central.state {
         case .poweredOn:
-            if state == .disconnected || state == .bluetoothOff { startScanning() }
+            if userPaused { return }
+            if let p = bracelet, !linkUp, p.state != .connected {
+                // A bracelet restored by iOS (or one we were reaching before Bluetooth went off):
+                // connects only work once powered on, so (re)issue it now.
+                central.connect(p, options: [CBConnectPeripheralOptionNotifyOnDisconnectionKey: true])
+                enterConnecting()
+                if isForeground { scanAll() }
+            } else if state == .disconnected || state == .bluetoothOff {
+                startScanning()
+            }
         case .poweredOff:
             state = .bluetoothOff
         default:
@@ -360,11 +397,18 @@ extension BraceletManager: CBCentralManagerDelegate {
             }
             return
         }
-        guard BondGATT.isBondName(advName) else { return }
+        guard BondGATT.isBondName(advName), !userPaused else { return }
         // Already connecting to this one (e.g. the pending connect to our saved bracelet).
         if peripheral == bracelet, state == .connecting || state == .connected { return }
-        // Stick to our own bracelet — don't grab a partner's sitting in the same room.
-        if let saved = savedID, peripheral.identifier != saved, bracelet != nil { return }
+        if let current = bracelet, current != peripheral {
+            // Prefer the bracelet we're already reaching — but if it hasn't answered in 10 s
+            // (e.g. it was reset and now shows up under a new identifier), take this one.
+            // A partner's bracelet connected to their phone doesn't advertise, so this won't
+            // grab theirs.
+            if state == .connected { return }
+            if let started = connectStartedAt, Date().timeIntervalSince(started) < 10 { return }
+            NetLog.shared.record(.send, "Bracelet: saved one isn't answering — switching to \(advName ?? "bracelet")")
+        }
         connect(peripheral)
     }
 
@@ -379,9 +423,11 @@ extension BraceletManager: CBCentralManagerDelegate {
             enterConnecting()
             p.discoverServices(nil)
         } else {
+            // Not connected: the connect is issued in centralManagerDidUpdateState once
+            // Bluetooth is powered on (a connect before that is silently dropped).
             linkUp = false
-            enterConnecting()
-            central.connect(p, options: [CBConnectPeripheralOptionNotifyOnDisconnectionKey: true])
+            connectStartedAt = Date()
+            state = .connecting
         }
     }
 
