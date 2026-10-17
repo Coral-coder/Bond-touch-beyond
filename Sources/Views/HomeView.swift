@@ -8,6 +8,8 @@ struct HomeView: View {
     @EnvironmentObject var model: AppModel
     @EnvironmentObject var store: LocalStore
     @State private var showHeart = false
+    /// A heartbeat send's problem (no heart rate, no partner…), shown briefly under the top bar.
+    @State private var heartNote: String?
     @State private var showPeople = false
     @State private var showEncounters = false
     @State private var showCompose = false
@@ -29,6 +31,20 @@ struct HomeView: View {
     var body: some View {
         VStack(spacing: 12) {
             topBar
+                .overlay(alignment: .bottom) {
+                    if let heartNote {
+                        Text(heartNote)
+                            .font(Theme.font(12, .semibold)).foregroundStyle(.white)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 14).padding(.vertical, 8)
+                            .glass(cornerRadius: 16)
+                            .padding(.horizontal, 24)
+                            .offset(y: 46)
+                            .transition(.opacity.combined(with: .move(edge: .top)))
+                            .zIndex(1)
+                    }
+                }
+                .animation(.easeOut(duration: 0.25), value: heartNote)
             // Fixed above the feed; only Recent touches scrolls.
             VStack(alignment: .leading, spacing: 14) {
                 pairCard
@@ -81,12 +97,49 @@ struct HomeView: View {
 
     private var topBar: some View {
         HStack(spacing: 10) {
-            iconButton("heart.fill", label: "Heartbeat") { showHeart = true }
+            heartButton
             PartnerBar()
             iconButton("person.2.fill", label: "People") { showPeople = true }
         }
         .padding(.horizontal, 18)
         .padding(.top, 8)
+    }
+
+    /// One tap sends your heartbeat (the icon beats while it goes); a long press opens the
+    /// heartbeat screen.
+    private var heartButton: some View {
+        TimelineView(.animation(paused: !model.sendingHeartbeat)) { ctx in
+            Image(systemName: "heart.fill")
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(model.sendingHeartbeat ? Theme.pink : .white)
+                .scaleEffect(model.sendingHeartbeat ? heartScale(ctx.date) : 1)
+                .frame(width: 46, height: 46)
+                .glass(Circle())
+        }
+        .contentShape(Circle())
+        .onTapGesture {
+            guard !model.sendingHeartbeat else { return }
+            UIImpactFeedbackGenerator(style: .soft).impactOccurred()
+            Task {
+                if await model.sendHeartbeat() == nil {
+                    heartNote = model.statusLine.isEmpty ? "Couldn't send your heartbeat." : model.statusLine
+                    try? await Task.sleep(nanoseconds: 3_500_000_000)
+                    heartNote = nil
+                }
+            }
+        }
+        .onLongPressGesture { showHeart = true }
+        .accessibilityLabel("Send my heartbeat")
+        .accessibilityHint("Long press for heartbeat options")
+        .accessibilityAddTraits(.isButton)
+    }
+
+    /// Lub-dub size while sending.
+    private func heartScale(_ date: Date) -> CGFloat {
+        let t = date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 0.85) / 0.85
+        let lub = t < 0.15 ? sin(t / 0.15 * .pi) * 0.22 : 0
+        let dub = t > 0.22 && t < 0.34 ? sin((t - 0.22) / 0.12 * .pi) * 0.12 : 0
+        return 1 + CGFloat(lub + dub)
     }
 
     private func iconButton(_ icon: String, label: String, action: @escaping () -> Void) -> some View {
@@ -306,18 +359,29 @@ struct HomeView: View {
                 }
                 Spacer(minLength: 0)
             } else {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 12) {
-                        ForEach(touches) { touch in
-                            SwipeToSave(onSave: { meaningName = ""; meaningFromTouch = touch }) {
-                                touchRow(touch)
+                // A native list: smooth momentum scrolling, and the system swipe action to save a
+                // touch as a meaning (a custom drag on each row fought the scrolling).
+                List {
+                    ForEach(touches) { touch in
+                        touchRow(touch)
+                            .modifier(SurfaceBubble(active: touch.heartbeatBPM != nil, id: touch.id, sentAt: touch.sentAt,
+                                                    colorRGB: touch.colorRGB))
+                            .listRowInsets(EdgeInsets(top: 6, leading: 10, bottom: 6, trailing: 10))
+                            .listRowBackground(Color.clear)
+                            .listRowSeparator(.hidden)
+                            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                Button { meaningName = ""; meaningFromTouch = touch } label: {
+                                    Label("Meaning", systemImage: "star.fill")
+                                }
+                                .tint(Theme.accent)
                             }
-                        }
                     }
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 10)
                 }
+                .listStyle(.plain)
+                .scrollContentBackground(.hidden)
                 .scrollIndicators(.visible)
+                .environment(\.defaultMinListRowHeight, 1)
+                .animation(.spring(response: 0.55, dampingFraction: 0.8), value: touches.map(\.id))
                 .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
                 // Rows fade out at the frame's top and bottom edges instead of being cut.
                 .mask(LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: .black, location: 0.04),
@@ -587,5 +651,47 @@ private struct SwipeToSave<Content: View>: View {
     private func fire() {
         withAnimation(.spring(response: 0.3)) { offset = 0 }
         onSave()
+    }
+}
+
+/// A heartbeat arriving in the history rises into place like a bubble coming up to the
+/// surface — floating up from below, swelling slightly, then settling — and sends out
+/// ripples in its colour as it "breaks the surface". Only for a heartbeat that just arrived
+/// (seconds old), and only once, so scrolling back past it doesn't replay it.
+private struct SurfaceBubble: ViewModifier {
+    let active: Bool
+    let id: UUID
+    let sentAt: Date
+    let colorRGB: Int
+
+    @State private var risen = false
+    @State private var rippling = false
+    private static var played: Set<UUID> = []
+
+    private var fresh: Bool { active && Date().timeIntervalSince(sentAt) < 15 && !Self.played.contains(id) }
+
+    func body(content: Content) -> some View {
+        content
+            .scaleEffect(risen ? 1 : 0.82)
+            .offset(y: risen ? 0 : 70)
+            .opacity(risen ? 1 : 0)
+            .background {
+                // Ripples: three rings spreading out from the card, one after another.
+                ZStack {
+                    ForEach(0..<3, id: \.self) { i in
+                        Capsule()
+                            .stroke(Color(rgbInt: colorRGB).opacity(rippling ? 0 : 0.75), lineWidth: rippling ? 1 : 3)
+                            .scaleEffect(x: rippling ? 1.25 + CGFloat(i) * 0.12 : 0.9, y: rippling ? 1.9 + CGFloat(i) * 0.35 : 0.9)
+                            .animation(.easeOut(duration: 1.3).delay(Double(i) * 0.22), value: rippling)
+                    }
+                }
+                .allowsHitTesting(false)
+            }
+            .onAppear {
+                guard fresh else { risen = true; return }
+                Self.played.insert(id)
+                withAnimation(.spring(response: 0.7, dampingFraction: 0.62)) { risen = true }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { rippling = true }
+            }
     }
 }

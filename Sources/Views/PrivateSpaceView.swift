@@ -104,15 +104,18 @@ struct PrivateSpaceView: View {
                 }
             }
             if let error { Text(error).font(.footnote).foregroundStyle(.white) }
-            Spacer()
+            Spacer(minLength: 12)
             keypad(allowBiometrics: allowBiometrics)
         }
-        .padding(Metric.buttonMargin)
+        .padding(.horizontal, Metric.buttonMargin)
+        .padding(.top, Metric.buttonMargin)
+        // Clear of the floating tab bar, so the bottom row (Face ID, 0, delete) is reachable.
+        .padding(.bottom, 104)
     }
 
     private func keypad(allowBiometrics: Bool) -> some View {
         let keys = ["1","2","3","4","5","6","7","8","9","", "0", "<"]
-        return LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 3), spacing: 18) {
+        return LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 3), spacing: 14) {
             ForEach(keys, id: \.self) { key in
                 if key.isEmpty {
                     if allowBiometrics {
