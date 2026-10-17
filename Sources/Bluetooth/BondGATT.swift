@@ -160,6 +160,53 @@ enum BondGATT {
         [1, 0x19], [1, 0x1B], [1, 0x41], [1, 0x42], [1, 0x49, 0x01], [1, 0x1C]
     ].map { (ffb1, Data($0)) }
 
+    // MARK: - Bond Touch More session commands (from the original app's BleBondManagerV3)
+
+    /// Asks for the firmware version (answered with an 0xAC notification). The original
+    /// sends it right after enabling FFB1 notifications; the answer is what marks the
+    /// bracelet as paired, after which settings go out.
+    static let v3FirmwareRequest: (CBUUID, Data) = (ffb1, Data([1, 0x30]))
+    /// "Paired" confirmation — the answer to WAIT_FOR_ACT_PAIRED (state 138) and to the
+    /// PAIRED signal (event 19). Without it the bracelet sits flashing white and drops the link.
+    static let v3PairedConfirm: (CBUUID, Data) = (ffb1, Data([1, 0x31]))
+    /// Asks for the three partner slots currently on the bracelet (answered with an ack
+    /// `[0x0A, 0x45, 3 × (state, R, G, B)]`).
+    static let v3ReadUserColors: (CBUUID, Data) = (ffb1, Data([1, 0x45, 0x01]))
+
+    /// One partner slot in the bracelet's menu: its colour lights the bar and marks which
+    /// partner a touch is from or to. A bracelet with no active slot shows no colours and
+    /// won't record a touch.
+    struct V3Slot: Equatable {
+        enum State: UInt8 { case inactive = 0, active = 1, ignore = 2 }
+        var state: State
+        var rgb: Int
+        static let inactive = V3Slot(state: .inactive, rgb: 0x000000)
+        var bytes: [UInt8] { [state.rawValue, UInt8((rgb >> 16) & 0xFF), UInt8((rgb >> 8) & 0xFF), UInt8(rgb & 0xFF)] }
+    }
+
+    /// Writes the three partner slots: `[1, 0x45, 0x00, slot1, slot2, slot3]`, each slot
+    /// `[state, R, G, B]` (state 2 = leave that slot as it is).
+    static func v3WriteUserColors(_ slots: [V3Slot]) -> (CBUUID, Data) {
+        let three = Array((slots + Array(repeating: V3Slot.inactive, count: 3)).prefix(3))
+        return (ffb1, Data([1, 0x45, 0x00] + three.flatMap(\.bytes)))
+    }
+
+    /// Parses the slots from a user-colour ack `[0x0A, 0x45, s, r, g, b, s, r, g, b, s, r, g, b]`.
+    static func v3UserColors(fromAck b: [UInt8]) -> [V3Slot]? {
+        guard b.count >= 14, b[0] == 0x0A, b[1] == 0x45 else { return nil }
+        return (0..<3).map { i in
+            let o = 2 + i * 4
+            return V3Slot(state: V3Slot.State(rawValue: b[o]) ?? .ignore,
+                          rgb: (Int(b[o + 1]) << 16) | (Int(b[o + 2]) << 8) | Int(b[o + 3]))
+        }
+    }
+
+    /// Vibration strength and left/right balance: `[1, 0x48, 0x02, level, balance, 0x03]`.
+    /// Valid levels 28, 33, 40, 58, 60, 73, 80, 88, 100; balance 0…4 (2 = centred).
+    static func v3Vibration(level: UInt8, balance: UInt8) -> (CBUUID, Data) {
+        (ffb1, Data([1, 0x48, 0x02, level, balance, 0x03]))
+    }
+
     /// A whole heartbeat for a Bond Touch More as ONE touch message, shaped like a real
     /// heart: each beat is a big "lub" (the whole bar lights and both motors buzz, 150 ms)
     /// then, ~150 ms later, a smaller "dub" (just the centre, 100 ms), then a rest to the
@@ -197,12 +244,12 @@ enum BondGATT {
     /// v3 (Bond Touch More): the 50 ms position samples on FFB2 — the bar lights and the
     /// vibration pans along the positions. v2-base: a queue-pause marker, one 0x33
     /// "send-message" step per on-segment, then a resume marker.
-    static func touchSend(_ gen: BondGeneration, touch: TouchMessage) -> [(CBUUID, Data)] {
+    static func touchSend(_ gen: BondGeneration, touch: TouchMessage, slot: Int = 1) -> [(CBUUID, Data)] {
         let onOff = touch.onOffMs.isEmpty ? [200] : touch.onOffMs
         let startRGB = touch.colorRGB, endRGB = touch.endColorRGB
         switch gen {
         case .v3:
-            return v3TouchFrames(samples: touch.samples, startRGB: startRGB, endRGB: endRGB)
+            return v3TouchFrames(samples: touch.samples, startRGB: startRGB, endRGB: endRGB, slot: slot)
         case .v1:
             // v1 has no segmented send; fall back to a colour + buzz.
             return ledMotor(.v1, rgb: startRGB)
@@ -222,14 +269,15 @@ enum BondGATT {
         }
     }
 
-    /// FFB2 playback: header `[slot 1, n, ceil(n/20), colour1 RGB, colour2 RGB, replyMenu 0]`
-    /// padded with 0xFF, then the sample bytes 20 per packet, padded with 0xFF. The
-    /// firmware accepts 1…10 packets, so at most 200 samples.
-    private static func v3TouchFrames(samples raw: [Int], startRGB: Int, endRGB: Int) -> [(CBUUID, Data)] {
+    /// FFB2 playback: header `[partner slot 1…3, n, ceil(n/20), colour1 RGB, colour2 RGB,
+    /// replyMenu 0]` padded with 0xFF, then the sample bytes 20 per packet, padded with 0xFF.
+    /// The firmware accepts 1…10 packets, so at most 200 samples.
+    private static func v3TouchFrames(samples raw: [Int], startRGB: Int, endRGB: Int, slot: Int = 1) -> [(CBUUID, Data)] {
         var samples = TouchPattern.trimmed(raw).map { UInt8(clamping: $0) }
         if samples.isEmpty { samples = [0xF4, 0xF4, 0xF4, 0xF4] }   // a short centre tap
         let chunks = (samples.count + 19) / 20
-        let header: [UInt8] = [0x01, UInt8(samples.count), UInt8(chunks)] + be3(startRGB) + be3(endRGB) + [0x00]
+        let header: [UInt8] = [UInt8(min(max(slot, 1), 3)), UInt8(samples.count), UInt8(chunks)]
+            + be3(startRGB) + be3(endRGB) + [0x00]
         var frames: [(CBUUID, Data)] = [(ffb2, padFF(header))]
         var idx = 0
         while idx < samples.count {
@@ -247,14 +295,16 @@ enum BondGATT {
     /// a header `[slot 1…3, n, packets, …]` then `packets` × 20 sample bytes.
     struct V3Recording {
         private var expected = 0
+        private var slot = 1
         private var bytes: [Int] = []
 
-        /// Feeds one FFB2 notification; returns the trimmed samples when complete.
-        mutating func feed(_ data: Data) -> [Int]? {
+        /// Feeds one FFB2 notification; when complete, returns the partner slot (1…3) the
+        /// touch is for and its trimmed samples.
+        mutating func feed(_ data: Data) -> (slot: Int, samples: [Int])? {
             let b = [UInt8](data)
             if expected == 0 {
                 guard b.count >= 3, (1...3).contains(b[0]), (1...10).contains(b[2]) else { return nil }
-                expected = Int(b[2]); bytes = []
+                slot = Int(b[0]); expected = Int(b[2]); bytes = []
                 return nil
             }
             guard b.count >= 20 else { expected = 0; bytes = []; return nil }
@@ -263,7 +313,7 @@ enum BondGATT {
             guard expected == 0 else { return nil }
             let out = TouchPattern.trimmed(bytes)
             bytes = []
-            return out.isEmpty ? nil : out
+            return out.isEmpty ? nil : (slot, out)
         }
     }
 

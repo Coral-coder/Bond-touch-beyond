@@ -23,11 +23,38 @@ final class BraceletManager: NSObject, ObservableObject {
         UserDefaults.standard.object(forKey: "BondBraceletLastConnected") as? Date {
         didSet { UserDefaults.standard.set(lastConnectedAt, forKey: "BondBraceletLastConnected") }
     }
-    /// Delivered when the user makes a touch on their own bracelet: the pattern and its
-    /// generation (3 = Bond Touch More position samples, 2 = on/off milliseconds).
-    var onLocalTap: (([Int], Int) -> Void)?
+    /// Delivered when the user makes a touch on their own bracelet: the pattern, its
+    /// generation (3 = Bond Touch More position samples, 2 = on/off milliseconds), and — on a
+    /// Bond Touch More — the bond of the partner slot it was made for (nil = selected partner).
+    var onLocalTap: (([Int], Int, String?) -> Void)?
     private var v3Recording = BondGATT.V3Recording()
     private var v3FeaturesSent = false
+
+    // Bond Touch More session state, reset on every connection (mirrors the original app's
+    // BleBondManagerV3: `p` = firmware read, `o` = last bond state).
+    private var v3FirmwareRead = false
+    private var v3LastState: UInt8?
+    private var slotsSynced = false
+    /// The partner slots the bracelet should show — one colour per partner, up to three —
+    /// and which bond each slot is. Set by the app from the partner list.
+    private var desiredSlots: [BondGATT.V3Slot] = [.inactive, .inactive, .inactive]
+    private var slotBondIDs: [String] = []
+
+    /// Sets the bracelet's partner slots (colour per partner, up to 3, in order). Like the
+    /// original app, a change is pushed to a paired Bond Touch More right away.
+    func setPartnerMenu(_ partners: [(id: String, rgb: Int)]) {
+        let top = Array(partners.prefix(3))
+        slotBondIDs = top.map(\.id)
+        let slots = top.map { BondGATT.V3Slot(state: .active, rgb: $0.rgb & 0xFFFFFF) }
+            + Array(repeating: BondGATT.V3Slot.inactive, count: 3 - top.count)
+        guard slots != desiredSlots else { return }
+        desiredSlots = slots
+        if gen == .v3, v3FirmwareRead { syncPartnerSlots() }
+    }
+
+    private func bondID(forSlot slot: Int) -> String? {
+        slot >= 1 && slot <= slotBondIDs.count ? slotBondIDs[slot - 1] : nil
+    }
 
     private var central: CBCentralManager!
     private var bracelet: CBPeripheral?
@@ -268,7 +295,9 @@ final class BraceletManager: NSObject, ObservableObject {
             }
             return false
         }
-        enqueue(BondGATT.touchSend(gen, touch: touch))
+        // Into the slot of the partner it is from, so it shows in their colour.
+        let slot = slotBondIDs.firstIndex(of: touch.bondID).map { $0 + 1 } ?? 1
+        enqueue(BondGATT.touchSend(gen, touch: touch, slot: slot))
         // The Bond Touch More renders the touch itself (LEDs + panned vibration); older
         // bracelets also get a glow + buzz in the touch's colour.
         if gen != .v3 { enqueue(BondGATT.ledMotor(gen, rgb: touch.colorRGB)) }
@@ -364,14 +393,105 @@ final class BraceletManager: NSObject, ObservableObject {
         switch signal {
         case .waitingToken: sendToken()
         case .waitingAuid:  sendAuid()
-        case .connected:
-            markConnected()
-            if gen == .v3, !v3FeaturesSent {
-                v3FeaturesSent = true
-                enqueue(BondGATT.v3ConnectedWrites)
-            }
+        case .connected:    markConnected()
         case .other:        break
         }
+    }
+
+    // MARK: - Bond Touch More session (the original app's BleBondManagerV3, step for step)
+
+    /// Every FFB1 notification from a Bond Touch More: system states, bond events, the
+    /// firmware answer and command acks.
+    private func handleV3(_ data: Data) {
+        let b = [UInt8](data)
+        guard let kind = b.first else { return }
+        switch kind {
+        case 0x04 where b.count >= 2:                              // system state
+            let s = b[1]
+            guard s != v3LastState else { return }                 // the original ignores repeats
+            v3LastState = s
+            if state != .connected { enterConnecting(timeout: 60) } // handshake in progress
+            switch s {
+            case 130:
+                NetLog.shared.record(.send, "Bracelet: waiting for token — sending it")
+                sendToken()
+            case 131:
+                NetLog.shared.record(.send, "Bracelet: waiting for id — sending it")
+                sendAuid()
+            case 132:
+                NetLog.shared.record(.fail, "Bracelet is in setup mode", "Double-tap the bracelet to pair it with this phone")
+            case 133:
+                NetLog.shared.record(.ok, "Bracelet: handshake complete")
+                if !v3FirmwareRead, !v3FeaturesSent {
+                    v3FeaturesSent = true
+                    enqueue(BondGATT.v3ConnectedWrites)
+                }
+                enableV3TouchNotifications()
+                markConnected()
+            case 138:
+                NetLog.shared.record(.send, "Bracelet: confirming pairing")
+                enqueue([BondGATT.v3PairedConfirm])
+            default:
+                break
+            }
+        case 0x02 where b.count >= 2:                              // bond events
+            if b[1] == 19 {                                        // APP_EVENT_PAIRED_SIGNAL
+                NetLog.shared.record(.send, "Bracelet: paired signal — confirming")
+                enqueue([BondGATT.v3PairedConfirm])
+            }
+        case 0xAC where b.count >= 4:                              // firmware [minor, major, generation]
+            guard !v3FirmwareRead else { return }
+            v3FirmwareRead = true
+            NetLog.shared.record(.ok, "Bracelet paired", "firmware \(b[3]).\(b[2]).\(b[1])")
+            enableV3TouchNotifications()
+            if let p = bracelet, let battery = chars[BondGATT.batteryLevel] {
+                if battery.properties.contains(.read) { p.readValue(for: battery) }
+                if battery.properties.contains(.notify) { p.setNotifyValue(true, for: battery) }
+            }
+            markConnected()
+            syncPartnerSlots()                                     // then the settings, as the original
+        case 0x0A where b.count >= 2:                              // command acks
+            if b[1] == 0x45, let current = BondGATT.v3UserColors(fromAck: b) { reconcileSlots(current) }
+        default:
+            break
+        }
+    }
+
+    /// FFB2 carries touches made on the bar; the original enables it once paired.
+    private func enableV3TouchNotifications() {
+        guard let p = bracelet, let ffb2 = chars[BondGATT.ffb2],
+              ffb2.properties.contains(.notify), !ffb2.isNotifying else { return }
+        p.setNotifyValue(true, for: ffb2)
+    }
+
+    /// As the original: ask the bracelet for its partner slots; the ack is answered with a
+    /// write of only the slots that differ. If no ack comes, write them outright.
+    private func syncPartnerSlots() {
+        slotsSynced = false
+        enqueue([BondGATT.v3ReadUserColors])
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { [weak self] in
+            guard let self, self.gen == .v3, self.linkUp, !self.slotsSynced else { return }
+            self.slotsSynced = true
+            self.enqueue([BondGATT.v3WriteUserColors(self.desiredSlots)])
+            NetLog.shared.record(.send, "Bracelet: partner colours written")
+        }
+    }
+
+    private func reconcileSlots(_ current: [BondGATT.V3Slot]) {
+        slotsSynced = true
+        var out: [BondGATT.V3Slot] = []
+        var changed = false
+        for (i, want) in desiredSlots.enumerated() {
+            if i < current.count, current[i] == want {
+                out.append(BondGATT.V3Slot(state: .ignore, rgb: want.rgb))   // leave as is
+            } else {
+                out.append(want)
+                changed = true
+            }
+        }
+        guard changed else { return }
+        enqueue([BondGATT.v3WriteUserColors(out)])
+        NetLog.shared.record(.send, "Bracelet: partner colours updated")
     }
 
     private func handle(_ event: BondGATT.TouchEvent) {
@@ -382,12 +502,12 @@ final class BraceletManager: NSObject, ObservableObject {
             if stop {
                 let pattern = incoming
                 incoming = []
-                if !pattern.isEmpty { onLocalTap?(pattern, 2) }
+                if !pattern.isEmpty { onLocalTap?(pattern, 2, nil) }
             }
         case .tap:
-            onLocalTap?([120], 2)
+            onLocalTap?([120], 2, nil)
         case .doubleTap:
-            onLocalTap?([120, 120, 120], 2)
+            onLocalTap?([120, 120, 120], 2, nil)
         case .ignored:
             break
         }
@@ -475,7 +595,9 @@ extension BraceletManager: CBCentralManagerDelegate {
         linkUp = true
         central.stopScan()
         resetConnectionState()
-        enterConnecting()            // fresh window for discovery + the pairing handshake
+        // A fresh window for discovery + the pairing handshake — long enough for an iOS
+        // "Bluetooth Pairing Request" to be answered. Each state the bracelet reports extends it.
+        enterConnecting(timeout: 30)
         peripheral.discoverServices(nil)
     }
 
@@ -517,6 +639,10 @@ extension BraceletManager: CBCentralManagerDelegate {
     private func resetConnectionState() {
         gen = nil
         v3FeaturesSent = false
+        v3FirmwareRead = false
+        v3LastState = nil
+        slotsSynced = false
+        v3Recording = BondGATT.V3Recording()
         chars.removeAll()
         hasV3Service = false
         incoming = []
@@ -540,24 +666,20 @@ extension BraceletManager: CBPeripheralDelegate {
             chars[char.uuid] = char
         }
 
-        // Battery level (standard battery service): read it now and follow changes.
-        if service.uuid == BondGATT.batteryService, let battery = chars[BondGATT.batteryLevel] {
+        // Battery level (standard battery service): read it now and follow changes. (A Bond
+        // Touch More's battery is read once it's paired, as the original app does.)
+        if !hasV3Service, service.uuid == BondGATT.batteryService, let battery = chars[BondGATT.batteryLevel] {
             if battery.properties.contains(.read) { peripheral.readValue(for: battery) }
             if battery.properties.contains(.notify) { peripheral.setNotifyValue(true, for: battery) }
         }
 
         if hasV3Service {
-            // v3: subscribe FFB1 (events/state) and FFB2, then drive the handshake.
-            if let ffb1 = chars[BondGATT.ffb1] { peripheral.setNotifyValue(true, for: ffb1) }
-            if let ffb2 = chars[BondGATT.ffb2], ffb2.properties.contains(.notify) {
-                peripheral.setNotifyValue(true, for: ffb2)
-            }
-            if gen == nil, chars[BondGATT.ffb1] != nil {
-                // The original app sends nothing here: it answers the bracelet's own state
-                // notifications (waiting for token → token, waiting for AUID → AUID,
-                // connected → feature enables).
+            // Bond Touch More, as the original app: enable FFB1 notifications; once they're on
+            // (didUpdateNotificationStateFor) ask for the firmware version, and answer the
+            // bracelet's state notifications (handleV3). FFB2 is enabled once it's paired.
+            if gen == nil, let ffb1 = chars[BondGATT.ffb1] {
                 gen = .v3
-                markConnected()
+                peripheral.setNotifyValue(true, for: ffb1)
             }
         } else if gen == nil, let apiChar = chars[BondGATT.charApiVer],
                   apiChar.properties.contains(.read) {
@@ -587,9 +709,13 @@ extension BraceletManager: CBPeripheralDelegate {
         }
 
         guard let gen else { return }
-        if gen == .v3, characteristic.uuid == BondGATT.ffb2 {
-            if let samples = v3Recording.feed(data) { onLocalTap?(samples, 3) }
-            return
+        if gen == .v3 {
+            if characteristic.uuid == BondGATT.ffb2 {
+                // A touch made on the bar, for the partner in its slot.
+                if let touch = v3Recording.feed(data) { onLocalTap?(touch.samples, 3, bondID(forSlot: touch.slot)) }
+                return
+            }
+            if characteristic.uuid == BondGATT.ffb1 { handleV3(data); return }
         }
         handle(BondGATT.signal(gen, uuid: characteristic.uuid, data: data))
         handle(BondGATT.touchEvent(gen, uuid: characteristic.uuid, data: data))
@@ -601,6 +727,22 @@ extension BraceletManager: CBPeripheralDelegate {
         markConnected()
         // Like the original app, the token and AUID are sent only when the bracelet asks
         // for them on its state channel (handled in handle(_ signal:)).
+    }
+
+    func peripheral(_ peripheral: CBPeripheral, didUpdateNotificationStateFor characteristic: CBCharacteristic,
+                    error: Error?) {
+        if let error {
+            NetLog.shared.record(.fail, "Bracelet: couldn't enable notifications", error.localizedDescription)
+            return
+        }
+        // Bond Touch More: FFB1 notifications are on — ask for the firmware version, as the
+        // original does; ask once more after 3 s if it hasn't answered.
+        guard gen == .v3, characteristic.uuid == BondGATT.ffb1, characteristic.isNotifying else { return }
+        enqueue([BondGATT.v3FirmwareRequest])
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in
+            guard let self, self.gen == .v3, self.linkUp, !self.v3FirmwareRead else { return }
+            self.enqueue([BondGATT.v3FirmwareRequest])
+        }
     }
 
     func peripheral(_ peripheral: CBPeripheral, didWriteValueFor characteristic: CBCharacteristic,

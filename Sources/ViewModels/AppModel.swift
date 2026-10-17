@@ -149,14 +149,27 @@ final class AppModel: ObservableObject {
         bracelet.$state.receive(on: DispatchQueue.main).assign(to: &$braceletState)
         bracelet.$heartbeatActive.receive(on: DispatchQueue.main).assign(to: &$partnerHeartbeatActive)
         location.onUpdate = { [weak self] fix in Task { @MainActor in await self?.broadcastLocation(fix) } }
-        // A tap pattern made on the user's own bracelet is a touch for the selected partner.
-        bracelet.onLocalTap = { [weak self] pattern, generation in
+        // A touch made on the user's own bracelet: on a Bond Touch More it's for the partner
+        // in the slot it was made in; otherwise for the selected partner.
+        bracelet.onLocalTap = { [weak self] pattern, generation, slotBondID in
             Task { @MainActor in
                 guard let self else { return }
+                let target = slotBondID.flatMap { id in self.partners.contains { $0.id == id } ? id : nil }
                 await self.sendTouch(pattern: pattern, generation: generation,
-                                     colorRGB: self.store.profile.colorRGB)
+                                     colorRGB: self.store.profile.colorRGB, toBondID: target)
             }
         }
+        // The bracelet's partner slots follow the partner list: one slot per partner (up to
+        // three), lit in that partner's colour — what the original app sends after pairing.
+        Publishers.CombineLatest($cloudPartners, $legacyPartners)
+            .debounce(for: .milliseconds(300), scheduler: DispatchQueue.main)
+            .sink { [weak self] _, _ in
+                Task { @MainActor in
+                    guard let self else { return }
+                    self.bracelet.setPartnerMenu(self.partners.map { (id: $0.id, rgb: $0.colorRGB) })
+                }
+            }
+            .store(in: &statusWatch)
         watchStatusForPresence()
         // A touch that didn't make it to the bracelet plays on the phone instead.
         bracelet.onPlayFailed = { [weak self] touch in
