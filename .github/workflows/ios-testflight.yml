@@ -137,30 +137,49 @@ jobs:
           echo "ASC_KEY_PATH=$RUNNER_TEMP/asc/AuthKey_$ASC_KEY_ID.p8" >> "$GITHUB_ENV"
 
       - name: Inject the APNs auth key (direct partner-to-partner push)
+        # Accepts whatever the secrets were named — a missing secret resolves to an empty
+        # string, so we just take the first non-empty candidate for each value. Team id
+        # falls back to APPLE_TEAM_ID (already used for App Store Connect).
         env:
-          APNS_KEY_ID: ${{ secrets.APNS_KEY_ID }}
-          APNS_TEAM_ID: ${{ secrets.APNS_TEAM_ID }}
-          APNS_KEY_P8: ${{ secrets.APNS_KEY_P8 }}
+          KID_1: ${{ secrets.APNS_KEY_ID }}
+          KID_2: ${{ secrets.APNS_KID }}
+          KID_3: ${{ secrets.APN_KEY_ID }}
+          KID_4: ${{ secrets.PUSH_KEY_ID }}
+          TID_1: ${{ secrets.APNS_TEAM_ID }}
+          TID_2: ${{ secrets.APPLE_TEAM_ID }}
+          TID_3: ${{ secrets.APN_TEAM_ID }}
+          TID_4: ${{ secrets.TEAM_ID }}
+          P8_1: ${{ secrets.APNS_KEY_P8 }}
+          P8_2: ${{ secrets.APNS_P8 }}
+          P8_3: ${{ secrets.APNS_AUTH_KEY }}
+          P8_4: ${{ secrets.APNS_PRIVATE_KEY }}
+          P8_5: ${{ secrets.APNS_KEY }}
+          P8_6: ${{ secrets.APN_KEY_P8 }}
+          P8_7: ${{ secrets.PUSH_KEY_P8 }}
         run: |
-          if [ -z "$APNS_KEY_P8" ] || [ -z "$APNS_KEY_ID" ] || [ -z "$APNS_TEAM_ID" ]; then
-            echo "No APNS_* secrets set — direct push stays dormant (CloudKit push still used)."
+          first() { for v in "$@"; do if [ -n "$v" ]; then printf '%s' "$v"; return; fi; done; }
+          KID="$(first "$KID_1" "$KID_2" "$KID_3" "$KID_4")"
+          TID="$(first "$TID_1" "$TID_2" "$TID_3" "$TID_4")"
+          P8="$(first "$P8_1" "$P8_2" "$P8_3" "$P8_4" "$P8_5" "$P8_6" "$P8_7")"
+          if [ -z "$P8" ] || [ -z "$KID" ] || [ -z "$TID" ]; then
+            echo "::warning::APNs not fully configured (keyID=$([ -n "$KID" ] && echo yes || echo no), teamID=$([ -n "$TID" ] && echo yes || echo no), p8=$([ -n "$P8" ] && echo yes || echo no)). Direct push stays dormant; CloudKit push still used. Expected secret names: APNS_KEY_ID, APNS_TEAM_ID (or APPLE_TEAM_ID), APNS_KEY_P8."
             exit 0
           fi
           mkdir -p Sources/Push
           {
             echo 'import Foundation'
             echo ''
-            echo '// Generated at build time from the APNS_* GitHub secrets. Not the committed source.'
+            echo '// Generated at build time from GitHub secrets. Not the committed source.'
             echo 'enum APNsSecrets {'
-            echo "    static let keyID = \"$APNS_KEY_ID\""
-            echo "    static let teamID = \"$APNS_TEAM_ID\""
+            echo "    static let keyID = \"$KID\""
+            echo "    static let teamID = \"$TID\""
             echo '    static let privateKeyP8 = """'
-            printf '%s\n' "$APNS_KEY_P8"
+            printf '%s\n' "$P8"
             echo '"""'
             echo '    static var isConfigured: Bool { !keyID.isEmpty && !teamID.isEmpty && !privateKeyP8.isEmpty }'
             echo '}'
           } > Sources/Push/APNsSecrets.swift
-          echo "APNs key injected (kid $APNS_KEY_ID) — direct push enabled for this build."
+          echo "APNs key injected (kid $KID) — direct push enabled for this build."
 
       - name: Select Xcode 26 or later
         run: |
