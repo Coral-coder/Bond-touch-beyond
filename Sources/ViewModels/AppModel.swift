@@ -351,6 +351,7 @@ final class AppModel: ObservableObject {
             cloudPartners = bonds.filter { !$0.pending }.map { Partner(bond: $0) }
             cloudPartners.forEach { loadCachedPhoto(bondID: $0.id) }
             cloudPending = bonds.filter { $0.pending }
+            migrateMeaningLibraries()
             if selectedPartnerID == nil { selectedPartnerID = partners.first?.id }
             ready = true
             statusLine = "Ready."
@@ -701,7 +702,8 @@ final class AppModel: ObservableObject {
         legacyPublishProfile(name: p.name, colorRGB: p.colorRGB)
         for partner in cloudPartners {
             try? await relay.sendProfile(name: p.name, colorRGB: p.colorRGB, photo: myPhotoFileURL,
-                                         pushToken: myPushToken, bond: partner.bond, senderID: myUserID)
+                                         pushToken: myPushToken, meanings: sharedLibrary(partner.id),
+                                         bond: partner.bond, senderID: myUserID)
         }
     }
 
@@ -819,6 +821,7 @@ final class AppModel: ObservableObject {
                 do {
                     try await relay.sendProfile(name: p.name.isEmpty ? "Me" : p.name, colorRGB: p.colorRGB,
                                                 photo: myPhotoFileURL, pushToken: myPushToken,
+                                                meanings: sharedLibrary(partner.id),
                                                 bond: partner.bond, senderID: myUserID)
                     profileSyncedBondIDs.insert(partner.id)   // only once it actually landed
                 } catch {
@@ -843,6 +846,7 @@ final class AppModel: ObservableObject {
             if let token = events.partnerPushToken, !token.isEmpty { partnerPushTokens[partner.id] = token }
             if let seen = events.partnerSeenTouch { markSeen(bondID: partner.id, upTo: seen) }
             if let seen = events.partnerSeenMessage { partnerSeenMessage[partner.id] = seen }
+            if let shared = events.partnerMeanings { mergeMeanings(shared, bondID: partner.id) }
             if let p = events.presence {
                 cloudPartners[index].presence = p
                 cloudPartners[index].online = p.online

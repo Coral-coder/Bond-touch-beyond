@@ -43,6 +43,8 @@ actor CloudRelay {
         var partnerSeenTouch: Int?
         /// The same for our chat messages (read receipts).
         var partnerSeenMessage: Int?
+        /// The partner's copy of the shared Touch Language, when their profile changed.
+        var partnerMeanings: [TouchMeaning]?
     }
 
     /// The record kinds, each its own CloudKit record type.
@@ -321,7 +323,7 @@ actor CloudRelay {
     }
 
     func sendProfile(name: String, colorRGB: Int, photo: URL?, pushToken: String? = nil,
-                     bond: Bond, senderID: String) async throws {
+                     meanings: [TouchMeaning]? = nil, bond: Bond, senderID: String) async throws {
         let photoData = photo.flatMap { try? Data(contentsOf: $0) }
         let hash = photoData.map(Self.hash)
         if let photoData, let hash, writtenPhotoHash[bond.id] != hash {
@@ -329,7 +331,8 @@ actor CloudRelay {
             writtenPhotoHash[bond.id] = hash
         }
         try await put(mine(bond, "pf", .profile), seal(ProfilePayload(name: name, colorRGB: colorRGB,
-                                                                      pushToken: pushToken, photoHash: hash), bond.id))
+                                                                      pushToken: pushToken, photoHash: hash,
+                                                                      meanings: meanings), bond.id))
     }
 
     private static func hash(_ data: Data) -> String {
@@ -422,6 +425,7 @@ actor CloudRelay {
             events.partnerName = p.name
             events.partnerColorRGB = p.colorRGB
             events.partnerPushToken = p.pushToken
+            events.partnerMeanings = p.meanings
             let photoRef = theirs(bond, "ph", .photo)
             if let hash = p.photoHash, hash != seenPhotoHash[code],
                let photo = try? await get([photoRef]),
@@ -476,7 +480,11 @@ actor CloudRelay {
 
 // Encrypted payload shapes (JSON, then AES-GCM sealed into `payload`).
 private struct BondPayload: Codable { let name: String; let ownerID: String }
-private struct ProfilePayload: Codable { let name: String; let colorRGB: Int; let pushToken: String?; let photoHash: String? }
+private struct ProfilePayload: Codable {
+    let name: String; let colorRGB: Int; let pushToken: String?; let photoHash: String?
+    /// The Touch Language this phone shares with the partner (optional: older builds).
+    var meanings: [TouchMeaning]? = nil
+}
 private struct PhotoPayload: Codable { let data: Data }
 /// A phone's status snapshot, shared (encrypted) with its partner and shown on their card.
 /// Every field but `online` is optional so older and newer builds read each other's.

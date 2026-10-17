@@ -335,14 +335,92 @@ extension AppModel {
     /// The selected partner's Touch Language: the server's for an original-app partner,
     /// the local library for an iCloud partner.
     var currentMeanings: [TouchMeaning] {
-        if let bond = selectedPartner?.bond, bond.legacy { return legacyMeanings[bond.id] ?? [] }
+        if let bond = selectedPartner?.bond { return meanings(for: bond) }
         return store.meanings
     }
 
-    /// A bond's Touch Language: the server's for an original-app partner, the local library
-    /// for an iCloud partner.
+    /// A bond's Touch Language: the server's for an original-app partner; for an iCloud
+    /// partner, the library shared with just them.
     func meanings(for bond: Bond) -> [TouchMeaning] {
-        bond.legacy ? (legacyMeanings[bond.id] ?? []) : store.meanings
+        bond.legacy ? (legacyMeanings[bond.id] ?? []) : cloudLibrary(bond.id).filter { $0.deleted != true }
+    }
+
+    // MARK: - Touch Language shared with an iCloud partner
+
+    /// The library shared with an iCloud partner, delete markers included.
+    func cloudLibrary(_ bondID: String) -> [TouchMeaning] {
+        store.cloudMeanings[bondID] ?? []
+    }
+
+    /// Once: the older single library becomes the shared library of each iCloud partner
+    /// there was then. Partners added later start their own (nothing leaks between partners).
+    func migrateMeaningLibraries() {
+        let key = "MeaningsPerBondMigrated"
+        guard !UserDefaults.standard.bool(forKey: key) else { return }
+        for id in (cloudPartners.map(\.id) + cloudPending.map(\.id)) where store.cloudMeanings[id] == nil {
+            store.cloudMeanings[id] = store.meanings.map { var m = $0; m.updatedAt = m.updatedAt ?? Date(); return m }
+        }
+        UserDefaults.standard.set(true, forKey: key)
+    }
+
+    /// Changes the shared library and sends it to the partner (in the encrypted profile).
+    private func changeCloudLibrary(_ bondID: String, _ change: (inout [TouchMeaning]) -> Void) {
+        var lib = cloudLibrary(bondID)
+        change(&lib)
+        store.cloudMeanings[bondID] = lib
+        Task { await publishMeanings(bondID: bondID) }
+    }
+
+    /// What we share: no local-only state (the New badge, original-backend ids).
+    func sharedLibrary(_ bondID: String) -> [TouchMeaning] {
+        cloudLibrary(bondID).map { var m = $0; m.isNew = false; m.serverID = nil; return m }
+    }
+
+    func publishMeanings(bondID: String) async {
+        guard let bond = cloudPartners.first(where: { $0.id == bondID })?.bond else { return }
+        let p = store.profile
+        do {
+            try await relay.sendProfile(name: p.name.isEmpty ? "Me" : p.name, colorRGB: p.colorRGB,
+                                        photo: myPhotoFileURL, pushToken: myPushToken,
+                                        meanings: sharedLibrary(bondID), bond: bond, senderID: myUserID)
+        } catch {
+            NetLog.shared.log(.fail, "iCloud: Touch Language not sent", error.localizedDescription)
+        }
+    }
+
+    /// Takes in the partner's copy: for each meaning the newer edit wins; ones only they have
+    /// are added with a New badge (a same-named one we already have isn't doubled).
+    func mergeMeanings(_ incoming: [TouchMeaning], bondID: String) {
+        var lib = cloudLibrary(bondID)
+        var changed = false
+        for var m in incoming {
+            if let i = lib.firstIndex(where: { $0.id == m.id }) {
+                guard (m.updatedAt ?? .distantPast) > (lib[i].updatedAt ?? .distantPast) else { continue }
+                m.isNew = lib[i].isNew
+                m.serverID = lib[i].serverID
+                lib[i] = m
+                changed = true
+            } else if m.deleted != true,
+                      !lib.contains(where: { $0.deleted != true && $0.label.lowercased() == m.label.lowercased() }) {
+                m.isNew = true
+                lib.append(m)
+                changed = true
+            }
+        }
+        if changed { store.cloudMeanings[bondID] = lib }
+    }
+
+    /// Clears a meaning's New badge (local only).
+    func markMeaningSeen(_ meaning: TouchMeaning) {
+        guard meaning.isNew else { return }
+        if let bond = selectedPartner?.bond, bond.legacy {
+            if let i = legacyMeanings[bond.id]?.firstIndex(where: { $0.id == meaning.id }) { legacyMeanings[bond.id]?[i].isNew = false }
+        } else if let bond = selectedPartner?.bond {
+            var lib = cloudLibrary(bond.id)
+            if let i = lib.firstIndex(where: { $0.id == meaning.id }) { lib[i].isNew = false; store.cloudMeanings[bond.id] = lib }
+        } else if let i = store.meanings.firstIndex(where: { $0.id == meaning.id }) {
+            store.meanings[i].isNew = false
+        }
     }
 
     /// The saved meaning a touch closely matches, if any — so a touch that's really
@@ -376,7 +454,13 @@ extension AppModel {
     }
 
     func addMeaning(_ meaning: TouchMeaning) async {
-        guard let bond = selectedPartner?.bond, bond.legacy else { store.meanings.append(meaning); return }
+        guard let bond = selectedPartner?.bond else { store.meanings.append(meaning); return }
+        guard bond.legacy else {
+            var m = meaning
+            m.updatedAt = Date()
+            changeCloudLibrary(bond.id) { $0.append(m) }
+            return
+        }
         do {
             let token = try await legacyToken()
             let id = try await BondBackend.createMeaning(bondId: bond.id, meaning, bearer: token)
@@ -405,10 +489,23 @@ extension AppModel {
             }
             return
         }
-        if let i = store.meanings.firstIndex(where: { $0.id == meaning.id }) { store.meanings[i] = meaning }
+        if let bond = selectedPartner?.bond, !bond.legacy {
+            var m = meaning
+            m.updatedAt = Date()
+            changeCloudLibrary(bond.id) { lib in if let i = lib.firstIndex(where: { $0.id == m.id }) { lib[i] = m } }
+        } else if let i = store.meanings.firstIndex(where: { $0.id == meaning.id }) {
+            store.meanings[i] = meaning
+        }
     }
 
     func deleteMeaning(_ meaning: TouchMeaning) async {
+        if let bond = selectedPartner?.bond, !bond.legacy {
+            // Kept as a marker so it's deleted on the partner's phone too.
+            changeCloudLibrary(bond.id) { lib in
+                if let i = lib.firstIndex(where: { $0.id == meaning.id }) { lib[i].deleted = true; lib[i].updatedAt = Date() }
+            }
+            return
+        }
         guard let bond = selectedPartner?.bond, bond.legacy, let serverID = meaning.serverID else {
             store.meanings.removeAll { $0.id == meaning.id }
             return

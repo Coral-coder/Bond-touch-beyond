@@ -73,13 +73,17 @@ extension AppModel {
         let key = "ImportedLegacyMeanings"
         var done = Set(UserDefaults.standard.stringArray(forKey: key) ?? [])
         for id in migratedLegacyIDs where !done.contains(id) {
-            guard let list = legacyMeanings[id] else { continue }
-            let existing = Set(store.meanings.map { $0.label.lowercased() })
+            guard let list = legacyMeanings[id], let cloudID = store.chatLinks[id] else { continue }
+            // Into the library shared with them on iCloud.
+            var lib = cloudLibrary(cloudID)
+            let existing = Set(lib.filter { $0.deleted != true }.map { $0.label.lowercased() })
             for m in list where !existing.contains(m.label.lowercased()) {
                 var copy = m
                 copy.serverID = nil
-                store.meanings.append(copy)
+                copy.updatedAt = Date()
+                lib.append(copy)
             }
+            store.cloudMeanings[cloudID] = lib
             done.insert(id)
         }
         UserDefaults.standard.set(Array(done), forKey: key)

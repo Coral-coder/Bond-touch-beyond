@@ -79,9 +79,7 @@ struct MeaningsView: View {
                 pendingDelete = nil
             }
         } message: {
-            // An original-app partner shares the library on the server; iCloud ones are per phone.
-            Text(model.selectedPartner?.bond.legacy == true ? "This meaning will disappear for both of you."
-                                                            : "This meaning will be removed from your Touch Language.")
+            Text("This meaning will disappear for both of you.")
         }
     }
 
@@ -143,8 +141,7 @@ struct MeaningsView: View {
     }
 
     private func clearNew(_ meaning: TouchMeaning) {
-        guard let i = store.meanings.firstIndex(where: { $0.id == meaning.id }), store.meanings[i].isNew else { return }
-        store.meanings[i].isNew = false
+        model.markMeaningSeen(meaning)
     }
 }
 

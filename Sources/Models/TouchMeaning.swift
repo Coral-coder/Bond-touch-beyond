@@ -22,6 +22,10 @@ struct TouchMeaning: Identifiable, Codable, Equatable {
     /// Starred in the Touch Library (synced with the original backend's `favourite`).
     /// Optional so meanings saved before this field existed still load.
     var favourite: Bool? = nil
+    /// For a library shared with an iCloud partner: when it was last changed (the newer
+    /// edit wins), and whether it was deleted (kept as a marker so the delete syncs too).
+    var updatedAt: Date? = nil
+    var deleted: Bool? = nil
 
     var touchGeneration: Int { generation == 3 ? 3 : 2 }
 

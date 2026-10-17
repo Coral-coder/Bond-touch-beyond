@@ -32,7 +32,7 @@ final class WatchBridge: NSObject, WCSessionDelegate {
         }
         var meanings: [String: [[String: Any]]] = [:]
         for p in model.partners {
-            let list = p.bond.legacy ? (model.legacyMeanings[p.id] ?? []) : model.store.meanings
+            let list = model.meanings(for: p.bond)
             meanings[p.id] = list.map {
                 var d: [String: Any] = ["name": $0.label, "pattern": $0.pattern, "gen": $0.touchGeneration,
                                         "start": $0.colorRGB, "end": $0.endColorRGB]
