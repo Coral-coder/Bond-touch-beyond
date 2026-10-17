@@ -148,7 +148,7 @@ final class AppModel: ObservableObject {
         historyIDs = Set(history.map { $0.id })
         bracelet.$state.receive(on: DispatchQueue.main).assign(to: &$braceletState)
         bracelet.$heartbeatActive.receive(on: DispatchQueue.main).assign(to: &$partnerHeartbeatActive)
-        location.onUpdate = { [weak self] coord in Task { @MainActor in await self?.broadcastLocation(coord) } }
+        location.onUpdate = { [weak self] fix in Task { @MainActor in await self?.broadcastLocation(fix) } }
         // A tap pattern made on the user's own bracelet is a touch for the selected partner.
         bracelet.onLocalTap = { [weak self] pattern, generation in
             Task { @MainActor in
@@ -157,7 +157,7 @@ final class AppModel: ObservableObject {
                                      colorRGB: self.store.profile.colorRGB)
             }
         }
-        watchBraceletForPresence()
+        watchStatusForPresence()
         // A touch that didn't make it to the bracelet plays on the phone instead.
         bracelet.onPlayFailed = { [weak self] touch in
             Task { @MainActor in self?.haptics.play(touch) }
@@ -193,14 +193,10 @@ final class AppModel: ObservableObject {
         }
     }
 
-    private func broadcastLocation(_ coord: CLLocationCoordinate2D) async {
+    private func broadcastLocation(_ fix: CLLocation) async {
         guard sharingLocation else { return }
-        await legacyPushLocation(coord)
-        for partner in cloudPartners {
-            try? await relay.sendPresence(online: true, bond: partner.bond, senderID: myUserID,
-                                          latitude: coord.latitude, longitude: coord.longitude,
-                                          braceletConnected: bracelet.isReady)
-        }
+        await legacyPushLocation(fix.coordinate)
+        await publishPresence(force: false)   // throttled — fixes can arrive every few seconds
     }
 
     // MARK: - Lifecycle
@@ -266,37 +262,81 @@ final class AppModel: ObservableObject {
 
     func setOnline(_ online: Bool) async {
         lastOnline = online
-        // Presence also tells the partner whether this bracelet is connected (they then send
-        // silent pushes), and keeps the shared location while location sharing is on.
-        let coord = sharingLocation ? location.coordinate : nil
-        for partner in cloudPartners {
-            try? await relay.sendPresence(online: online, bond: partner.bond, senderID: myUserID,
-                                          latitude: coord?.latitude, longitude: coord?.longitude,
-                                          braceletConnected: bracelet.isReady)
-        }
+        await publishPresence(force: true)
     }
 
     private var lastOnline = true
     /// Whether each cloud partner's bracelet is connected, from their presence.
     var partnerBraceletConnected: [String: Bool] = [:]
-    private var braceletWatch: AnyCancellable?
+    private var statusWatch = Set<AnyCancellable>()
+    private var lastPublished: PresenceInfo?
+    private var lastPresencePush = Date.distantPast
 
-    /// When this bracelet connects or drops — also while the phone is locked (the Bluetooth
-    /// event wakes the app) — tell partners, so they know whether to buzz this phone.
-    private func watchBraceletForPresence() {
-        braceletWatch = bracelet.$state
-            .map { $0 == .connected }
-            .removeDuplicates()
-            .dropFirst()
-            .debounce(for: .seconds(2), scheduler: DispatchQueue.main)
-            .sink { [weak self] _ in
-                Task { @MainActor in
-                    guard let self, !self.cloudPartners.isEmpty else { return }
-                    let task = UIApplication.shared.beginBackgroundTask(withName: "bracelet-presence")
-                    await self.setOnline(self.lastOnline)
-                    UIApplication.shared.endBackgroundTask(task)
-                }
-            }
+    /// This phone's status snapshot for partners: online, shared location + when it was
+    /// taken + speed, phone battery/charging, bracelet connected/battery/last connected.
+    private func currentPresence() -> PresenceInfo {
+        var info = PresenceInfo(online: lastOnline)
+        if sharingLocation, let fix = location.lastLocation {
+            info.lat = fix.coordinate.latitude
+            info.lng = fix.coordinate.longitude
+            info.locationAt = fix.timestamp
+            info.speed = location.speed
+        }
+        let device = UIDevice.current
+        if device.batteryLevel >= 0 { info.phoneBattery = Double(device.batteryLevel) }
+        if device.batteryState != .unknown {
+            info.phoneCharging = device.batteryState == .charging || device.batteryState == .full
+        }
+        info.bracelet = bracelet.isReady
+        info.braceletBattery = bracelet.batteryPercent
+        info.braceletLastConnected = bracelet.isReady ? Date() : bracelet.lastConnectedAt
+        return info
+    }
+
+    /// Writes the status snapshot to every iCloud partner. `force: false` (location updates)
+    /// is throttled to one every 15 s.
+    func publishPresence(force: Bool) async {
+        guard !cloudPartners.isEmpty else { return }
+        if !force, Date().timeIntervalSince(lastPresencePush) < 15 { return }
+        lastPresencePush = Date()
+        let info = currentPresence()
+        lastPublished = info
+        for partner in cloudPartners {
+            try? await relay.sendPresence(info, bond: partner.bond)
+        }
+    }
+
+    /// Republishes when something worth showing changes: the bracelet connects or drops (also
+    /// while the phone is locked — the Bluetooth event wakes the app; partners then know
+    /// whether to buzz this phone), its battery moves 5 %, the phone's battery moves 5 %, or
+    /// the phone is plugged in / unplugged.
+    private func watchStatusForPresence() {
+        UIDevice.current.isBatteryMonitoringEnabled = true
+        let center = NotificationCenter.default
+        Publishers.MergeMany([
+            bracelet.$state.map { _ in () }.eraseToAnyPublisher(),
+            bracelet.$batteryPercent.map { _ in () }.eraseToAnyPublisher(),
+            center.publisher(for: UIDevice.batteryLevelDidChangeNotification).map { _ in () }.eraseToAnyPublisher(),
+            center.publisher(for: UIDevice.batteryStateDidChangeNotification).map { _ in () }.eraseToAnyPublisher(),
+        ])
+        .debounce(for: .seconds(2), scheduler: DispatchQueue.main)
+        .sink { [weak self] in Task { @MainActor in await self?.publishIfStatusChanged() } }
+        .store(in: &statusWatch)
+    }
+
+    private func publishIfStatusChanged() async {
+        guard !cloudPartners.isEmpty else { return }
+        let now = currentPresence()
+        if let last = lastPublished {
+            let bracelet = now.bracelet != last.bracelet
+            let braceletBattery = abs((now.braceletBattery ?? -100) - (last.braceletBattery ?? -100)) >= 5
+            let phoneBattery = abs((now.phoneBattery ?? -1) - (last.phoneBattery ?? -1)) >= 0.05
+            let charging = now.phoneCharging != last.phoneCharging
+            guard bracelet || braceletBattery || phoneBattery || charging else { return }
+        }
+        let task = UIApplication.shared.beginBackgroundTask(withName: "status-presence")
+        await publishPresence(force: true)
+        UIApplication.shared.endBackgroundTask(task)
     }
 
     /// Starts polling iCloud bonds while foregrounded (no-op if already running, or if there's
@@ -549,12 +589,14 @@ final class AppModel: ObservableObject {
             if let color = events.partnerColorRGB { cloudPartners[index].colorRGB = color }
             if let photo = events.partnerPhoto { setPartnerPhoto(photo, bondID: partner.id) }
             if let token = events.partnerPushToken, !token.isEmpty { partnerPushTokens[partner.id] = token }
-            if let online = events.presenceOnline { cloudPartners[index].online = online }
-            if let ready = events.partnerBraceletConnected { partnerBraceletConnected[partner.id] = ready }
-            if let seen = events.presenceLastSeen { cloudPartners[index].lastSeen = seen }
-            if let lat = events.presenceLat, let lng = events.presenceLng {
-                cloudPartners[index].latitude = lat
-                cloudPartners[index].longitude = lng
+            if let p = events.presence {
+                cloudPartners[index].presence = p
+                cloudPartners[index].online = p.online
+                cloudPartners[index].lastSeen = p.sentAt
+                // Cleared when they stop sharing location.
+                cloudPartners[index].latitude = p.lat
+                cloudPartners[index].longitude = p.lng
+                if let ready = p.bracelet { partnerBraceletConnected[partner.id] = ready }
             }
 
             // Only the selected partner's touches/heartbeat drive the bracelet.

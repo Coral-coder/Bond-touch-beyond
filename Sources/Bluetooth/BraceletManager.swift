@@ -16,6 +16,13 @@ enum BraceletState: Equatable {
 /// using the per-generation wire format in `BondGATT`. Writes are serialised.
 final class BraceletManager: NSObject, ObservableObject {
     @Published private(set) var state: BraceletState = .disconnected
+    /// Battery percentage from the standard Bluetooth battery service (last known value).
+    @Published private(set) var batteryPercent: Int?
+    /// When the bracelet was last connected (now, while it is), kept across launches.
+    @Published private(set) var lastConnectedAt: Date? =
+        UserDefaults.standard.object(forKey: "BondBraceletLastConnected") as? Date {
+        didSet { UserDefaults.standard.set(lastConnectedAt, forKey: "BondBraceletLastConnected") }
+    }
     /// Delivered when the user makes a touch on their own bracelet: the pattern and its
     /// generation (3 = Bond Touch More position samples, 2 = on/off milliseconds).
     var onLocalTap: (([Int], Int) -> Void)?
@@ -194,6 +201,7 @@ final class BraceletManager: NSObject, ObservableObject {
         connectAttempts = 0
         let was = state
         state = .connected
+        lastConnectedAt = Date()
         if let id = bracelet?.identifier { savedID = id }
         if was != .connected { NetLog.shared.record(.ok, "Bracelet connected", gen.map { "\($0)" } ?? "") }
         // A touch that came in while we were reconnecting: play it now if it's still fresh,
@@ -489,6 +497,7 @@ extension BraceletManager: CBCentralManagerDelegate {
 
     func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral,
                         error: Error?) {
+        if state == .connected { lastConnectedAt = Date() }   // connected right up to now
         linkUp = false
         state = .disconnected
         resetConnectionState()
@@ -531,6 +540,12 @@ extension BraceletManager: CBPeripheralDelegate {
             chars[char.uuid] = char
         }
 
+        // Battery level (standard battery service): read it now and follow changes.
+        if service.uuid == BondGATT.batteryService, let battery = chars[BondGATT.batteryLevel] {
+            if battery.properties.contains(.read) { peripheral.readValue(for: battery) }
+            if battery.properties.contains(.notify) { peripheral.setNotifyValue(true, for: battery) }
+        }
+
         if hasV3Service {
             // v3: subscribe FFB1 (events/state) and FFB2, then drive the handshake.
             if let ffb1 = chars[BondGATT.ffb1] { peripheral.setNotifyValue(true, for: ffb1) }
@@ -558,6 +573,11 @@ extension BraceletManager: CBPeripheralDelegate {
     func peripheral(_ peripheral: CBPeripheral, didUpdateValueFor characteristic: CBCharacteristic,
                     error: Error?) {
         guard let data = characteristic.value else { return }
+
+        if characteristic.uuid == BondGATT.batteryLevel, let level = data.first {
+            batteryPercent = min(Int(level), 100)
+            return
+        }
 
         if characteristic.uuid == BondGATT.charApiVer, gen == nil {
             let version = data.first

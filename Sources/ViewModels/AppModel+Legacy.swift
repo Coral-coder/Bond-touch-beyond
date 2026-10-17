@@ -207,6 +207,12 @@ extension AppModel {
                 legacyPartners[i].latitude = nil
                 legacyPartners[i].longitude = nil
             }
+            // The original app shares the partner's phone battery here (a fraction or a percent).
+            if let raw = (d["battery"] as? NSNumber)?.doubleValue, raw >= 0 {
+                var p = legacyPartners[i].presence ?? PresenceInfo(online: legacyPartners[i].online)
+                p.phoneBattery = raw > 1 ? min(raw / 100, 1) : raw
+                legacyPartners[i].presence = p
+            }
         }
     }
 

@@ -68,6 +68,8 @@ struct PartnerDetailView: View {
                             Text(statusText(partner)).font(Theme.font(14, .semibold)).foregroundStyle(Theme.subtitle)
                         }
 
+                        PartnerStatusCard(partner: partner)
+
                         HStack(spacing: 12) {
                             Image(systemName: "location.fill").foregroundStyle(.white)
                             VStack(alignment: .leading, spacing: 2) {

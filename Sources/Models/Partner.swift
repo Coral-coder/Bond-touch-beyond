@@ -11,6 +11,8 @@ struct Partner: Identifiable, Equatable {
     /// Last shared location (Presence), if the partner is sharing.
     var latitude: Double?
     var longitude: Double?
+    /// Their latest status snapshot: batteries, bracelet, speed, check-in times.
+    var presence: PresenceInfo?
 
     var id: String { bond.id }
 

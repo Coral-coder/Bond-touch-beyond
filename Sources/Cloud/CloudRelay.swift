@@ -33,11 +33,8 @@ actor CloudRelay {
         var messages: [ChatMessage] = []
         var latestBPM: Int?
         var latestBPMAt: Date?
-        var presenceOnline: Bool?
-        var presenceLastSeen: Date?
-        var presenceLat: Double?
-        var presenceLng: Double?
-        var partnerBraceletConnected: Bool?
+        /// The partner's latest status snapshot (online, location, speed, batteries, bracelet).
+        var presence: PresenceInfo?
         var partnerName: String?
         var partnerColorRGB: Int?
         var partnerPhoto: Data?
@@ -306,11 +303,11 @@ actor CloudRelay {
         try await put(mine(bond, "hb", .heartbeat), seal(HeartbeatPayload(bpm: bpm, sentAt: Date()), bond.id))
     }
 
-    func sendPresence(online: Bool, bond: Bond, senderID: String,
-                      latitude: Double? = nil, longitude: Double? = nil, braceletConnected: Bool? = nil) async throws {
-        try await put(mine(bond, "pr", .presence),
-                      seal(PresencePayload(online: online, lat: latitude, lng: longitude, sentAt: Date(),
-                                           bracelet: braceletConnected), bond.id))
+    /// Writes this phone's full status snapshot for the partner (it replaces the previous one).
+    func sendPresence(_ info: PresenceInfo, bond: Bond) async throws {
+        var info = info
+        info.sentAt = Date()
+        try await put(mine(bond, "pr", .presence), seal(info, bond.id))
     }
 
     func sendProfile(name: String, colorRGB: Int, photo: URL?, pushToken: String? = nil,
@@ -396,13 +393,7 @@ actor CloudRelay {
             events.latestBPM = p.bpm
             events.latestBPMAt = p.sentAt
         }
-        if let p = open(PresencePayload.self, found[presenceRef.id], code) {
-            events.presenceOnline = p.online
-            events.presenceLastSeen = p.sentAt
-            events.presenceLat = p.lat
-            events.presenceLng = p.lng
-            events.partnerBraceletConnected = p.bracelet
-        }
+        events.presence = open(PresenceInfo.self, found[presenceRef.id], code)
         if let rec = found[profileRef.id], isNew(rec), let p = open(ProfilePayload.self, rec, code) {
             events.partnerName = p.name
             events.partnerColorRGB = p.colorRGB
@@ -454,13 +445,26 @@ actor CloudRelay {
 private struct BondPayload: Codable { let name: String; let ownerID: String }
 private struct ProfilePayload: Codable { let name: String; let colorRGB: Int; let pushToken: String?; let photoHash: String? }
 private struct PhotoPayload: Codable { let data: Data }
-private struct PresencePayload: Codable {
-    let online: Bool
-    let lat: Double?
-    let lng: Double?
-    let sentAt: Date
-    /// Whether the sender's bracelet is connected (their partner then sends silent pushes).
+/// A phone's status snapshot, shared (encrypted) with its partner and shown on their card.
+/// Every field but `online` is optional so older and newer builds read each other's.
+struct PresenceInfo: Codable, Equatable {
+    var online: Bool
+    /// Shared location (only while location sharing is on) and when that fix was taken.
+    var lat: Double? = nil
+    var lng: Double? = nil
+    var locationAt: Date? = nil
+    /// Speed in metres per second at `locationAt`, when known.
+    var speed: Double? = nil
+    /// Phone battery 0…1 and whether it's charging.
+    var phoneBattery: Double? = nil
+    var phoneCharging: Bool? = nil
+    /// Whether the bracelet is connected (the partner then sends silent pushes), its battery
+    /// percentage, and when it was last connected.
     var bracelet: Bool? = nil
+    var braceletBattery: Int? = nil
+    var braceletLastConnected: Date? = nil
+    /// When this snapshot was written — the phone's last check-in.
+    var sentAt = Date()
 }
 private struct HeartbeatPayload: Codable { let bpm: Int; let sentAt: Date }
 private struct CursorPayload: Codable { let touch: Int; let message: Int }
