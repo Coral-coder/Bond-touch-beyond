@@ -149,7 +149,6 @@ extension BondBackend {
 
     /// `POST bond/api/v3/bonds/{bondId}/touches {timestamp, pattern, generation}` → touch id.
     /// Generation 3 patterns are position samples (≤ 200); generation 2 on/off ms.
-    @discardableResult
     /// Returns the new touch's id and — as the original app reads it — the id of the saved
     /// meaning the server matched the pattern to, if any.
     @discardableResult
