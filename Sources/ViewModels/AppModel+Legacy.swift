@@ -171,7 +171,7 @@ extension AppModel {
                                          endColorRGB: meaning?.endColorRGB ?? color,
                                          sentAt: Date(timeIntervalSince1970: ms / 1000))
                 newTouches.append(touch)
-                if !firstSync, id == selectedPartnerID, !store.doNotDisturb { bracelet.play(touch) }
+                if !firstSync, id == selectedPartnerID, !store.doNotDisturb { feel(touch) }
                 toAck.append((id, touchId))
             }
         }

@@ -111,6 +111,27 @@ final class AppModel: ObservableObject {
     }
 
     let bracelet = BraceletManager()
+    /// Vibrates the phone like the bracelet would, when the bracelet isn't connected.
+    let haptics = PhoneHaptics()
+
+    /// Plays a partner's touch on the bracelet — or, if the bracelet isn't connected (or the
+    /// touch doesn't reach it), on the phone's vibration motor in the same rhythm. In the
+    /// background the phone can't run its own vibration, so the touch is held for the
+    /// bracelet and the push notification is what buzzes.
+    func feel(_ touch: TouchMessage) {
+        let foreground = UIApplication.shared.applicationState == .active
+        if bracelet.play(touch, holdIfOffline: !foreground) { return }
+        if foreground {
+            haptics.play(touch)
+            NetLog.shared.log(.recv, "Bracelet not connected — played the touch on the phone")
+        }
+    }
+
+    /// Plays a partner's heartbeat on the bracelet, or lub-dubs the phone if it isn't connected.
+    func feelHeartbeat(bpm: Int) {
+        bracelet.playHeartbeat(bpm: bpm)       // also drives the on-screen heartbeat
+        if !bracelet.isReady { haptics.playHeartbeat(bpm: bpm) }
+    }
     let store = LocalStore()
     let heart = HeartRateService()
     let location = LocationService()
@@ -135,6 +156,10 @@ final class AppModel: ObservableObject {
                 await self.sendTouch(pattern: pattern, generation: generation,
                                      colorRGB: self.store.profile.colorRGB)
             }
+        }
+        // A touch that didn't make it to the bracelet plays on the phone instead.
+        bracelet.onPlayFailed = { [weak self] touch in
+            Task { @MainActor in self?.haptics.play(touch) }
         }
         watch.start(self)
         recovery.start(bracelet)
@@ -501,13 +526,13 @@ final class AppModel: ObservableObject {
             if partner.id == selectedPartnerID, !store.doNotDisturb {
                 // Only fresh touches buzz the band — not history fetched after a reinstall.
                 for touch in events.touches where Date().timeIntervalSince(touch.sentAt) < 120 {
-                    bracelet.play(touch)
+                    feel(touch)
                 }
                 // A heartbeat plays once, for 5 s — and only if it's fresh (not one that was
                 // sent long ago and is only now being fetched).
                 if let bpm = events.latestBPM, let at = events.latestBPMAt,
                    Date().timeIntervalSince(at) < 60 {
-                    bracelet.playHeartbeat(bpm: bpm)
+                    feelHeartbeat(bpm: bpm)
                 }
             }
         }

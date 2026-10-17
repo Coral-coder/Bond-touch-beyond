@@ -330,7 +330,7 @@ struct HomeView: View {
                     .font(Theme.font(12, .bold)).foregroundStyle(.white)
                 Text(touch.sentAt.formatted(date: .omitted, time: .shortened))
                     .font(Theme.font(11)).foregroundStyle(Theme.subtitle)
-                Button { model.bracelet.play(touch) } label: {
+                Button { model.feel(touch) } label: {
                     Image(systemName: "play.fill").font(.system(size: 12, weight: .bold)).foregroundStyle(.white)
                         .frame(width: 30, height: 30).background(Circle().fill(.white.opacity(0.14)))
                 }

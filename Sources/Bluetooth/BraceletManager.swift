@@ -248,19 +248,39 @@ final class BraceletManager: NSObject, ObservableObject {
 
     // MARK: - Public actions
 
-    /// Plays a received touch: replays the rhythm and glows/buzzes in its colour. If the
-    /// bracelet is reconnecting, the touch is held and played when it's back (if still fresh).
-    func play(_ touch: TouchMessage) {
+    /// Plays a received touch: replays the rhythm and glows/buzzes in its colour. Returns
+    /// false if the bracelet isn't connected; then, with `holdIfOffline`, the touch is held and
+    /// played when it's back (if still fresh).
+    @discardableResult
+    func play(_ touch: TouchMessage, holdIfOffline: Bool = true) -> Bool {
         guard let gen, state == .connected else {
-            pendingPlay = (touch, Date())
-            NetLog.shared.record(.fail, "Bracelet not connected — touch held until it reconnects")
-            return
+            if holdIfOffline {
+                pendingPlay = (touch, Date())
+                NetLog.shared.record(.fail, "Bracelet not connected — touch held until it reconnects")
+            }
+            return false
         }
         enqueue(BondGATT.touchSend(gen, touch: touch))
         // The Bond Touch More renders the touch itself (LEDs + panned vibration); older
         // bracelets also get a glow + buzz in the touch's colour.
         if gen != .v3 { enqueue(BondGATT.ledMotor(gen, rgb: touch.colorRGB)) }
+        lastPlayed = (touch, Date())
+        return true
     }
+
+    /// Called when a touch handed to the bracelet didn't make it (a write failed, or the link
+    /// dropped right after) — so it can be played on the phone instead.
+    var onPlayFailed: ((TouchMessage) -> Void)?
+    private var lastPlayed: (touch: TouchMessage, at: Date)?
+
+    private func reportPlayFailed(_ why: String) {
+        guard let last = lastPlayed, Date().timeIntervalSince(last.at) < 5 else { return }
+        lastPlayed = nil
+        NetLog.shared.record(.fail, "Touch didn't reach the bracelet", why)
+        onPlayFailed?(last.touch)
+    }
+
+    var isReady: Bool { state == .connected && gen != nil }
 
     /// Plays a received heartbeat: one pulse per beat at `bpm` for `seconds` (5 s), then
     /// stops on its own.
@@ -472,6 +492,7 @@ extension BraceletManager: CBCentralManagerDelegate {
         linkUp = false
         state = .disconnected
         resetConnectionState()
+        reportPlayFailed("bracelet disconnected")
         if error != nil { NetLog.shared.record(.fail, "Bracelet disconnected — reconnecting", error?.localizedDescription ?? "") }
         // Reconnect automatically (also in the background): a pending connect completes
         // whenever the bracelet comes back in range.
@@ -565,6 +586,8 @@ extension BraceletManager: CBPeripheralDelegate {
     func peripheral(_ peripheral: CBPeripheral, didWriteValueFor characteristic: CBCharacteristic,
                     error: Error?) {
         writing = false
+        if let error { reportPlayFailed(error.localizedDescription) }
+        else if writeQueue.isEmpty { lastPlayed = nil }   // the touch fully reached the bracelet
         pump()
     }
 
