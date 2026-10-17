@@ -528,9 +528,6 @@ final class AppModel: ObservableObject {
 
     // MARK: - Partners
 
-    /// Creates an iCloud bond and its invite link. Returns an error message when it can't
-    /// (chiefly: not signed into iCloud), so the UI can show it instead of a dead end.
-    @discardableResult
     /// As the original: at most three partners — the bracelet has three partner slots.
     static let maxPartners = 3
     private var partnerLimitMessage: String? {
@@ -539,7 +536,10 @@ final class AppModel: ObservableObject {
             : nil
     }
 
+    /// Creates an iCloud bond and its invite link. Returns an error message when it can't
+    /// (chiefly: not signed into iCloud), so the UI can show it instead of a dead end.
     /// `forExistingPartner`: an invite to move an original-app partner (already counted) to iCloud.
+    @discardableResult
     func createBond(forExistingPartner: Bool = false) async -> String? {
         if !forExistingPartner, let full = partnerLimitMessage { return full }
         iCloudStatus = await relay.accountStatusMessage()
