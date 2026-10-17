@@ -368,43 +368,55 @@ struct HomeView: View {
         }
     }
 
+    /// Height of a history card; the touch is drawn across all of it.
+    private static let rowHeight: CGFloat = 100
+
     private func touchRow(_ touch: TouchMessage) -> some View {
         let mine = touch.senderID == model.myUserID || touch.senderID == ChatMessage.legacySelf
         let meaning = model.meaningTag(for: touch)
-        return HStack(spacing: 12) {
+        let h = Self.rowHeight
+        return ZStack(alignment: .trailing) {
+            // The touch fills the whole card, edge to edge.
             Group {
                 if let bpm = touch.heartbeatBPM {
-                    // A heartbeat is listed as its EKG, with the BPM.
-                    EKGView(bpm: bpm, colorRGB: touch.colorRGB)
-                        .frame(height: 64)
-                        .overlay(alignment: .topLeading) {
-                            Label("\(bpm) BPM", systemImage: "heart.fill")
-                                .font(Theme.font(12, .heavy)).foregroundStyle(.white)
-                                .padding(.horizontal, 9).padding(.vertical, 4)
-                                .background(Capsule().fill(.black.opacity(0.45)))
-                                .accessibilityLabel("Heartbeat, \(bpm) beats per minute")
-                        }
+                    EKGView(bpm: bpm, colorRGB: touch.colorRGB, lineWidth: 3)
+                        .padding(.vertical, 10)
                 } else {
                     TouchViz(pattern: touch.pattern, generation: touch.generation,
-                             colorRGB: touch.colorRGB, endColorRGB: touch.endColorRGB, height: 64)
+                             colorRGB: touch.colorRGB, endColorRGB: touch.endColorRGB, height: h)
                 }
             }
-                .frame(maxWidth: .infinity)
-                .overlay {
-                    // A touch that is a saved meaning wears its name right across it.
-                    if touch.heartbeatBPM == nil, let meaning {
-                        HStack(spacing: 6) {
-                            if !meaning.emoji.isEmpty { Text(meaning.emoji).font(.system(size: 17)) }
-                            Text(meaning.label).font(Theme.font(16, .heavy)).lineLimit(1).minimumScaleFactor(0.7)
-                        }
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 14).padding(.vertical, 7)
-                        .background(Capsule().fill(.black.opacity(0.5)))
-                        .overlay(Capsule().stroke(Color(rgbInt: touch.colorRGB).opacity(0.9), lineWidth: 1.5))
-                        .shadow(color: Color(rgbInt: touch.colorRGB).opacity(0.6), radius: 8)
-                        .accessibilityLabel("Meaning: \(meaning.label)")
-                    }
+            .frame(maxWidth: .infinity)
+            .frame(height: h)
+            .overlay(alignment: .topLeading) {
+                if let bpm = touch.heartbeatBPM {
+                    // A heartbeat is listed as its EKG, with the BPM.
+                    Label("\(bpm) BPM", systemImage: "heart.fill")
+                        .font(Theme.font(12, .heavy)).foregroundStyle(.white)
+                        .padding(.horizontal, 9).padding(.vertical, 4)
+                        .background(Capsule().fill(.black.opacity(0.45)))
+                        .padding(10)
+                        .accessibilityLabel("Heartbeat, \(bpm) beats per minute")
                 }
+            }
+            .overlay {
+                // A touch that is a saved meaning wears its name right across it.
+                if touch.heartbeatBPM == nil, let meaning {
+                    HStack(spacing: 6) {
+                        if !meaning.emoji.isEmpty { Text(meaning.emoji).font(.system(size: 17)) }
+                        Text(meaning.label).font(Theme.font(16, .heavy)).lineLimit(1).minimumScaleFactor(0.7)
+                    }
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 14).padding(.vertical, 7)
+                    .background(Capsule().fill(.black.opacity(0.5)))
+                    .overlay(Capsule().stroke(Color(rgbInt: touch.colorRGB).opacity(0.9), lineWidth: 1.5))
+                    .shadow(color: Color(rgbInt: touch.colorRGB).opacity(0.6), radius: 8)
+                    .padding(.trailing, 70)   // centred on the part of the card not under the details
+                    .accessibilityLabel("Meaning: \(meaning.label)")
+                }
+            }
+
+            // Who, when, status and replay, floating over the right edge on a soft scrim.
             VStack(alignment: .trailing, spacing: 2) {
                 Text(mine ? "You" : (partner?.displayName ?? "Partner"))
                     .font(Theme.font(12, .bold)).foregroundStyle(.white)
@@ -425,8 +437,12 @@ struct HomeView: View {
                 .padding(.top, 2)
             }
             .fixedSize()
+            .padding(.leading, 28).padding(.trailing, 14)
+            .frame(maxHeight: .infinity)
+            .background(LinearGradient(colors: [.clear, .black.opacity(0.45)], startPoint: .leading, endPoint: .trailing))
         }
-        .padding(.horizontal, 14).padding(.vertical, 10)
+        .frame(height: h)
+        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
         .glass(cornerRadius: 22)
     }
 }
