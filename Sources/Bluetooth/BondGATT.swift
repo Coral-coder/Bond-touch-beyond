@@ -60,10 +60,13 @@ enum BondGATT {
     static let deviceNames = ["BOND", "Bond More", "BOND 4", "BOND MINI"]
     static let dfuNames = ["BOND_DFU", "BOND_M_DFU", "BOND_4_DFU", "BOND_MINI_DFU"]
 
-    /// A normal (running) bracelet. Excludes bracelets in firmware-update (DFU) mode.
+    /// A normal (running) bracelet. Excludes bracelets in firmware-update (DFU) mode, and the
+    /// Bond Heart pendant ("BondHeart" / "BOND_H_DFU"), which `HeartPendant` handles.
     static func isBondName(_ name: String?) -> Bool {
         guard let name else { return false }
-        return name.uppercased().hasPrefix("BOND") && dfuModel(name) == nil
+        let upper = name.uppercased()
+        if upper.hasPrefix("BONDHEART") || upper.hasPrefix("BOND_H_") { return false }
+        return upper.hasPrefix("BOND") && dfuModel(name) == nil
     }
 
     /// The bracelet model of a bracelet stuck in firmware-update (DFU) mode, from the name

@@ -29,6 +29,7 @@ struct SettingsView: View {
                     row("Personal details", "") { PersonalDetailsView() }
                     row("My Bond Touch Bracelet", "") { BraceletSettingsView() }
                     row("Bracelet firmware (recovery)", "") { FirmwareSettingsView() }
+                    row("Bond Heart", "") { BondHeartView() }
                     row("Tutorials", "") { HelpView() }
                     row("Do not disturb", "") { DoNotDisturbView() }
                     row("My people", "") { PeopleView().navigationTitle("My people") }

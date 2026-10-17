@@ -181,6 +181,9 @@ final class AppModel: ObservableObject {
     }
     let store = LocalStore()
     let heart = HeartRateService()
+    /// Bond Heart: the pendant and the heartbeat library (AppModel+BondHeart).
+    let pendant = HeartPendant()
+    let heartLibrary = HeartLibrary()
     let location = LocationService()
     let relay = CloudRelay()
 

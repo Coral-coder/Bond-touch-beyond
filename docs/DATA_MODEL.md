@@ -308,6 +308,17 @@ identity is entirely Firebase Auth.
 - DELETE `/heart/api/v2/requests/{id}`
 - PUT `/heart/api/v2/heartbeats/{id}/requests`
 
+Bodies (Gson, Kotlin field names; `Sources/Legacy/HeartAPI.swift`): list →
+`{heartbeats: [{id, pattern [ms], name, color, createdDate, createdBy, hasMemory, isSelf,
+emails}], pendingHeartbeats: [{id, pattern, name, color, createdDate, createdBy, message}]}`;
+create `{pattern, name, color (& 0xFFFFFF), isSelf: false, createdDate (epoch ms), hasMemory,
+emails}`; the two PUTs on `user/heartbeats/{id}` are edit `{name, color, hasMemory, emails}`
+and accept-pending (no body); a pending heartbeat is rejected by deleting it; share
+`PUT heartbeats/{id}/requests {toUserEmail (lower-cased), message, notify}`; requests
+`[{id, fromUser, fromUserName, toUser, createdDate}]`, create `{fromUserName, toUser}`;
+count `{name, count, sinceDate "yyyy-MM-dd", controlTimestamp}` → `{controlTimestamp}`;
+total_count `{count, name}`. Memory photos live in Firebase Storage `memories/<uid>/<id>`.
+
 ### 3c. Analytics / CDP — base `https://track-prod.api.bond-touch.com/`
 
 Own OkHttp client, no Firebase auth interceptor: POST `alias`, POST `profile`,

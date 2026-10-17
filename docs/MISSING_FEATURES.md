@@ -25,6 +25,14 @@ and our Swift code (October 2026). Sizes: S = small, M = medium, L = large.
   v3 3.1.1, v4 2.0.3, mini 1.2.0), "Update to …" on the bracelet's device card with
   confirmation, battery above 40 % or charging, the original's update-mode command per
   generation, then flashed automatically with the built-in firmware (offered, not forced).
+- Bond Heart (§5), in Settings → Bond Heart: pendant pairing and reconnect (token / AUID /
+  OOBE / paired-signal handshake, firmware, battery, played count), recording a heartbeat
+  with the camera and flash (or an Apple Watch beat-to-beat series), name / colour / memory
+  (note + local photo), library with replay (EKG + beep + vibration), wear on the pendant,
+  send to a partner's bracelet as a heartbeat touch, and with an original account the
+  `heart/api/v2` share / request / pending / count endpoints. Not built: pendant DFU,
+  memory photos through the original servers (Firebase App Check), the 24 h dashboard
+  auto-share of the count.
 
 ## 0. Broken — we claim or attempt it, but it doesn't work (fix first)
 
@@ -112,7 +120,9 @@ the phone.
 Whole second mode: record a heartbeat with the camera, customise (colour/name/memory),
 heartbeat library, wear on the pendant, share/request by email, received/waiting screens,
 hold counter (share with 3 people / 24 h), pendant pairing, settings, DFU, tutorials,
-`heart/api/v2` endpoints. Protocol documented in BLE_PROTOCOL.md §2. None of it built.
+`heart/api/v2` endpoints. Protocol documented in BLE_PROTOCOL.md §2. Built since — see
+"Done since this audit"; still missing: pendant DFU, memory photos via the original
+servers, campaign / walkthrough / buy screens.
 
 ## Paid in the original
 
