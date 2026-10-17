@@ -183,7 +183,8 @@ final class AppModel: ObservableObject {
 
     init() {
         messagesByBond = ChatArchive.load()
-        history = TouchArchive.load()
+        // A send cut short by the app closing didn't finish.
+        history = TouchArchive.load().map { var t = $0; if t.delivery == .sending { t.delivery = .failed }; return t }
         historyIDs = Set(history.map { $0.id })
         bracelet.$state.receive(on: DispatchQueue.main).assign(to: &$braceletState)
         bracelet.$heartbeatActive.receive(on: DispatchQueue.main).assign(to: &$partnerHeartbeatActive)
@@ -324,6 +325,7 @@ final class AppModel: ObservableObject {
             await publishProfile()
             await setOnline(inForeground)
             await refreshAll()
+            await resendRecentFailures()
             if inForeground { startCloudPolling() }   // a background launch just handles its push
             if UIApplication.shared.backgroundRefreshStatus != .available {
                 NetLog.shared.log(.fail, "Background App Refresh is off for this app",
@@ -559,13 +561,20 @@ final class AppModel: ObservableObject {
             NetLog.shared.log(.ok, "Touch matches \"\(meaning.label)\" — sending it as that meaning")
         }
         // A meaning goes out as itself: its own pattern and colours.
-        let touch = TouchMessage(bondID: bond.id, senderID: myUserID,
+        var touch = TouchMessage(bondID: bond.id, senderID: myUserID,
                                  pattern: meaning?.pattern ?? pattern,
                                  generation: meaning?.touchGeneration ?? generation,
                                  colorRGB: meaning?.colorRGB ?? colorRGB,
                                  endColorRGB: meaning?.endColorRGB ?? endColorRGB,
                                  meaningLabel: meaning?.label, meaningEmoji: meaning?.emoji,
                                  heartbeatBPM: heartbeatBPM)
+        touch.delivery = .sending
+        recordTouch(touch)          // listed straight away as "Sending…"
+        await transmit(touch, bond: bond, meaning: meaning)
+    }
+
+    /// Sends a touch already in history and updates its delivery status (Sent, or Failed).
+    private func transmit(_ touch: TouchMessage, bond: Bond, meaning: TouchMeaning?) async {
         let route = bond.legacy ? "original Bond API" : "iCloud"
         NetLog.shared.log(.send, "Send \(meaning.map { "\"\($0.label)\"" } ?? "touch") → \(bond.partnerName) (\(route))",
                           "gen \(touch.generation), \(touch.pattern.count) samples")
@@ -575,32 +584,65 @@ final class AppModel: ObservableObject {
                 // lights and buzzes it as that meaning.
                 try await BondBackend.sendMeaningTouch(bondId: bond.id, meaningId: serverID,
                                                        bearer: try await legacyToken())
+                updateHistory(touch.id) { $0.delivery = .sent }
             } else if bond.legacy {
                 // As the original: the server tells us which saved meaning it matched.
-                if let matched = try await legacySendTouch(touch, bond: bond), touch.meaningLabel == nil {
-                    var tagged = touch
-                    tagged.meaningLabel = matched.label
-                    tagged.meaningEmoji = matched.emoji
-                    recordTouch(tagged)
-                    return
+                let matched = try await legacySendTouch(touch, bond: bond)
+                updateHistory(touch.id) { t in
+                    t.delivery = .sent
+                    if let matched, t.meaningLabel == nil { t.meaningLabel = matched.label; t.meaningEmoji = matched.emoji }
                 }
             } else {
-                try await relay.sendTouch(touch, bond: bond)
+                let seq = try await relay.sendTouch(touch, bond: bond)
+                updateHistory(touch.id) { $0.delivery = .sent; $0.ringSeq = seq }
                 NetLog.shared.log(.ok, "Touch → iCloud accepted", "\(bond.partnerName)")
                 // Wake their phone right away (CloudKit's own push can lag in deep sleep).
                 let me = store.profile.name.isEmpty ? "Someone" : store.profile.name
-                if let bpm = heartbeatBPM {
+                if let bpm = touch.heartbeatBPM {
                     await pushPartner(bondID: bond.id, title: "\(me)'s heartbeat", body: "💓 \(bpm) BPM", touch: touch)
                 } else {
-                    let body = meaning.map { "\($0.emoji) \($0.label)".trimmingCharacters(in: .whitespaces) } ?? "❤️"
+                    let body = touch.meaningLabel.map { "\(touch.meaningEmoji ?? "") \($0)".trimmingCharacters(in: .whitespaces) } ?? "❤️"
                     await pushPartner(bondID: bond.id, title: "\(me) touched you", body: body, touch: touch)
                 }
             }
-            recordTouch(touch)
         } catch {
+            updateHistory(touch.id) { $0.delivery = .failed }
             statusLine = "Send failed: \(error.localizedDescription)"
             NetLog.shared.log(.fail, "Send touch failed (\(route))", error.localizedDescription)
         }
+    }
+
+    /// Changes one history entry and saves.
+    func updateHistory(_ id: UUID, _ change: (inout TouchMessage) -> Void) {
+        guard let i = history.firstIndex(where: { $0.id == id }) else { return }
+        change(&history[i])
+        TouchArchive.save(history)
+    }
+
+    /// Sends a failed touch again (same touch, so it isn't listed twice).
+    func resend(_ touch: TouchMessage) async {
+        guard touch.delivery == .failed, let bond = bond(for: touch.bondID) else { return }
+        let bg = UIApplication.shared.beginBackgroundTask(withName: "resend-touch")
+        defer { UIApplication.shared.endBackgroundTask(bg) }
+        updateHistory(touch.id) { $0.delivery = .sending }
+        let meaning = touch.meaningLabel.flatMap { label in meanings(for: bond).first { $0.label == label } }
+        await transmit(touch, bond: bond, meaning: meaning)
+    }
+
+    /// As the original: touches that failed in the last 15 minutes are sent again when the
+    /// app starts (older ones stay Failed — tap to retry).
+    func resendRecentFailures() async {
+        let recent = history.filter { $0.delivery == .failed && Date().timeIntervalSince($0.sentAt) < 15 * 60 }
+        for t in recent { await resend(t) }
+    }
+
+    /// Marks our touches the partner's phone has received as Seen.
+    private func markSeen(bondID: String, upTo seen: Int) {
+        var changed = false
+        for i in history.indices where history[i].bondID == bondID && history[i].delivery == .sent {
+            if let seq = history[i].ringSeq, seq <= seen { history[i].delivery = .seen; changed = true }
+        }
+        if changed { TouchArchive.save(history) }
     }
 
     /// Sends a saved meaning (Touch Language) — by id to an original-app partner, as a
@@ -758,6 +800,7 @@ final class AppModel: ObservableObject {
             if let color = events.partnerColorRGB { cloudPartners[index].colorRGB = color }
             if let photo = events.partnerPhoto { setPartnerPhoto(photo, bondID: partner.id) }
             if let token = events.partnerPushToken, !token.isEmpty { partnerPushTokens[partner.id] = token }
+            if let seen = events.partnerSeenTouch { markSeen(bondID: partner.id, upTo: seen) }
             if let p = events.presence {
                 cloudPartners[index].presence = p
                 cloudPartners[index].online = p.online

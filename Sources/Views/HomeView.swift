@@ -319,6 +319,25 @@ struct HomeView: View {
         }
     }
 
+    /// Sending… / Sent / Seen / Failed (tap to send again), as the original.
+    @ViewBuilder private func deliveryLabel(_ touch: TouchMessage, _ delivery: TouchMessage.Delivery) -> some View {
+        switch delivery {
+        case .sending:
+            Text("Sending…").font(Theme.font(10, .semibold)).foregroundStyle(Theme.subtitle)
+        case .sent:
+            Label("Sent", systemImage: "checkmark").font(Theme.font(10, .semibold)).foregroundStyle(Theme.subtitle)
+        case .seen:
+            Label("Seen", systemImage: "checkmark.circle.fill").font(Theme.font(10, .semibold)).foregroundStyle(Theme.accent)
+        case .failed:
+            Button { Task { await model.resend(touch) } } label: {
+                Label("Failed · Retry", systemImage: "exclamationmark.circle.fill")
+                    .font(Theme.font(10, .bold)).foregroundStyle(Theme.danger)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Failed to send. Tap to retry.")
+        }
+    }
+
     private func touchRow(_ touch: TouchMessage) -> some View {
         let mine = touch.senderID == model.myUserID || touch.senderID == ChatMessage.legacySelf
         let meaning = model.meaningTag(for: touch)
@@ -361,6 +380,7 @@ struct HomeView: View {
                     .font(Theme.font(12, .bold)).foregroundStyle(.white)
                 Text(touch.sentAt.formatted(date: .omitted, time: .shortened))
                     .font(Theme.font(11)).foregroundStyle(Theme.subtitle)
+                if mine, let delivery = touch.delivery { deliveryLabel(touch, delivery) }
                 Button { model.feel(touch) } label: {
                     Image(systemName: "play.fill").font(.system(size: 12, weight: .bold)).foregroundStyle(.white)
                         .frame(width: 30, height: 30).background(Circle().fill(.white.opacity(0.14)))

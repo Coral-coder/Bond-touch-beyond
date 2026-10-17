@@ -39,6 +39,8 @@ actor CloudRelay {
         var partnerColorRGB: Int?
         var partnerPhoto: Data?
         var partnerPushToken: String?
+        /// The highest number of *our* touches the partner's phone has received ("Seen").
+        var partnerSeenTouch: Int?
     }
 
     /// The record kinds, each its own CloudKit record type.
@@ -283,12 +285,14 @@ actor CloudRelay {
 
     // MARK: - Sending (encrypted)
 
-    func sendTouch(_ touch: TouchMessage, bond: Bond) async throws {
+    /// Sends a touch; returns its number in this phone's touch ring (for Seen).
+    @discardableResult
+    func sendTouch(_ touch: TouchMessage, bond: Bond) async throws -> Int {
         let body = TouchPayload(id: touch.id, sentAt: touch.sentAt, pattern: touch.pattern, generation: touch.generation,
                                 colorRGB: touch.colorRGB, endColorRGB: touch.endColorRGB,
                                 meaningLabel: touch.meaningLabel, meaningEmoji: touch.meaningEmoji,
                                 heartbeatBPM: touch.heartbeatBPM)
-        try await sendEvent(.touch, bond: bond) { (seq: Int) -> TouchPayload in var b = body; b.seq = seq; return b }
+        return try await sendEvent(.touch, bond: bond) { (seq: Int) -> TouchPayload in var b = body; b.seq = seq; return b }
     }
 
     func sendChat(_ message: ChatMessage, bond: Bond) async throws {
@@ -298,7 +302,7 @@ actor CloudRelay {
         }
         let body = MessagePayload(id: message.id, sentAt: message.sentAt, kind: message.kind.rawValue,
                                   text: message.text, colorRGB: message.colorRGB, image: image)
-        try await sendEvent(.message, bond: bond) { (seq: Int) -> MessagePayload in var b = body; b.seq = seq; return b }
+        _ = try await sendEvent(.message, bond: bond) { (seq: Int) -> MessagePayload in var b = body; b.seq = seq; return b }
     }
 
     func sendHeartbeat(bpm: Int, bond: Bond, senderID: String) async throws {
@@ -334,30 +338,47 @@ actor CloudRelay {
     private func seenKey(_ code: String, _ kind: Kind) -> String { "relay.seen.\(kind.rawValue).\(code)" }
 
     /// Writes one touch or message in order behind any send already in flight.
-    private func sendEvent<P: Encodable>(_ kind: Kind, bond: Bond, _ make: @escaping (Int) -> P) async throws {
+    private func sendEvent<P: Encodable>(_ kind: Kind, bond: Bond, _ make: @escaping (Int) -> P) async throws -> Int {
         let previous = sendTail
-        let task = Task { () async throws -> Void in
+        let task = Task { () async throws -> Int in
             await previous?.value
-            try await self.writeEvent(kind, bond: bond, make)
+            return try await self.writeEvent(kind, bond: bond, make)
         }
         sendTail = Task { _ = await task.result }
-        try await task.value
+        return try await task.value
     }
 
-    private func writeEvent<P: Encodable>(_ kind: Kind, bond: Bond, _ make: (Int) -> P) async throws {
+    private func writeEvent<P: Encodable>(_ kind: Kind, bond: Bond, _ make: (Int) -> P) async throws -> Int {
         let seq = await nextSeq(kind, bond)
         let what = kind == .touch ? "t-\(slot(seq))" : "m-\(slot(seq))"
         // The event first, then the cursor that announces it — the partner never sees a
         // cursor pointing at an event that isn't there yet.
         try await put(mine(bond, what, kind), seal(make(seq), bond.id))
+        try await writeCursor(bond)
+        return seq
+    }
+
+    /// This phone's cursor: its newest numbers, plus how far it has received the partner's touches.
+    private func writeCursor(_ bond: Bond) async throws {
         let cursor = CursorPayload(touch: UserDefaults.standard.integer(forKey: seqKey(bond.id, .touch)),
-                                   message: UserDefaults.standard.integer(forKey: seqKey(bond.id, .message)))
+                                   message: UserDefaults.standard.integer(forKey: seqKey(bond.id, .message)),
+                                   seenTouch: UserDefaults.standard.integer(forKey: seenKey(bond.id, .touch)))
         try await put(mine(bond, "cur", .cursor), seal(cursor, bond.id))
     }
 
     /// Reserves this phone's next touch or message number in `bond`, continuing from the
     /// server after a reinstall so numbers are never reused.
     private func nextSeq(_ kind: Kind, _ bond: Bond) async -> Int {
+        await loadCounters(bond)
+        let key = seqKey(bond.id, kind)
+        let next = UserDefaults.standard.integer(forKey: key) + 1
+        UserDefaults.standard.set(next, forKey: key)
+        return next
+    }
+
+    /// Makes sure this phone knows its own newest numbers (from the server after a reinstall),
+    /// so a cursor it writes never rewinds them.
+    private func loadCounters(_ bond: Bond) async {
         let touchKey = seqKey(bond.id, .touch), messageKey = seqKey(bond.id, .message)
         if UserDefaults.standard.object(forKey: touchKey) == nil || UserDefaults.standard.object(forKey: messageKey) == nil {
             let cursorRef = mine(bond, "cur", .cursor)
@@ -365,10 +386,6 @@ actor CloudRelay {
             if UserDefaults.standard.object(forKey: touchKey) == nil { UserDefaults.standard.set(server?.touch ?? 0, forKey: touchKey) }
             if UserDefaults.standard.object(forKey: messageKey) == nil { UserDefaults.standard.set(server?.message ?? 0, forKey: messageKey) }
         }
-        let key = seqKey(bond.id, kind)
-        let next = UserDefaults.standard.integer(forKey: key) + 1
-        UserDefaults.standard.set(next, forKey: key)
-        return next
     }
 
     /// The slots between what we've seen and the partner's newest number (at most one ring).
@@ -411,6 +428,7 @@ actor CloudRelay {
 
         // The rings: fetch every slot between what we've seen and their newest numbers.
         let cursor = open(CursorPayload.self, found[cursorRef.id], code) ?? CursorPayload(touch: 0, message: 0)
+        events.partnerSeenTouch = cursor.seenTouch
         let touchRange = pendingRange(.touch, code: code, newest: cursor.touch)
         let messageRange = pendingRange(.message, code: code, newest: cursor.message)
         let touchRefs = touchRange.map { r in r.map { ($0, theirs(bond, "t-\(slot($0))", .touch)) } } ?? []
@@ -438,6 +456,11 @@ actor CloudRelay {
             }
             if let touchRange { UserDefaults.standard.set(touchRange.upperBound, forKey: seenKey(code, .touch)) }
             if let messageRange { UserDefaults.standard.set(messageRange.upperBound, forKey: seenKey(code, .message)) }
+            // Tell the partner their touches arrived (their "Seen").
+            if touchRange != nil {
+                await loadCounters(bond)
+                try? await writeCursor(bond)
+            }
         }
         events.touches.sort { $0.sentAt < $1.sentAt }
         events.messages.sort { $0.sentAt < $1.sentAt }
@@ -471,7 +494,9 @@ struct PresenceInfo: Codable, Equatable {
     var sentAt = Date()
 }
 private struct HeartbeatPayload: Codable { let bpm: Int; let sentAt: Date }
-private struct CursorPayload: Codable { let touch: Int; let message: Int }
+/// A phone's newest touch / message numbers, and the partner's touches it has received
+/// (so the partner can mark theirs Seen; optional so older builds read it).
+private struct CursorPayload: Codable { let touch: Int; let message: Int; var seenTouch: Int? = nil }
 private struct TouchPayload: Codable {
     var seq = 0
     let id: UUID
