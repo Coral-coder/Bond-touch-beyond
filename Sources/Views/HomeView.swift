@@ -364,7 +364,7 @@ struct HomeView: View {
                 List {
                     ForEach(touches) { touch in
                         touchRow(touch)
-                            .modifier(SurfaceBubble(active: touch.heartbeatBPM != nil, id: touch.id, sentAt: touch.sentAt,
+                            .modifier(SurfaceBubble(active: true, id: touch.id, sentAt: touch.sentAt,
                                                     colorRGB: touch.colorRGB))
                             .listRowInsets(EdgeInsets(top: 6, leading: 10, bottom: 6, trailing: 10))
                             .listRowBackground(Color.clear)
@@ -654,10 +654,10 @@ private struct SwipeToSave<Content: View>: View {
     }
 }
 
-/// A heartbeat arriving in the history rises into place like a bubble coming up to the
-/// surface — floating up from below, swelling slightly, then settling — and sends out
-/// ripples in its colour as it "breaks the surface". Only for a heartbeat that just arrived
-/// (seconds old), and only once, so scrolling back past it doesn't replay it.
+/// A touch (or heartbeat) arriving in the history rises into place like a bubble coming up
+/// to the surface — floating up from below, swelling slightly, then settling — and sends out
+/// ripples in its colour as it "breaks the surface". Only for one that just arrived (seconds
+/// old, sent or received), and only once, so scrolling back past it doesn't replay it.
 private struct SurfaceBubble: ViewModifier {
     let active: Bool
     let id: UUID
