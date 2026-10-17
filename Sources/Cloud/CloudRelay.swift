@@ -5,23 +5,27 @@ import Foundation
 /// Connects two phones through iCloud with ONE link — no CloudKit sharing, no accept step.
 /// A bond is a short random **code**; the invite link carries it.
 ///
-/// There are no queries (so no indexes) and no subscriptions: every record has a name both
-/// phones can work out from the code and their role — A created the invite, B joined it — so
-/// each reads the other's records by name only. The schema is one record type, `BTItem`, with
-/// one bytes field, `payload` (cloudkit.ckdb; must be deployed to Production). Everything in `payload` is AES-GCM encrypted under a key derived from the code
-/// (BondCrypto), so the database holds only ciphertext. The partner's phone is woken by a
-/// direct APNs push (APNsClient), not by CloudKit.
+/// Private between the two people: the code never goes to iCloud. The phones derive from it
+/// (BondCrypto) an opaque **locator** that names the bond's records and a separate AES-GCM key
+/// that seals every payload — so iCloud holds only meaningless IDs and ciphertext, and only the
+/// two people with the link can read anything. Records can be read only by signed-in iCloud
+/// users who know their exact names, and written only by their creator.
 ///
-/// Records per bond (R is A or B; each phone only ever writes its own R):
-///   <code>-bond        the inviter's name + iCloud id (written once by A)
-///   <code>-R-pf        profile: name, colour, push token, photo hash
-///   <code>-R-ph        profile photo
-///   <code>-R-pr        presence: online, location
-///   <code>-R-hb        latest heartbeat
-///   <code>-R-head      newest event number
-///   <code>-R-ev-<n>    event ring (touches + chat), slot n = number % 50
+/// No queries (so no indexes) and no subscriptions: each phone works out the other's record
+/// names from the locator and its role — A created the invite, B joined it — and fetches them
+/// by name. The partner's phone is woken by a direct APNs push (APNsClient).
+///
+/// Records per bond (L = locator, R = A or B; each phone only ever writes its own R):
+///   Bond       L-bond        the inviter's name + iCloud id (written once by A)
+///   Profile    L-R-pf        name, colour, push token, photo hash
+///   Photo      L-R-ph        profile photo
+///   Presence   L-R-pr        online, location
+///   Heartbeat  L-R-hb        latest heartbeat
+///   Cursor     L-R-cur       newest touch and message numbers
+///   Touch      L-R-t-<n>     touch ring, slot n = number % 50
+///   Message    L-R-m-<n>     chat ring, slot n = number % 50
+/// The schema (cloudkit.ckdb) gives every type one encrypted BYTES field, `payload`.
 actor CloudRelay {
-    static let recordType = "BTItem"
     static let ringSize = 50
 
     struct RelayEvents {
@@ -39,6 +43,12 @@ actor CloudRelay {
         var partnerPushToken: String?
     }
 
+    /// The record kinds, each its own CloudKit record type.
+    private enum Kind: String {
+        case bond = "Bond", profile = "Profile", photo = "Photo", presence = "Presence"
+        case heartbeat = "Heartbeat", cursor = "Cursor", touch = "Touch", message = "Message"
+    }
+
     private let container: CKContainer
     private var db: CKDatabase { container.publicCloudDatabase }
     /// Change tag last seen per record, so an unchanged heartbeat/profile isn't re-reported.
@@ -46,7 +56,7 @@ actor CloudRelay {
     /// Photo hash last downloaded / uploaded per bond, so the photo moves only when it changes.
     private var seenPhotoHash: [String: String] = [:]
     private var writtenPhotoHash: [String: String] = [:]
-    /// Sends run one after another so an event is always written before the head announcing it.
+    /// Sends run one after another so an event is always written before the cursor announcing it.
     private var sendTail: Task<Void, Never>?
     private var lastLoggedError = ""
 
@@ -102,15 +112,28 @@ actor CloudRelay {
         return String((0..<8).map { _ in alphabet.randomElement()! })
     }
 
-    // MARK: - Record names
+    // MARK: - Record names (opaque: derived from the code, never the code itself)
+
+    private struct Ref {
+        let id: CKRecord.ID
+        let kind: Kind
+    }
 
     private static func role(_ isOwner: Bool) -> String { isOwner ? "A" : "B" }
-    private func id(_ code: String, _ suffix: String) -> CKRecord.ID { CKRecord.ID(recordName: "\(code)-\(suffix)") }
-    private func bondID(_ code: String) -> CKRecord.ID { id(code, "bond") }
+
+    private func ref(_ code: String, _ suffix: String, _ kind: Kind) -> Ref {
+        Ref(id: CKRecord.ID(recordName: "\(BondCrypto.locator(forCode: code))-\(suffix)"), kind: kind)
+    }
+    private func bondRef(_ code: String) -> Ref { ref(code, "bond", .bond) }
     /// One of this phone's records in `bond`.
-    private func mine(_ bond: Bond, _ what: String) -> CKRecord.ID { id(bond.id, "\(Self.role(bond.isOwner))-\(what)") }
+    private func mine(_ bond: Bond, _ what: String, _ kind: Kind) -> Ref {
+        ref(bond.id, "\(Self.role(bond.isOwner))-\(what)", kind)
+    }
     /// One of the partner's records in `bond`.
-    private func theirs(_ bond: Bond, _ what: String) -> CKRecord.ID { id(bond.id, "\(Self.role(!bond.isOwner))-\(what)") }
+    private func theirs(_ bond: Bond, _ what: String, _ kind: Kind) -> Ref {
+        ref(bond.id, "\(Self.role(!bond.isOwner))-\(what)", kind)
+    }
+    private func slot(_ seq: Int) -> Int { seq % Self.ringSize }
 
     // MARK: - Low-level read / write
 
@@ -126,18 +149,18 @@ actor CloudRelay {
 
     /// Creates or overwrites one record. Throws the record's own error — `modifyRecords`
     /// reports per-record failures (schema, permissions) in its results, not by throwing.
-    private func put(_ recordID: CKRecord.ID, _ payload: Data) async throws {
-        let record = CKRecord(recordType: Self.recordType, recordID: recordID)
+    private func put(_ ref: Ref, _ payload: Data) async throws {
+        let record = CKRecord(recordType: ref.kind.rawValue, recordID: ref.id)
         record["payload"] = payload as CKRecordValue
         let result = try await db.modifyRecords(saving: [record], deleting: [], savePolicy: .allKeys, atomically: false)
-        if case .failure(let error) = result.saveResults[recordID] { throw error }
+        if case .failure(let error) = result.saveResults[ref.id] { throw error }
     }
 
     /// Fetches records by name; ones that don't exist yet are simply absent from the result.
-    private func get(_ ids: [CKRecord.ID]) async throws -> [CKRecord.ID: CKRecord] {
-        guard !ids.isEmpty else { return [:] }
+    private func get(_ refs: [Ref]) async throws -> [CKRecord.ID: CKRecord] {
+        guard !refs.isEmpty else { return [:] }
         do {
-            let results = try await db.records(for: ids)
+            let results = try await db.records(for: refs.map(\.id))
             var out: [CKRecord.ID: CKRecord] = [:]
             for (rid, result) in results {
                 switch result {
@@ -177,18 +200,18 @@ actor CloudRelay {
     /// the moment they join.
     func createBond(displayName: String, myUserID: String, colorRGB: Int, pushToken: String) async throws -> (Bond, URL) {
         var code = Self.newCode()
-        if let found = try? await get([bondID(code)]), !found.isEmpty { code = Self.newCode() }
-        log(.send, "iCloud: creating bond", code)
+        if let found = try? await get([bondRef(code)]), !found.isEmpty { code = Self.newCode() }
+        log(.send, "iCloud: creating bond")
         let bond = Bond(id: code, partnerName: "Pending…", isOwner: true, pending: true)
         do {
-            try await put(bondID(code), seal(BondPayload(name: displayName, ownerID: myUserID), code))
-            try await put(mine(bond, "pf"), seal(ProfilePayload(name: displayName, colorRGB: colorRGB,
-                                                                pushToken: pushToken, photoHash: nil), code))
+            try await put(bondRef(code), seal(BondPayload(name: displayName, ownerID: myUserID), code))
+            try await put(mine(bond, "pf", .profile), seal(ProfilePayload(name: displayName, colorRGB: colorRGB,
+                                                                          pushToken: pushToken, photoHash: nil), code))
         } catch {
             log(.fail, "iCloud: couldn't create bond", Self.detail(error))
             throw error
         }
-        log(.ok, "iCloud: bond created, invite ready", Self.inviteURL(for: code).absoluteString)
+        log(.ok, "iCloud: bond created, invite ready")
         return (bond, Self.inviteURL(for: code))
     }
 
@@ -196,25 +219,25 @@ actor CloudRelay {
     /// away — that's how the inviter's phone learns we joined.
     func joinBond(code rawCode: String, displayName: String, colorRGB: Int, pushToken: String) async throws -> Bond {
         let code = Self.normalize(rawCode)
-        log(.send, "iCloud: joining bond", code)
+        log(.send, "iCloud: joining bond")
         let found: [CKRecord.ID: CKRecord]
-        do { found = try await get([bondID(code)]) } catch {
+        do { found = try await get([bondRef(code)]) } catch {
             log(.fail, "iCloud: couldn't look up the code", Self.detail(error))
             throw error
         }
-        guard let info = open(BondPayload.self, found[bondID(code)], code) else {
-            log(.fail, "iCloud: no bond with that code", code)
+        guard let info = open(BondPayload.self, found[bondRef(code).id], code) else {
+            log(.fail, "iCloud: no bond with that code")
             throw CloudRelayError.bondNotFound
         }
         let bond = Bond(id: code, partnerName: info.name, isOwner: false)
         do {
-            try await put(mine(bond, "pf"), seal(ProfilePayload(name: displayName, colorRGB: colorRGB,
-                                                                pushToken: pushToken, photoHash: nil), code))
+            try await put(mine(bond, "pf", .profile), seal(ProfilePayload(name: displayName, colorRGB: colorRGB,
+                                                                          pushToken: pushToken, photoHash: nil), code))
         } catch {
             log(.fail, "iCloud: couldn't join bond", Self.detail(error))
             throw error
         }
-        log(.ok, "iCloud: joined bond", "\(code) — with \(info.name)")
+        log(.ok, "iCloud: joined bond", "with \(info.name)")
         return bond
     }
 
@@ -225,15 +248,16 @@ actor CloudRelay {
         var bonds: [Bond] = []
         for (code, isOwner) in roles {
             let probe = Bond(id: code, partnerName: "", isOwner: isOwner)
-            guard let found = try? await get([bondID(code), theirs(probe, "pf")]) else {
+            let partnerProfile = theirs(probe, "pf", .profile)
+            guard let found = try? await get([bondRef(code), partnerProfile]) else {
                 bonds.append(Bond(id: code, partnerName: "Partner", isOwner: isOwner))
                 continue
             }
-            guard let info = open(BondPayload.self, found[bondID(code)], code) else {
-                log(.fail, "iCloud: bond \(code) no longer exists")
+            guard let info = open(BondPayload.self, found[bondRef(code).id], code) else {
+                log(.fail, "iCloud: a bond no longer exists")
                 continue
             }
-            let profile = open(ProfilePayload.self, found[theirs(probe, "pf")], code)
+            let profile = open(ProfilePayload.self, found[partnerProfile.id], code)
             let name = profile?.name ?? (isOwner ? "Pending…" : info.name)
             bonds.append(Bond(id: code, partnerName: name, isOwner: isOwner, pending: isOwner && profile == nil))
         }
@@ -242,25 +266,29 @@ actor CloudRelay {
 
     /// The partner's name once they've joined an invite we created; nil while still pending.
     func joinedPartnerName(_ bond: Bond) async -> String? {
-        guard let found = try? await get([theirs(bond, "pf")]) else { return nil }
-        return open(ProfilePayload.self, found[theirs(bond, "pf")], bond.id)?.name
+        let profile = theirs(bond, "pf", .profile)
+        guard let found = try? await get([profile]) else { return nil }
+        return open(ProfilePayload.self, found[profile.id], bond.id)?.name
     }
 
     func deleteBond(_ bond: Bond) async throws {
-        var ids = ["pf", "ph", "pr", "hb", "head"].map { mine(bond, $0) }
-        ids += (0..<Self.ringSize).map { mine(bond, "ev-\($0)") }
-        if bond.isOwner { ids.append(bondID(bond.id)) }
-        _ = try? await db.modifyRecords(saving: [], deleting: ids, savePolicy: .allKeys, atomically: false)
-        UserDefaults.standard.removeObject(forKey: seqKey(bond.id))
-        UserDefaults.standard.removeObject(forKey: seenKey(bond.id))
+        var refs = [mine(bond, "pf", .profile), mine(bond, "ph", .photo), mine(bond, "pr", .presence),
+                    mine(bond, "hb", .heartbeat), mine(bond, "cur", .cursor)]
+        refs += (0..<Self.ringSize).map { mine(bond, "t-\($0)", .touch) }
+        refs += (0..<Self.ringSize).map { mine(bond, "m-\($0)", .message) }
+        if bond.isOwner { refs.append(bondRef(bond.id)) }
+        _ = try? await db.modifyRecords(saving: [], deleting: refs.map(\.id), savePolicy: .allKeys, atomically: false)
+        for key in [seqKey(bond.id, .touch), seqKey(bond.id, .message), seenKey(bond.id, .touch), seenKey(bond.id, .message)] {
+            UserDefaults.standard.removeObject(forKey: key)
+        }
     }
 
     // MARK: - Sending (encrypted)
 
     func sendTouch(_ touch: TouchMessage, bond: Bond) async throws {
-        let body = TouchBody(pattern: touch.pattern, generation: touch.generation,
-                             colorRGB: touch.colorRGB, endColorRGB: touch.endColorRGB)
-        try await sendEvent(bond: bond) { EventPayload(seq: $0, id: touch.id, sentAt: touch.sentAt, touch: body, chat: nil) }
+        let body = TouchPayload(id: touch.id, sentAt: touch.sentAt, pattern: touch.pattern, generation: touch.generation,
+                                colorRGB: touch.colorRGB, endColorRGB: touch.endColorRGB)
+        try await sendEvent(.touch, bond: bond) { (seq: Int) -> TouchPayload in var b = body; b.seq = seq; return b }
     }
 
     func sendChat(_ message: ChatMessage, bond: Bond) async throws {
@@ -268,18 +296,19 @@ actor CloudRelay {
         if message.kind == .image, let file = message.imageFile {
             image = try? Data(contentsOf: ChatArchive.imageURL(file))
         }
-        let body = ChatBody(kind: message.kind.rawValue, text: message.text, colorRGB: message.colorRGB, image: image)
-        try await sendEvent(bond: bond) { EventPayload(seq: $0, id: message.id, sentAt: message.sentAt, touch: nil, chat: body) }
+        let body = MessagePayload(id: message.id, sentAt: message.sentAt, kind: message.kind.rawValue,
+                                  text: message.text, colorRGB: message.colorRGB, image: image)
+        try await sendEvent(.message, bond: bond) { (seq: Int) -> MessagePayload in var b = body; b.seq = seq; return b }
     }
 
     func sendHeartbeat(bpm: Int, bond: Bond, senderID: String) async throws {
-        try await put(mine(bond, "hb"), seal(HeartbeatPayload(bpm: bpm, sentAt: Date()), bond.id))
+        try await put(mine(bond, "hb", .heartbeat), seal(HeartbeatPayload(bpm: bpm, sentAt: Date()), bond.id))
     }
 
     func sendPresence(online: Bool, bond: Bond, senderID: String,
                       latitude: Double? = nil, longitude: Double? = nil) async throws {
-        try await put(mine(bond, "pr"), seal(PresencePayload(online: online, lat: latitude, lng: longitude,
-                                                             sentAt: Date()), bond.id))
+        try await put(mine(bond, "pr", .presence),
+                      seal(PresencePayload(online: online, lat: latitude, lng: longitude, sentAt: Date()), bond.id))
     }
 
     func sendProfile(name: String, colorRGB: Int, photo: URL?, pushToken: String? = nil,
@@ -287,114 +316,130 @@ actor CloudRelay {
         let photoData = photo.flatMap { try? Data(contentsOf: $0) }
         let hash = photoData.map(Self.hash)
         if let photoData, let hash, writtenPhotoHash[bond.id] != hash {
-            try await put(mine(bond, "ph"), seal(PhotoPayload(data: photoData), bond.id))
+            try await put(mine(bond, "ph", .photo), seal(PhotoPayload(data: photoData), bond.id))
             writtenPhotoHash[bond.id] = hash
         }
-        try await put(mine(bond, "pf"), seal(ProfilePayload(name: name, colorRGB: colorRGB,
-                                                            pushToken: pushToken, photoHash: hash), bond.id))
+        try await put(mine(bond, "pf", .profile), seal(ProfilePayload(name: name, colorRGB: colorRGB,
+                                                                      pushToken: pushToken, photoHash: hash), bond.id))
     }
 
     private static func hash(_ data: Data) -> String {
         SHA256.hash(data: data).prefix(8).map { String(format: "%02x", $0) }.joined()
     }
 
-    // MARK: - Event ring
+    // MARK: - Touch & message rings
 
-    private func seqKey(_ code: String) -> String { "relay.seq.\(code)" }
-    private func seenKey(_ code: String) -> String { "relay.seen.\(code)" }
+    private func seqKey(_ code: String, _ kind: Kind) -> String { "relay.seq.\(kind.rawValue).\(code)" }
+    private func seenKey(_ code: String, _ kind: Kind) -> String { "relay.seen.\(kind.rawValue).\(code)" }
 
-    /// Writes one event (touch or chat) in order behind any send already in flight.
-    private func sendEvent(bond: Bond, _ make: @escaping (Int) -> EventPayload) async throws {
+    /// Writes one touch or message in order behind any send already in flight.
+    private func sendEvent<P: Encodable>(_ kind: Kind, bond: Bond, _ make: @escaping (Int) -> P) async throws {
         let previous = sendTail
         let task = Task { () async throws -> Void in
             await previous?.value
-            try await self.writeEvent(bond: bond, make)
+            try await self.writeEvent(kind, bond: bond, make)
         }
         sendTail = Task { _ = await task.result }
         try await task.value
     }
 
-    private func writeEvent(bond: Bond, _ make: (Int) -> EventPayload) async throws {
-        let seq = await nextSeq(bond)
-        // The event first, then the head that announces it — the partner never sees a head
-        // pointing at an event that isn't there yet.
-        try await put(mine(bond, "ev-\(seq % Self.ringSize)"), seal(make(seq), bond.id))
-        try await put(mine(bond, "head"), seal(HeadPayload(seq: seq), bond.id))
+    private func writeEvent<P: Encodable>(_ kind: Kind, bond: Bond, _ make: (Int) -> P) async throws {
+        let seq = await nextSeq(kind, bond)
+        let what = kind == .touch ? "t-\(slot(seq))" : "m-\(slot(seq))"
+        // The event first, then the cursor that announces it — the partner never sees a
+        // cursor pointing at an event that isn't there yet.
+        try await put(mine(bond, what, kind), seal(make(seq), bond.id))
+        let cursor = CursorPayload(touch: UserDefaults.standard.integer(forKey: seqKey(bond.id, .touch)),
+                                   message: UserDefaults.standard.integer(forKey: seqKey(bond.id, .message)))
+        try await put(mine(bond, "cur", .cursor), seal(cursor, bond.id))
     }
 
-    /// Reserves this phone's next event number in `bond`, continuing from the server after a
-    /// reinstall so numbers are never reused.
-    private func nextSeq(_ bond: Bond) async -> Int {
-        let key = seqKey(bond.id)
-        if UserDefaults.standard.object(forKey: key) == nil {
-            let server = open(HeadPayload.self, (try? await get([mine(bond, "head")]))?[mine(bond, "head")], bond.id)?.seq ?? 0
-            if UserDefaults.standard.object(forKey: key) == nil { UserDefaults.standard.set(server, forKey: key) }
+    /// Reserves this phone's next touch or message number in `bond`, continuing from the
+    /// server after a reinstall so numbers are never reused.
+    private func nextSeq(_ kind: Kind, _ bond: Bond) async -> Int {
+        let touchKey = seqKey(bond.id, .touch), messageKey = seqKey(bond.id, .message)
+        if UserDefaults.standard.object(forKey: touchKey) == nil || UserDefaults.standard.object(forKey: messageKey) == nil {
+            let cursorRef = mine(bond, "cur", .cursor)
+            let server = open(CursorPayload.self, (try? await get([cursorRef]))?[cursorRef.id], bond.id)
+            if UserDefaults.standard.object(forKey: touchKey) == nil { UserDefaults.standard.set(server?.touch ?? 0, forKey: touchKey) }
+            if UserDefaults.standard.object(forKey: messageKey) == nil { UserDefaults.standard.set(server?.message ?? 0, forKey: messageKey) }
         }
+        let key = seqKey(bond.id, kind)
         let next = UserDefaults.standard.integer(forKey: key) + 1
         UserDefaults.standard.set(next, forKey: key)
         return next
     }
 
+    /// The slots between what we've seen and the partner's newest number (at most one ring).
+    private func pendingRange(_ kind: Kind, code: String, newest: Int) -> ClosedRange<Int>? {
+        let lastSeen = UserDefaults.standard.object(forKey: seenKey(code, kind)) as? Int ?? 0
+        if newest < lastSeen { UserDefaults.standard.set(newest, forKey: seenKey(code, kind)) }   // they restarted
+        guard newest > lastSeen else { return nil }
+        return max(lastSeen + 1, newest - Self.ringSize + 1)...newest
+    }
+
     // MARK: - Receiving (decrypt)
 
-    /// Everything new from the partner since the last call: touches and chat from their event
-    /// ring, plus their heartbeat, presence and profile when those changed. One or two fetches
-    /// by name — cheap enough to poll every few seconds.
+    /// Everything new from the partner since the last call: touches and chat from their rings,
+    /// plus their heartbeat, presence and profile when those changed. One or two fetches by
+    /// name — cheap enough to poll every few seconds.
     func fetchNewEvents(bond: Bond, myUserID: String) async throws -> RelayEvents {
         let code = bond.id
         var events = RelayEvents()
-        let found = try await get(["head", "hb", "pr", "pf"].map { theirs(bond, $0) })
+        let cursorRef = theirs(bond, "cur", .cursor), heartbeatRef = theirs(bond, "hb", .heartbeat)
+        let presenceRef = theirs(bond, "pr", .presence), profileRef = theirs(bond, "pf", .profile)
+        let found = try await get([cursorRef, heartbeatRef, presenceRef, profileRef])
 
-        if let rec = found[theirs(bond, "hb")], isNew(rec), let p = open(HeartbeatPayload.self, rec, code) {
+        if let rec = found[heartbeatRef.id], isNew(rec), let p = open(HeartbeatPayload.self, rec, code) {
             events.latestBPM = p.bpm
             events.latestBPMAt = p.sentAt
         }
-        if let p = open(PresencePayload.self, found[theirs(bond, "pr")], code) {
+        if let p = open(PresencePayload.self, found[presenceRef.id], code) {
             events.presenceOnline = p.online
             events.presenceLastSeen = p.sentAt
             events.presenceLat = p.lat
             events.presenceLng = p.lng
         }
-        if let rec = found[theirs(bond, "pf")], isNew(rec), let p = open(ProfilePayload.self, rec, code) {
+        if let rec = found[profileRef.id], isNew(rec), let p = open(ProfilePayload.self, rec, code) {
             events.partnerName = p.name
             events.partnerColorRGB = p.colorRGB
             events.partnerPushToken = p.pushToken
+            let photoRef = theirs(bond, "ph", .photo)
             if let hash = p.photoHash, hash != seenPhotoHash[code],
-               let photo = try? await get([theirs(bond, "ph")]),
-               let image = open(PhotoPayload.self, photo[theirs(bond, "ph")], code) {
+               let photo = try? await get([photoRef]),
+               let image = open(PhotoPayload.self, photo[photoRef.id], code) {
                 events.partnerPhoto = image.data
                 seenPhotoHash[code] = hash
             }
         }
 
-        // The event ring: fetch every slot between what we've seen and their head.
-        let head = open(HeadPayload.self, found[theirs(bond, "head")], code)?.seq ?? 0
-        let lastSeen = UserDefaults.standard.object(forKey: seenKey(code)) as? Int ?? 0
-        if head > lastSeen {
-            let first = max(lastSeen + 1, head - Self.ringSize + 1)
-            let wanted = (first...head).map { ($0, theirs(bond, "ev-\($0 % Self.ringSize)")) }
-            let records = try await get(wanted.map { $0.1 })
+        // The rings: fetch every slot between what we've seen and their newest numbers.
+        let cursor = open(CursorPayload.self, found[cursorRef.id], code) ?? CursorPayload(touch: 0, message: 0)
+        let touchRange = pendingRange(.touch, code: code, newest: cursor.touch)
+        let messageRange = pendingRange(.message, code: code, newest: cursor.message)
+        let touchRefs = touchRange.map { r in r.map { ($0, theirs(bond, "t-\(slot($0))", .touch)) } } ?? []
+        let messageRefs = messageRange.map { r in r.map { ($0, theirs(bond, "m-\(slot($0))", .message)) } } ?? []
+        if !touchRefs.isEmpty || !messageRefs.isEmpty {
+            let records = try await get(touchRefs.map(\.1) + messageRefs.map(\.1))
             let partnerID = "\(code)-\(Self.role(!bond.isOwner))"   // never equals our own id
-            for (seq, rid) in wanted {
-                // A slot holding a different number was overwritten (more than 50 behind) — skip.
-                guard let p = open(EventPayload.self, records[rid], code), p.seq == seq else { continue }
-                if let t = p.touch {
-                    events.touches.append(TouchMessage(id: p.id, bondID: code, senderID: partnerID, pattern: t.pattern,
-                                                       generation: t.generation, colorRGB: t.colorRGB,
-                                                       endColorRGB: t.endColorRGB, sentAt: p.sentAt))
-                }
-                if let c = p.chat {
-                    let kind = ChatMessage.Kind(rawValue: c.kind) ?? .text
-                    var imageFile: String?
-                    if kind == .image, let img = c.image { imageFile = ChatArchive.saveImage(img) }
-                    events.messages.append(ChatMessage(id: p.id, bondID: code, senderID: partnerID, kind: kind,
-                                                       text: c.text, colorRGB: c.colorRGB, sentAt: p.sentAt,
-                                                       imageFile: imageFile))
-                }
+            for (seq, r) in touchRefs {
+                // A slot holding a different number was overwritten (> 50 behind) — skip it.
+                guard let t = open(TouchPayload.self, records[r.id], code), t.seq == seq else { continue }
+                events.touches.append(TouchMessage(id: t.id, bondID: code, senderID: partnerID, pattern: t.pattern,
+                                                   generation: t.generation, colorRGB: t.colorRGB,
+                                                   endColorRGB: t.endColorRGB, sentAt: t.sentAt))
             }
-            UserDefaults.standard.set(head, forKey: seenKey(code))
-        } else if head < lastSeen {
-            UserDefaults.standard.set(head, forKey: seenKey(code))   // their numbering restarted
+            for (seq, r) in messageRefs {
+                guard let m = open(MessagePayload.self, records[r.id], code), m.seq == seq else { continue }
+                let kind = ChatMessage.Kind(rawValue: m.kind) ?? .text
+                var imageFile: String?
+                if kind == .image, let img = m.image { imageFile = ChatArchive.saveImage(img) }
+                events.messages.append(ChatMessage(id: m.id, bondID: code, senderID: partnerID, kind: kind,
+                                                   text: m.text, colorRGB: m.colorRGB, sentAt: m.sentAt,
+                                                   imageFile: imageFile))
+            }
+            if let touchRange { UserDefaults.standard.set(touchRange.upperBound, forKey: seenKey(code, .touch)) }
+            if let messageRange { UserDefaults.standard.set(messageRange.upperBound, forKey: seenKey(code, .message)) }
         }
         events.touches.sort { $0.sentAt < $1.sentAt }
         events.messages.sort { $0.sentAt < $1.sentAt }
@@ -408,15 +453,24 @@ private struct ProfilePayload: Codable { let name: String; let colorRGB: Int; le
 private struct PhotoPayload: Codable { let data: Data }
 private struct PresencePayload: Codable { let online: Bool; let lat: Double?; let lng: Double?; let sentAt: Date }
 private struct HeartbeatPayload: Codable { let bpm: Int; let sentAt: Date }
-private struct HeadPayload: Codable { let seq: Int }
-private struct TouchBody: Codable { let pattern: [Int]; let generation: Int; let colorRGB: Int; let endColorRGB: Int }
-private struct ChatBody: Codable { let kind: String; let text: String; let colorRGB: Int; let image: Data? }
-private struct EventPayload: Codable {
-    let seq: Int
+private struct CursorPayload: Codable { let touch: Int; let message: Int }
+private struct TouchPayload: Codable {
+    var seq = 0
     let id: UUID
     let sentAt: Date
-    let touch: TouchBody?
-    let chat: ChatBody?
+    let pattern: [Int]
+    let generation: Int
+    let colorRGB: Int
+    let endColorRGB: Int
+}
+private struct MessagePayload: Codable {
+    var seq = 0
+    let id: UUID
+    let sentAt: Date
+    let kind: String
+    let text: String
+    let colorRGB: Int
+    let image: Data?
 }
 
 enum CloudRelayError: LocalizedError {
