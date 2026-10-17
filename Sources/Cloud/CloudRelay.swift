@@ -5,11 +5,10 @@ import Foundation
 /// Connects two phones through iCloud with ONE link — no CloudKit sharing, no accept step.
 /// A bond is a short random **code**; the invite link carries it.
 ///
-/// Nothing has to be set up in the CloudKit console. There are no queries (so no indexes)
-/// and no subscriptions: every record has a name both phones can work out from the code and
-/// their role — A created the invite, B joined it — so each reads the other's records by name
-/// only. One record type, `BTItem`, with one bytes field, `payload`, which iCloud creates on
-/// first use. Everything in `payload` is AES-GCM encrypted under a key derived from the code
+/// There are no queries (so no indexes) and no subscriptions: every record has a name both
+/// phones can work out from the code and their role — A created the invite, B joined it — so
+/// each reads the other's records by name only. The schema is one record type, `BTItem`, with
+/// one bytes field, `payload` (cloudkit.ckdb; must be deployed to Production). Everything in `payload` is AES-GCM encrypted under a key derived from the code
 /// (BondCrypto), so the database holds only ciphertext. The partner's phone is woken by a
 /// direct APNs push (APNsClient), not by CloudKit.
 ///

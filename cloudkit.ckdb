@@ -2,8 +2,8 @@ DEFINE SCHEMA
 
     -- The whole iCloud relay is one record type with one encrypted field. Records are read
     -- by name only (no queries), so no QUERYABLE/SORTABLE indexes are needed.
-    -- Builds use the Development environment, which creates this type on first use; this
-    -- file is only for deploying to Production later.
+    -- Import into the Development schema in the CloudKit Console, then Deploy Schema Changes
+    -- to Production (builds use Production).
     RECORD TYPE BTItem (
         payload     BYTES,
         GRANT WRITE TO "_creator",

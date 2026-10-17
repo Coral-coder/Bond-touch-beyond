@@ -117,10 +117,9 @@ targets:
           - iCloud.$(CFBundleIdentifier)
         com.apple.developer.icloud-services:
           - CloudKit
-        # Development CloudKit: it creates the one record type the relay uses (BTItem) on first
-        # use, so pairing needs nothing set up in the CloudKit console. To move to Production
-        # later, deploy the schema (Development → Production) and switch this to Production.
-        com.apple.developer.icloud-container-environment: Development
+        # Production CloudKit. Its schema needs the one record type the relay uses — BTItem with
+        # a BYTES field "payload" (cloudkit.ckdb) — imported and deployed to Production.
+        com.apple.developer.icloud-container-environment: Production
         com.apple.developer.ubiquity-kvstore-identifier: $(TeamIdentifierPrefix)$(CFBundleIdentifier)
         aps-environment: production
         com.apple.developer.healthkit: true
