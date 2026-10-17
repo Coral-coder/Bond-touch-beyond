@@ -4,7 +4,7 @@ import Foundation
 /// Bond Touch bracelet generations. The original app supports five, selected at runtime
 /// from the advertised service / API-version byte. See `docs/BLE_PROTOCOL.md`.
 enum BondGeneration {
-    case v1      // classic "BOND" (legacy FF06 protocol)
+    case v1      // classic "BOND" (legacy sequenced FF06-style frames on d3c0ffa6)
     case v2      // "BOND" / "Bond More" (API 0x42)
     case v4      // "BOND 4" (API 0x44)
     case mini    // "BOND MINI" (API 0x45)
@@ -12,14 +12,6 @@ enum BondGeneration {
 
     /// v4 and mini share the v2 app service / characteristics and frame format.
     var usesV2Base: Bool { self == .v2 || self == .v4 || self == .mini }
-}
-
-/// A decoded state signal from the bracelet's state/event channel.
-enum BondSignal {
-    case waitingToken
-    case waitingAuid
-    case connected
-    case other
 }
 
 /// Bond Touch bracelet GATT layout and wire format, reverse-engineered from the official
@@ -34,27 +26,35 @@ enum BondGATT {
     static let batteryLevel   = CBUUID(string: "00002a19-0000-1000-8000-00805f9b34fb")
     static let disService     = CBUUID(string: "0000180a-0000-1000-8000-00805f9b34fb")
     static let firmwareChar   = CBUUID(string: "00002a26-0000-1000-8000-00805f9b34fb")
+    static let modelChar      = CBUUID(string: "00002a24-0000-1000-8000-00805f9b34fb")
     static let cccd           = CBUUID(string: "00002902-0000-1000-8000-00805f9b34fb")
 
-    // MARK: v2 / v4 / mini characteristics (app service, node 0001)
+    // MARK: v1 / v2 / v4 / mini characteristics (app service, node 0001)
     static let charToken   = CBUUID(string: "d3c0ffa1-add3-1d4b-0001-0000b5006bb1") // token write
     static let charAuid    = CBUUID(string: "d3c0ffa2-add3-1d4b-0001-0000b5006bb1") // AUID write
     static let charState   = CBUUID(string: "d3c0ffa4-add3-1d4b-0001-0000b5006bb1") // state notify
-    static let charEvent   = CBUUID(string: "d3c0ffa5-add3-1d4b-0001-0000b5006bb1") // touch/event notify + write
-    static let charAppCmd  = CBUUID(string: "d3c0ffa6-add3-1d4b-0001-0000b5006bb1") // app command write
+    static let charEvent   = CBUUID(string: "d3c0ffa5-add3-1d4b-0001-0000b5006bb1") // touch/event notify
+    static let charAppCmd  = CBUUID(string: "d3c0ffa6-add3-1d4b-0001-0000b5006bb1") // app command write (all non-v3)
+    static let v1Ack       = CBUUID(string: "d3c0ffa7-add3-1d4b-0001-0000b5006bb1") // v1 command-result notify
+    /// v4/mini: an encrypted characteristic — subscribing to it makes the phone bond.
+    static let charBondNotify = CBUUID(string: "d3c0ffa8-add3-1d4b-0001-0000b5006bb1")
+
+    // MARK: Service d3c00001 (node 0000)
     static let charApiVer  = CBUUID(string: "d3c0ffb3-add3-1d4b-0000-0000b5006bb1") // API-version read
+    /// Battery: v2/v4/mini `[level %, reserved]`; v1 `[millivolts u16LE]`. Read + notify.
+    static let charFF06    = CBUUID(string: "d3c0ff06-add3-1d4b-0000-0000b5006bb1")
+    static let v1Firmware  = CBUUID(string: "d3c0ff03-add3-1d4b-0000-0000b5006bb1") // v1 `[patch, minor]`
 
     // MARK: v3 characteristics (service d3c00003, node 0000)
     static let v3ApiVer = CBUUID(string: "d3c0ff10-add3-1d4b-0000-0000b5006bb1")
     static let ffb1     = CBUUID(string: "d3c0ffb1-add3-1d4b-0000-0000b5006bb1") // app cmds + notify
     static let ffb2     = CBUUID(string: "d3c0ffb2-add3-1d4b-0000-0000b5006bb1") // touch pattern write
 
-    // MARK: v1 characteristics
-    static let v1Cmd   = CBUUID(string: "d3c0ff06-add3-1d4b-0000-0000b5006bb1")
-    static let v1State = CBUUID(string: "d3c0ffa2-add3-1d4b-0001-0000b5006bb1")
-
     /// Fixed app-layer pairing token used by the shipping firmware.
     static let token: [UInt8] = Array("12345678".utf8)
+
+    /// Vibration strengths the bracelets accept (VibrationHelper); balance is 0…4, 2 = centre.
+    static let vibrationLevels: [Int] = [28, 33, 40, 58, 60, 73, 80, 88, 100]
 
     // MARK: Names
     static let deviceNames = ["BOND", "Bond More", "BOND 4", "BOND MINI"]
@@ -102,9 +102,8 @@ enum BondGATT {
             // Exactly as the original app: [3] + "12345678", unpadded, and only when the
             // bracelet reports it is waiting for the token.
             return [(ffb1, Data(pfx(3) + token))]
-        case .v1:
-            return [(charToken, Data(token))]
         default:
+            // v1 (WriteStringCommand) and v2-base (Q()): the bare 8 ASCII bytes on ffa1.
             return [(charToken, Data(token))]
         }
     }
@@ -125,33 +124,397 @@ enum BondGATT {
 
     // MARK: - LED + motor (notification buzz + glow)
 
-    /// A buzz + glow in `rgb`. v2-base uses the 0x26 LED+motor frame on the app-command
-    /// characteristic; v3 uses the FFB1 colour + vibration commands.
+    /// A buzz + glow in `rgb` (used for heartbeat pulses; not part of the original app).
+    /// v2-base uses the 0x26 LED+motor frame; v3 the FFB1 colour + vibration commands. v1
+    /// has its own sequenced frames (`V1Commands`).
     static func ledMotor(_ gen: BondGeneration, rgb: Int,
                          strength: UInt8 = 88, vibMs: UInt16 = 400,
                          brightness: UInt8 = 255, holdMs: UInt16 = 600) -> [(CBUUID, Data)] {
-        let (r, g, b) = rgbBytes(rgb)
         switch gen {
         case .v3:
             // FFB1 commands are written at their exact length, as the original app does.
-            let color = pfx(1) + [0x4B, 0x00, 0x00, r, g, b]
-            let vib   = pfx(1) + [0x48, 0x00, vibLevel(strength), 0x00, 0x03]
-            return [(ffb1, Data(color)), (ffb1, Data(vib))]
+            let (r, g, b) = rgbBytes(rgb)
+            return [(ffb1, Data([1, 0x4B, 0x00, 0x00, r, g, b])),
+                    v3VibrationPreview(level: nearestVibrationLevel(Int(strength)), balance: 2)]
         case .v1:
-            // FF06 ColorCommand (0x21) then LgtVibCommand (0x26).
-            let color = u16le(0x21) + u16le(0) + u32le(UInt32(rgb & 0xFFFFFF)) + [100]
-            let vib   = u16le(0x26) + u16le(0) + [0x00, 0x01, 0x01, 0x01]
-            return [(v1Cmd, pad(color, to: 16)), (v1Cmd, pad(vib, to: 16))]
+            return []
         default:
-            var f: [UInt8] = [0x26, 0x00, 0x00, strength]
-            f += u16le(vibMs)
-            f += [0x01, r, g, b, brightness]
-            f += u16le(80)      // transition
-            f += u16le(holdMs)  // hold
-            f += u16le(80)      // sleep
-            f += u16le(holdMs)  // execute
-            return [(charAppCmd, pad(f, to: 20))]
+            return [ledAndMotor(strength: strength, vibMs: vibMs, ledMode: 1, rgb: ledColor(rgb),
+                                brightness: brightness, transitionMs: 80, holdMs: holdMs,
+                                sleepMs: 80, executeMs: holdMs)]
         }
+    }
+
+    /// One heartbeat pulse: a short firm buzz + glow.
+    static func heartbeatPulse(_ gen: BondGeneration, rgb: Int) -> [(CBUUID, Data)] {
+        ledMotor(gen, rgb: rgb, strength: 100, vibMs: 130, brightness: 255, holdMs: 130)
+    }
+
+    /// The closest strength the bracelets accept.
+    static func nearestVibrationLevel(_ x: Int) -> UInt8 {
+        UInt8(vibrationLevels.min(by: { abs($0 - x) < abs($1 - x) }) ?? 80)
+    }
+
+    // MARK: - v2 / v4 / mini app commands (BleBondManagerV2Base, BleAppCommandHelper)
+
+    /// v2-base frames are `Arrays.copyOf(frame, 20)`: zero-padded to 20 bytes, on ffa6.
+    private static func app(_ bytes: [UInt8]) -> (CBUUID, Data) {
+        (charAppCmd, Data(Array(bytes.prefix(20)) + Array(repeating: 0, count: max(0, 20 - bytes.count))))
+    }
+
+    /// 0x26 LedAndMotorCommand: `[0x26, 0, queue, strength, vibMs LE, ledMode, R, G, B,
+    /// brightness, transition LE, hold LE, sleep LE, execute LE]`. ledMode 1 = solid,
+    /// 2 = queued pattern step, 4 = off.
+    static func ledAndMotor(queue: UInt8 = 0, strength: UInt8, vibMs: UInt16, ledMode: UInt8,
+                            rgb: Int = 0, brightness: UInt8 = 0, transitionMs: UInt16 = 0,
+                            holdMs: UInt16 = 0, sleepMs: UInt16 = 0, executeMs: UInt16 = 0) -> (CBUUID, Data) {
+        let (r, g, b) = rgbBytes(rgb)
+        var f: [UInt8] = [0x26, 0x00, queue, strength]
+        f += u16le(vibMs)
+        f += [ledMode, r, g, b, brightness]
+        f += u16le(transitionMs)
+        f += u16le(holdMs)
+        f += u16le(sleepMs)
+        f += u16le(executeMs)
+        return app(f)
+    }
+
+    /// 0x33 "send message" step (BleAppCommandHelper.a): `[0x33, 0, strength, brightness ×3,
+    /// RGB1, RGB2, RGB3, ms LE16]`.
+    private static func messageStep(_ rgb: Int, strength: UInt8, brightness: UInt8, ms: Int) -> (CBUUID, Data) {
+        var f: [UInt8] = [0x33, 0x00, strength, brightness, brightness, brightness]
+        f += be3(rgb) + be3(rgb) + be3(rgb)
+        f += u16le(UInt16(clamping: ms))
+        return app(f)
+    }
+
+    /// 0x32 (BleAppCommandHelper.b): ends a queued message — 0x22 after 0x33 steps, 0x11
+    /// after queued 0x26 frames. The original pauses its write queue 5 s once it's written.
+    static func queueMarker(gradient: Bool) -> (CBUUID, Data) {
+        app([0x32, 0x00, gradient ? 0x22 : 0x11])
+    }
+
+    /// 0x27 configuration write (BleAppCommandHelper.d): `[0x27, 0, property, 1, value…]`.
+    private static func config(_ property: UInt8, _ value: [UInt8]) -> (CBUUID, Data) {
+        app([0x27, 0x00, property, 0x01] + value)
+    }
+
+    /// A colour as the config commands carry it: the mapped ARGB int, big-endian (alpha 0xFF).
+    private static func configColor(_ rgb: Int) -> [UInt8] {
+        be32(0xFF00_0000 | UInt32(ledColor(rgb) & 0xFFFFFF))
+    }
+
+    /// A touch to play (BleBondManagerV2Base.g). One colour: queued 0x26 frames (queue 1),
+    /// one per on/off pair, then `[0x32,0,0x11]`. A gradient: one 0x33 frame per 200 ms of
+    /// each on segment (the original's `0..n` loop, so n+1 frames) shading start→end, a
+    /// zero-colour 0x33 frame for each gap, then `[0x32,0,0x22]`. The mini always plays its
+    /// fixed pattern (BleBondManagerMini.g); an empty pattern falls back to it too.
+    static func v2TouchFrames(_ gen: BondGeneration, onOff raw: [Int], startRGB: Int, endRGB: Int,
+                              strength: UInt8) -> [(CBUUID, Data)] {
+        let list = gen == .mini || raw.isEmpty ? miniPattern : raw.map { max(0, $0) }
+        if startRGB == endRGB {
+            let rgb = ledColor(startRGB)
+            var on: [Int] = [], off: [Int] = []
+            for (i, ms) in list.enumerated() {
+                if i % 2 == 0 { on.append(ms) } else { off.append(ms) }
+            }
+            if on.count > off.count { off.append(0) }
+            var out: [(CBUUID, Data)] = on.indices.map { i -> (CBUUID, Data) in
+                let o = on[i], f = off[i]
+                let t = Int(Float(o) * 0.25)
+                return ledAndMotor(queue: 1, strength: strength, vibMs: UInt16(clamping: o), ledMode: 2, rgb: rgb,
+                                   brightness: 80, transitionMs: UInt16(clamping: t),
+                                   holdMs: UInt16(clamping: o - t * 2), sleepMs: UInt16(clamping: f),
+                                   executeMs: UInt16(clamping: o + f))
+            }
+            out.append(queueMarker(gradient: false))
+            return out
+        }
+        let from = ledColor(startRGB), to = ledColor(endRGB)
+        let total = Float(list.reduce(0, +))
+        var elapsed: Float = 0
+        var out: [(CBUUID, Data)] = []
+        for (i, ms) in list.enumerated() {
+            if i % 2 == 0 {
+                let steps = max(1, Int(Float(ms) / 200))
+                for _ in 0...steps {
+                    let rgb = blend(from, to, total > 0 ? min(1, elapsed / total) : 0)
+                    out.append(messageStep(rgb, strength: strength, brightness: 80, ms: 200))
+                    elapsed += 200
+                }
+            } else {
+                out.append(messageStep(0, strength: 0, brightness: 0, ms: ms))
+                elapsed += Float(ms)
+            }
+        }
+        out.append(queueMarker(gradient: true))
+        return out
+    }
+
+    /// What the mini plays and reports for every touch (BleBondManagerMiniKt.b).
+    static let miniPattern = [500, 250, 500, 250, 500]
+
+    /// Written once the bracelet is bonded (BleBondManagerV2Base.D): low-battery alert at
+    /// 10 %, blinking red 1000/500 ms; minimum touch 50 ms; "disconnected" params all zero.
+    /// v2 also turns ANCS off (BleBondManagerV2.D).
+    static func v2BondedSettings(_ gen: BondGeneration) -> [(CBUUID, Data)] {
+        let lowBattery: [UInt8] = [1] + be16(1000) + be16(500) + be32(1171) + be32(0x00FF_0000)
+        let disconnected: [UInt8] = [0] + be16(0) + be16(0) + be16(0) + be32(0)
+        var out: [(CBUUID, Data)] = [
+            config(0x17, [10]),             // LOW_BAT_THRESHOLD 10 %
+            config(0x21, lowBattery),       // LOW_BAT_COLOR: on, 1000 / 500 ms, 1171, red
+            config(0x14, u32le(50)),        // MIN_TOUCH_DURATION 50 ms (u32 little-endian)
+            config(0x31, disconnected),     // DISCONNECTED_PARAM
+        ]
+        if gen == .v2 { out.append(v2Ancs(false)) }
+        return out
+    }
+
+    /// ANCS_PARAM (0x33): whether the bracelet shows the phone's notifications.
+    static func v2Ancs(_ on: Bool) -> (CBUUID, Data) { config(0x33, [on ? 1 : 0]) }
+
+    /// MOTOR_STRENGTH (0x18) — BleBondManagerV2Base.B (balance isn't used on these models).
+    static func v2MotorStrength(_ level: Int) -> (CBUUID, Data) { config(0x18, [UInt8(clamping: level)]) }
+
+    /// The user's own colour (f()): TOUCH_COLOR, then on v2 DOUBLE_TAP_COLOR and on v4/mini
+    /// the user's menu entry (UserMenu(colour, 0x80), also property 0x24).
+    static func v2UserColor(_ gen: BondGeneration, rgb: Int) -> [(CBUUID, Data)] {
+        let color = configColor(rgb)
+        return [config(0x25, color),
+                gen == .v2 ? config(0x24, color) : config(0x24, color + be32(0x80))]
+    }
+
+    /// One v4 partner-menu entry (BleBondManagerV4.W): UserMenu(colour, slot | 0x80) when
+    /// active, UserMenu(0xFF000000, slot & 0x7F) when not.
+    static func v2MenuEntry(slot: Int, rgb: Int?) -> (CBUUID, Data) {
+        if let rgb { return config(0x24, configColor(rgb) + be32(UInt32(slot | 0x80))) }
+        return config(0x24, be32(0xFF00_0000) + be32(UInt32(slot & 0x7F)))
+    }
+
+    /// SELECTED_USER (0x37): which partner slot (1…3) the v4 sends to.
+    static func v2SelectedUser(_ slot: Int) -> (CBUUID, Data) { config(0x37, [UInt8(clamping: slot)]) }
+
+    /// The answer to the PAIRED_SIGNAL event (0x13).
+    static let v2PairedReply: (CBUUID, Data) = app([0x31, 0x00, 0x11, 0x22, 0x33, 0x44])
+
+    /// Vibration preview (BleBondManagerV2Base.z): motor only, 2 s.
+    static func v2VibrationPreview(level: Int) -> (CBUUID, Data) {
+        ledAndMotor(strength: UInt8(clamping: level), vibMs: 2000, ledMode: 4)
+    }
+
+    /// Colour preview (y()): hold `rgb` until told otherwise (execute 0xFFFF).
+    static func v2HoldColor(_ rgb: Int) -> (CBUUID, Data) {
+        ledAndMotor(strength: 0, vibMs: 0, ledMode: 1, rgb: ledColor(rgb), brightness: 80, executeMs: 0xFFFF)
+    }
+
+    /// LEDs off (h()).
+    static let v2LedsOff: (CBUUID, Data) = ledAndMotor(strength: 0, vibMs: 0, ledMode: 4)
+
+    /// The state characteristic (ffa4): `[bondState, chargingState, ledBusy, motorBusy, touchBusy]`.
+    /// Bond states 0x82 WAITING_TOKEN, 0x83 WAITING_AUID, 0x84 OOBE (setup), 0x85 CONNECTED,
+    /// 0x86 MSG, 0x87 FACTORY, 0x88 QUEUE_EXECUTING; charging 0 no, 1 charging, 2 full, 0xFF error.
+    struct V2State {
+        let bond: UInt8
+        let charging: UInt8
+        init?(_ data: Data) {
+            let b = [UInt8](data)
+            guard b.count >= 5 else { return nil }
+            bond = b[0]; charging = b[1]
+        }
+    }
+
+    /// A v2-base AppEvent from the event characteristic (ffa5).
+    enum V2Event {
+        case auidError
+        case pairedSignal
+        /// A recorded touch segment; `slot` is the v4 partner slot it's for (byte 14).
+        case segment(touchMs: Int, releaseMs: Int, counter: Int, stop: Bool, slot: Int)
+        case timeout(counter: Int, slot: Int)
+        case tap
+        case doubleTap
+        case ignored
+    }
+
+    /// Parses `[eventId, counter, touchMs u32LE, releaseMs u32LE, stop u32LE, (v4) slot]`.
+    static func v2Event(_ data: Data) -> V2Event {
+        let b = [UInt8](data)
+        // A 0x19 blob of length >= 14 is a ship-mode / BLE-params report, not an event.
+        guard b.count >= 14, b[0] != 0x19 else { return .ignored }
+        let counter = Int(b[1])
+        let slot = b.count > 14 ? Int(b[14]) : 0
+        switch b[0] {
+        case 0x12: return .auidError
+        case 0x13: return .pairedSignal
+        case 0x14:
+            return .segment(touchMs: Int(u32leAt(b, 2)), releaseMs: Int(u32leAt(b, 6)), counter: counter,
+                            stop: u32leAt(b, 10) == 0xFFFF_FFFF, slot: slot)
+        case 0x15: return .timeout(counter: counter, slot: slot)
+        case 0x16: return .tap
+        case 0x17: return .doubleTap
+        default:   return .ignored
+        }
+    }
+
+    // MARK: - v1 commands (BleBondManagerV1, v1.BleAppCommandHelper, WriteFF06Command)
+
+    /// v1 frames on d3c0ffa6: `[opcode u16LE, seq u16LE, …]`, 16 bytes (8 for the short ones),
+    /// zero-filled, numbered with a running sequence that wraps after 65535.
+    struct V1Commands {
+        private var seq = 0
+
+        private mutating func next() -> [UInt8] {
+            seq += 1
+            if seq > 65535 { seq = 0 }
+            return BondGATT.u16le(UInt16(seq))
+        }
+
+        private static func frame(_ b: [UInt8], _ length: Int) -> (CBUUID, Data) {
+            (BondGATT.charAppCmd, Data(b + Array(repeating: 0, count: max(0, length - b.count))))
+        }
+
+        /// 0x26 LgtVibCommand: `[ledId, mode, kind, 1, (100, steps u16LE)]`.
+        private mutating func lgtVib(_ led: UInt8, mode: UInt8, kind: UInt8, timing: (UInt16, UInt16)?) -> (CBUUID, Data) {
+            var b = BondGATT.u16le(38) + next() + [led, mode, kind, 1]
+            if let t = timing { b += BondGATT.u16le(t.0) + BondGATT.u16le(t.1) }
+            return Self.frame(b, 16)
+        }
+
+        /// A touch (g()): one LgtVib per on/off entry — modes alternating 2, 1, … — then a
+        /// closing frame (mode 2, kind 2, no timing).
+        mutating func touch(onOff: [Int], rgb: Int) -> [(CBUUID, Data)] {
+            let led = BondGATT.v1Led(rgb)
+            var out: [(CBUUID, Data)] = []
+            var second = false
+            for ms in onOff {
+                let steps = (max(100, ms) * 10) / led.steps
+                out.append(lgtVib(led.id, mode: second ? 1 : 2, kind: 1,
+                                  timing: (100, UInt16(truncatingIfNeeded: steps))))
+                second.toggle()
+            }
+            out.append(lgtVib(led.id, mode: 2, kind: 2, timing: nil))
+            return out
+        }
+
+        /// 0x27 ActConfigCommand `[param u32LE, value u32LE]`.
+        private mutating func actConfig(_ param: UInt32, _ value: UInt32) -> (CBUUID, Data) {
+            Self.frame(BondGATT.u16le(39) + next() + BondGATT.u32le(param) + BondGATT.u32le(value), 16)
+        }
+
+        /// The user's colour (f()): colour 1003, LED id 1006, then save (0x27, 1000, 8 bytes).
+        mutating func userColor(_ rgb: Int) -> [(CBUUID, Data)] {
+            let led = BondGATT.v1Led(rgb)
+            let color = actConfig(1003, BondGATT.v1Palette(led.id))
+            let id = actConfig(1006, UInt32(led.id))
+            let save = Self.frame(BondGATT.u16le(39) + next() + BondGATT.u32le(1000), 8)
+            return [color, id, save]
+        }
+
+        /// 0x21 ColorCommand `[colour u32LE, with byte 7 = 100]`.
+        private mutating func color(_ argb: UInt32) -> (CBUUID, Data) {
+            var b = BondGATT.u16le(33) + next() + BondGATT.u32le(argb)
+            b[7] = 100
+            return Self.frame(b, 16)
+        }
+
+        /// Shows a colour (y()).
+        mutating func previewColor(_ rgb: Int) -> (CBUUID, Data) { color(BondGATT.v1Palette(BondGATT.v1Led(rgb).id)) }
+        /// LEDs off (h()).
+        mutating func colorOff() -> (CBUUID, Data) { color(0) }
+    }
+
+    /// The answer to the v1 PAIRED_SIGNAL event (19): a single byte 0x31 on ffa6.
+    static let v1PairedReply: (CBUUID, Data) = (charAppCmd, Data([0x31]))
+
+    /// v1 state (ffa4): `[bondEvent, pairedEvent, charging]` — paired 244 = waiting for the
+    /// AUID, 246 = connected, 247 = busy (message).
+    struct V1State {
+        let paired: UInt8
+        let charging: UInt8
+        init?(_ data: Data) {
+            let b = [UInt8](data)
+            guard b.count >= 3 else { return nil }
+            paired = b[1]; charging = b[2]
+        }
+    }
+
+    /// v1 event (ffa5): `[id, counter, count u16LE, touchMs u16LE]` — 18 AUID error,
+    /// 19 paired signal, 20 touch (count 1 = first, 0xFFFE timeout, 0xFFFF end).
+    struct V1Event {
+        let id: UInt8
+        let count: Int
+        let touchMs: Int
+        init?(_ data: Data) {
+            let b = [UInt8](data)
+            guard b.count >= 6 else { return nil }
+            id = b[0]
+            count = Int(b[2]) | Int(b[3]) << 8
+            touchMs = Int(b[4]) | Int(b[5]) << 8
+        }
+    }
+
+    /// v1 battery (ff06): millivolts → % over 3.7…4.1 V.
+    static func v1BatteryPercent(_ data: Data) -> Int? {
+        let b = [UInt8](data)
+        guard b.count >= 2 else { return nil }
+        let mv = Int(b[0]) | Int(b[1]) << 8
+        return max(0, min(400, mv - 3700)) * 100 / 400
+    }
+
+    /// The v1 LED for a colour: ColorMapperHelper.a snaps it to the base palette, then the
+    /// palette colour's LED id and step length (default LED 1, 100).
+    static func v1Led(_ rgb: Int) -> (id: UInt8, steps: Int) {
+        let base = v1BaseColor[rgb & 0xFFFFFF] ?? 0x23E0E8
+        return v1LedIDs[base] ?? (1, 100)
+    }
+
+    /// BleColorTable: the ARGB colour of each v1 LED id (‑1 for an unknown id).
+    static func v1Palette(_ id: UInt8) -> UInt32 {
+        let table: [UInt32] = [0xFF0000, 0x00EEF9, 0x000FF9, 0xBA00F9, 0xF9002D, 0x07F900,
+                               0x61F900, 0xF9F500, 0xF94300, 0xFFFFFF, 0x000000]
+        return Int(id) < table.count ? 0xFF00_0000 | table[Int(id)] : 0xFFFF_FFFF
+    }
+
+    private static let v1LedIDs: [Int: (id: UInt8, steps: Int)] = [
+        0xFF0000: (0, 30), 0x23E0E8: (1, 100), 0x106DED: (2, 100), 0xBE5BFF: (3, 100), 0xA502C0: (3, 100),
+        0xFF44A6: (4, 100), 0x03AB55: (5, 100), 0x7BBE2F: (6, 100), 0xE8D726: (7, 100), 0xFF7931: (8, 100),
+        0xFFFFFF: (9, 100), 0x000000: (10, 100),
+    ]
+
+    /// ColorMapperHelper.a: app colour → base palette colour (v1).
+    private static let v1BaseColor: [Int: Int] = [
+        0x23E0E8: 0x23E0E8, 0x106DED: 0x106DED, 0xBE5BFF: 0xBE5BFF, 0xFF44A6: 0xFF44A6, 0x03AB55: 0x03AB55,
+        0x7BBE2F: 0x7BBE2F, 0xE8D726: 0xE8D726, 0xFF7931: 0xFF7931, 0xA502C0: 0xA502C0, 0xD3007A: 0xFF44A6,
+        0xD33901: 0xFF7931, 0xFF7C00: 0xFF7931, 0xEFAE1D: 0xFF7931, 0xFFE700: 0xE8D726, 0xE4FF02: 0xE8D726,
+        0xAFFF00: 0xE8D726, 0x79FF03: 0x7BBE2F, 0x00D600: 0x7BBE2F, 0x00B560: 0x03AB55, 0x01D3B1: 0x03AB55,
+        0x28E4EB: 0x23E0E8, 0x00A4D3: 0x23E0E8, 0x006BD3: 0x106DED, 0x0045D2: 0x106DED, 0x1800C8: 0x106DED,
+        0x6D3DC9: 0xBE5BFF, 0x9D03DD: 0xBE5BFF, 0xC300D3: 0xBE5BFF, 0xD301AA: 0xFF44A6, 0xFA3A96: 0xFF44A6,
+        0xFF5338: 0xFF7931, 0xFF7701: 0xFF7931, 0xFFA910: 0xFF7931, 0xFFCD00: 0xE8D726, 0xFFE804: 0xE8D726,
+        0xEDFF04: 0xE8D726, 0xB6FF01: 0x7BBE2F, 0x5FF540: 0x7BBE2F, 0x05EB79: 0x03AB55, 0x2EF3BC: 0x03AB55,
+        0x51FBF3: 0x23E0E8, 0x22E7FF: 0x23E0E8, 0x00C8FF: 0x106DED, 0x009FFF: 0x106DED, 0x1875FF: 0x106DED,
+        0x8E59FF: 0xBE5BFF, 0xB659FF: 0xBE5BFF, 0xF25BFF: 0xBE5BFF, 0xF44CCE: 0xFF44A6,
+    ]
+
+    /// ColorMapperHelper.b: the app's palette colours → the LED colours v2/v4/mini show
+    /// (anything else is sent as is).
+    static func ledColor(_ rgb: Int) -> Int { ledColorMap[rgb & 0xFFFFFF] ?? (rgb & 0xFFFFFF) }
+
+    private static let ledColorMap: [Int: Int] = [
+        0xFA3A96: 0xD30013, 0xFF5338: 0xFF0C00, 0xFF7701: 0xFF2200, 0xFFA910: 0xF83C00, 0xFFCD00: 0xF85000,
+        0xFFE804: 0xF89200, 0xEDFF04: 0xDDC500, 0xB6FF01: 0x9FC500, 0x5FF540: 0x58B800, 0x05EB79: 0x087100,
+        0x2EF3BC: 0x08FB35, 0x51FBF3: 0x6DF7E3, 0x22E7FF: 0x00B7D3, 0x00C8FF: 0x006BD3, 0x009FFF: 0x0032D3,
+        0x1875FF: 0x000078, 0x8E59FF: 0x6500D3, 0xB659FF: 0xB100D3, 0xF25BFF: 0xD30072, 0xF44CCE: 0xD30039,
+        0xD3007A: 0xD30013, 0xD33901: 0xFF0C00, 0xFF7C00: 0xFF2200, 0xEFAE1D: 0xF83C00, 0xFFE700: 0xF85000,
+        0xE4FF02: 0xF89200, 0xAFFF00: 0xDDC500, 0x79FF03: 0x9FC500, 0x00D600: 0x58B800, 0x00B560: 0x087100,
+        0x01D3B1: 0x08FB35, 0x28E4EB: 0x6DF7E3, 0x00A4D3: 0x00B7D3, 0x006BD3: 0x006BD3, 0x0045D2: 0x0032D3,
+        0x1800C8: 0x000078, 0x6D3DC9: 0x6500D3, 0x9D03DD: 0xB100D3, 0xC300D3: 0xD30072, 0xD301AA: 0xD30039,
+    ]
+
+    /// Linear blend per channel, truncated (the original's ArgbEvaluator-style sb1.b).
+    private static func blend(_ a: Int, _ b: Int, _ t: Float) -> Int {
+        func ch(_ shift: Int) -> Int {
+            Int(Float((b >> shift) & 0xFF) * t + Float((a >> shift) & 0xFF) * (1 - t))
+        }
+        return (ch(16) << 16) | (ch(8) << 8) | ch(0)
     }
 
     /// What the original app sends once a Bond Touch More reports CONNECTED: enables its
@@ -201,10 +564,41 @@ enum BondGATT {
         }
     }
 
-    /// Vibration strength and left/right balance: `[1, 0x48, 0x02, level, balance, 0x03]`.
-    /// Valid levels 28, 33, 40, 58, 60, 73, 80, 88, 100; balance 0…4 (2 = centred).
+    /// Vibration strength and left/right balance: `[1, 0x48, 0x02, level, balance, 0x03]`
+    /// (BleBondManagerV3.F). Valid levels 28, 33, 40, 58, 60, 73, 80, 88, 100; balance 0…4
+    /// (2 = centred).
     static func v3Vibration(level: UInt8, balance: UInt8) -> (CBUUID, Data) {
         (ffb1, Data([1, 0x48, 0x02, level, balance, 0x03]))
+    }
+
+    /// Plays a vibration once without saving it: `[1, 0x48, 0x00, level, balance, 0x03]` (z()).
+    static func v3VibrationPreview(level: UInt8, balance: UInt8) -> (CBUUID, Data) {
+        (ffb1, Data([1, 0x48, 0x00, level, balance, 0x03]))
+    }
+
+    /// Lights the whole bar in a colour: `[1, 0x4B, 0x00, 0x00 (all LEDs), R, G, B]` (y()).
+    static func v3Color(_ rgb: Int) -> (CBUUID, Data) {
+        (ffb1, Data([1, 0x4B, 0x00, 0x00] + be3(rgb)))
+    }
+
+    /// LEDs off: `[1, 0x4B, 0x01]` (h()).
+    static let v3LedsOff: (CBUUID, Data) = (ffb1, Data([1, 0x4B, 0x01]))
+
+    /// The bracelet's battery-alert settings, from the ack `[0x0A, 0x49, low %, R, G, B,
+    /// critical %, R, G, B]` (asked for by the `[1, 0x49, 1]` sent on CONNECTED).
+    struct BatteryAlertSettings: Equatable {
+        let lowPercent: Int
+        let lowRGB: Int
+        let criticalPercent: Int
+        let criticalRGB: Int
+
+        init?(v3Ack b: [UInt8]) {
+            guard b.count >= 10, b[0] == 0x0A, b[1] == 0x49 else { return nil }
+            lowPercent = Int(b[2])
+            lowRGB = (Int(b[3]) << 16) | (Int(b[4]) << 8) | Int(b[5])
+            criticalPercent = Int(b[6])
+            criticalRGB = (Int(b[7]) << 16) | (Int(b[8]) << 8) | Int(b[9])
+        }
     }
 
     /// A whole heartbeat for a Bond Touch More as ONE touch message, shaped like a real
@@ -233,45 +627,29 @@ enum BondGATT {
         return v3TouchFrames(samples: Array(samples.prefix(total)), startRGB: rgb, endRGB: rgb)
     }
 
-    /// One heartbeat pulse: a short firm buzz + glow.
-    static func heartbeatPulse(_ gen: BondGeneration, rgb: Int) -> [(CBUUID, Data)] {
-        ledMotor(gen, rgb: rgb, strength: 100, vibMs: 130, brightness: 255, holdMs: 130)
-    }
-
     // MARK: - Sending a touch (replay the tap rhythm)
 
     /// Plays a touch on the bracelet.
     /// v3 (Bond Touch More): the 50 ms position samples on FFB2 — the bar lights and the
-    /// vibration pans along the positions. v2-base: a queue-pause marker, one 0x33
-    /// "send-message" step per on-segment, then a resume marker.
-    static func touchSend(_ gen: BondGeneration, touch: TouchMessage, slot: Int = 1) -> [(CBUUID, Data)] {
-        let onOff = touch.onOffMs.isEmpty ? [200] : touch.onOffMs
-        let startRGB = touch.colorRGB, endRGB = touch.endColorRGB
+    /// vibration pans along the positions. v2-base: `v2TouchFrames` at the user's vibration
+    /// strength. v1 frames are sequenced, so `V1Commands.touch` builds them instead.
+    static func touchSend(_ gen: BondGeneration, touch: TouchMessage, slot: Int = 1,
+                          strength: Int = 80) -> [(CBUUID, Data)] {
         switch gen {
         case .v3:
-            return v3TouchFrames(samples: touch.samples, startRGB: startRGB, endRGB: endRGB, slot: slot)
+            return v3TouchFrames(samples: touch.samples, startRGB: touch.colorRGB, endRGB: touch.endColorRGB, slot: slot)
         case .v1:
-            // v1 has no segmented send; fall back to a colour + buzz.
-            return ledMotor(.v1, rgb: startRGB)
+            return []
         default:
-            var out: [(CBUUID, Data)] = [(charAppCmd, pad([0x32, 0x00, 0x22], to: 20))]
-            let (r, g, b) = rgbBytes(startRGB)
-            // Alternate on/off: even indices are "on" (buzz) segments. The 0x33 frame carries
-            // the start→end gradient in its three colour slots.
-            for (i, ms) in onOff.enumerated() where i % 2 == 0 {
-                var f: [UInt8] = [0x33, 0x00, r, g, b]
-                f += be3(startRGB) + be3(endRGB) + be3(endRGB)
-                f += u16le(UInt16(clamping: ms))
-                out.append((charAppCmd, pad(f, to: 20)))
-            }
-            out.append((charAppCmd, pad([0x32, 0x00, 0x11], to: 20)))
-            return out
+            return v2TouchFrames(gen, onOff: touch.onOffMs, startRGB: touch.colorRGB, endRGB: touch.endColorRGB,
+                                 strength: UInt8(clamping: strength))
         }
     }
 
-    /// FFB2 playback: header `[partner slot 1…3, n, ceil(n/20), colour1 RGB, colour2 RGB,
-    /// replyMenu 0]` padded with 0xFF, then the sample bytes 20 per packet, padded with 0xFF.
-    /// The firmware accepts 1…10 packets, so at most 200 samples.
+    /// FFB2 playback (BleBondManagerV3.g): header `[partner slot 1…3, n, ceil(n/20), colour1
+    /// RGB, colour2 RGB, reply 0]` padded with 0xFF, then the sample bytes 20 per packet,
+    /// padded with 0xFF. Colours go as is (no colour mapping on v3); the reply flag is 0 for
+    /// a received touch. The firmware accepts 1…10 packets, so at most 200 samples.
     private static func v3TouchFrames(samples raw: [Int], startRGB: Int, endRGB: Int, slot: Int = 1) -> [(CBUUID, Data)] {
         var samples = TouchPattern.trimmed(raw).map { UInt8(clamping: $0) }
         if samples.isEmpty { samples = [0xF4, 0xF4, 0xF4, 0xF4] }   // a short centre tap
@@ -317,66 +695,15 @@ enum BondGATT {
         }
     }
 
-    // MARK: - Incoming
-
-    /// Interprets a state/event notification into a pairing signal.
-    static func signal(_ gen: BondGeneration, uuid: CBUUID, data: Data) -> BondSignal {
-        let b = [UInt8](data)
-        guard !b.isEmpty else { return .other }
-        if gen == .v3 && uuid == ffb1 {
-            // category 0x04 = system events; byte1 is the bond-state id.
-            guard b[0] == 0x04, b.count >= 2 else { return .other }
-            switch b[1] {
-            case 130: return .waitingToken
-            case 131: return .waitingAuid
-            case 133: return .connected
-            default:  return .other
-            }
-        }
-        if gen.usesV2Base && uuid == charState {
-            switch b[0] {
-            case 0x82: return .waitingToken
-            case 0x83: return .waitingAuid
-            case 0x85: return .connected
-            default:   return .other
-            }
-        }
-        return .other
-    }
-
-    /// A single parsed touch/tap event from the event characteristic.
-    enum TouchEvent {
-        case segment(touchMs: Int, releaseMs: Int, counter: Int, stop: Bool)
-        case tap
-        case doubleTap
-        case ignored
-    }
-
-    /// Parses a v2-base AppEvent frame on the event characteristic (d3c0ffa5).
-    static func touchEvent(_ gen: BondGeneration, uuid: CBUUID, data: Data) -> TouchEvent {
-        guard gen.usesV2Base, uuid == charEvent else { return .ignored }
-        let b = [UInt8](data)
-        // A 0x19 blob of length >= 14 is a BLE-params payload, not a touch.
-        if let first = b.first, first == 0x19, b.count >= 14 { return .ignored }
-        guard b.count >= 14 else { return .ignored }
-        let eventId = b[0]
-        let counter = Int(b[1])
-        let touchMs = Int(u32leAt(b, 2))
-        let releaseMs = Int(u32leAt(b, 6))
-        let stop = u32leAt(b, 10) == 0xFFFF_FFFF
-        switch eventId {
-        case 0x14: return .segment(touchMs: touchMs, releaseMs: releaseMs, counter: counter, stop: stop)
-        case 0x16: return .tap
-        case 0x17: return .doubleTap
-        default:   return .ignored
-        }
-    }
-
     // MARK: - Byte helpers
     private static func pfx(_ p: UInt8) -> [UInt8] { [p] }
     static func u16le(_ x: UInt16) -> [UInt8] { [UInt8(x & 0xFF), UInt8((x >> 8) & 0xFF)] }
     static func u32le(_ x: UInt32) -> [UInt8] {
         [UInt8(x & 0xFF), UInt8((x >> 8) & 0xFF), UInt8((x >> 16) & 0xFF), UInt8((x >> 24) & 0xFF)]
+    }
+    static func be16(_ x: UInt16) -> [UInt8] { [UInt8((x >> 8) & 0xFF), UInt8(x & 0xFF)] }
+    static func be32(_ x: UInt32) -> [UInt8] {
+        [UInt8((x >> 24) & 0xFF), UInt8((x >> 16) & 0xFF), UInt8((x >> 8) & 0xFF), UInt8(x & 0xFF)]
     }
     static func be3(_ rgb: Int) -> [UInt8] {
         [UInt8((rgb >> 16) & 0xFF), UInt8((rgb >> 8) & 0xFF), UInt8(rgb & 0xFF)]
@@ -387,15 +714,6 @@ enum BondGATT {
     private static func u32leAt(_ b: [UInt8], _ i: Int) -> UInt32 {
         guard b.count >= i + 4 else { return 0 }
         return UInt32(b[i]) | (UInt32(b[i + 1]) << 8) | (UInt32(b[i + 2]) << 16) | (UInt32(b[i + 3]) << 24)
-    }
-    /// Maps a 0–255 motor strength to the v3 vibration level 0–4.
-    private static func vibLevel(_ strength: UInt8) -> UInt8 {
-        UInt8(min(4, Int(strength) * 5 / 256))
-    }
-    private static func pad(_ bytes: [UInt8], to n: Int) -> Data {
-        var f = bytes
-        if f.count < n { f += Array(repeating: 0xFF, count: n - f.count) }
-        return Data(f.prefix(n))
     }
 }
 

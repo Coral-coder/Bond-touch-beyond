@@ -35,18 +35,22 @@ Bond Touch uses a vendor 128-bit UUID base `d3c0XXXX-add3-1d4b-0000-0000b5006bb1
   `BOND MINI`. A scanned device is accepted only if its advertised name is in this set.
 - DFU advertised names: `BOND_DFU`, `BOND_M_DFU`, `BOND_4_DFU`, `BOND_MINI_DFU`.
 
-**v1/v2/v4/mini service `d3c00002` characteristics:**
-- `d3c00001-add3-1d4b-0000-0000b5006bb1` — control/OTA service
-- `d3c00002-add3-1d4b-0001-0000b5006bb1` — main app service
-- `d3c0ff06-add3-1d4b-0000-0000b5006bb1` — v1 `FF06` command characteristic (v1 main write char)
-- `d3c0ffa1-add3-1d4b-0001-0000b5006bb1` — token write ("12345678")
-- `d3c0ffa2-add3-1d4b-0001-0000b5006bb1` — AUID / device-id write; v1 also uses it as a state-notify char
-- `d3c0ffa4-add3-1d4b-0001-0000b5006bb1` — state notify (BondState, battery); subscribed via CCCD
-- `d3c0ffa5-add3-1d4b-0001-0000b5006bb1` — touch/event notify + command write (main LED/motor/config char); subscribed
-- `d3c0ffa6-add3-1d4b-0001-0000b5006bb1` — app-command write (LED/motor/config; v2/v4/mini)
-- `d3c0ffa8-add3-1d4b-0001-0000b5006bb1` — v4/mini bonding/ANCS notify char
+**v1/v2/v4/mini services:**
+- `d3c00001-add3-1d4b-0000-0000b5006bb1` — control service:
+  - `d3c0ffb3-…-0000-…` — API-version read
+  - `d3c0ff06-…-0000-…` — **battery** read + notify (v2/v4/mini `[level %, reserved]`; v1
+    `[millivolts u16LE]`). It is *not* a command characteristic.
+  - v1 only: `d3c0ff03-…-0000-…` — firmware `[patch, minor]`
+- `d3c00002-add3-1d4b-0001-0000b5006bb1` — main app service:
+  - `d3c0ffa1-…-0001-…` — token write ("12345678")
+  - `d3c0ffa2-…-0001-…` — AUID / device-id write (u32LE)
+  - `d3c0ffa4-…-0001-…` — state read + notify (bond state, charging, busy flags)
+  - `d3c0ffa5-…-0001-…` — touch/event notify
+  - `d3c0ffa6-…-0001-…` — **app-command write for every non-v3 generation** (v1 sequenced
+    frames; v2/v4/mini LED/motor/config/DFU frames)
+  - `d3c0ffa7-…-0001-…` — v1 command-result (ack) notify
+  - `d3c0ffa8-…-0001-…` — v4/mini encrypted notify char; enabling it makes the phone bond
 - `0000180a-…` — standard DIS service; `00002a26-…` — firmware string char; `00002a24-…` — model-number char
-- v1 only: `d3c0ff03-…-0000-…` — v1 firmware-version read char; `d3c0ffa7-…-0001-…` — v1 char
 
 **v3 service `d3c00003` characteristics:**
 - `d3c0ffb1-add3-1d4b-0000-0000b5006bb1` — FFB1 (write app-commands, notify events); subscribed via CCCD
@@ -57,14 +61,16 @@ Bond Touch uses a vendor 128-bit UUID base `d3c0XXXX-add3-1d4b-0000-0000b5006bb1
 ### 1.1 MTU / connection setup
 
 - GATT is opened with `connectGatt(ctx, autoConnect, cb, TRANSPORT_LE=2)`.
-- No explicit `requestMtu` is issued for Bond Touch; all command writes are padded to
-  **20 bytes** (`Arrays.copyOf(frame, 20)` in every v2/v4/mini command builder; v3
-  frames are also 20 bytes, padded with `0xFF`).
+- No explicit `requestMtu` is issued for Bond Touch. v2/v4/mini command frames are
+  `Arrays.copyOf(frame, 20)` — **zero-padded** to 20 bytes. v3 FFB2 frames are 20 bytes
+  padded with `0xFF`; v3 FFB1 commands are written at their exact length. v1 frames are
+  16 (or 8) bytes, zero-filled.
 - After connect: `onConnectionStateChange` → `discoverServices()`; on
   `onServicesDiscovered` the client reads the API-version characteristic.
 - v2/v4/mini request `requestConnectionPriority(0)` (BALANCED) once the "connect burst"
   of descriptor writes settles.
-- v3 FFB1/FFB2 writes use `WRITE_TYPE_NO_RESPONSE` (`setWriteType(2)`).
+- v3 FFB1/FFB2 writes call `setWriteType(2)`, which is `WRITE_TYPE_DEFAULT` (write
+  **with** response; NO_RESPONSE is 1). All other writes use the default type too.
 
 ### 1.2 Device-version selection
 
@@ -93,19 +99,26 @@ All multi-byte command frames are written to characteristic `d3c0ffa6` on servic
   `[0x26, 0x00, queue:u8, vibStrength:u8, vibTimeMs:u16LE, ledMode:u8, red:u8, green:u8, blue:u8, ledBrightness:u8, ledTransitionMs:u16LE, ledHoldMs:u16LE, ledSleepMs:u16LE, ledExecuteMs:u16LE]`.
   - Constructor arg order: `(queueByte, vibStrength, vibTimeMs, ledMode, red, green, blue, ledBrightness, transition, hold, sleep, execute)`.
   - `ledMode`: `1` = solid/breathe, `4` = off/stop, `2` = pattern step (seen in special vibration).
-  - Used by: single color (ledMode 1, execute = -1), test color, blink, stop LED (ledMode 4), motor-only.
+  - `queue` `1` = queued as part of a message (closed by `[0x32,0,0x11]`), `0` = immediate.
+  - Used by: single-colour touch playback (queue 1, ledMode 2), hold colour (ledMode 1,
+    brightness 80, execute 0xFFFF), LEDs off (ledMode 4), vibration preview (strength,
+    2000 ms, ledMode 4), blink.
 - `0x27` (39) = **Configuration write**. Frame:
-  `[0x27, 0x00, propertyId:u8, 0x01, ...payload]` padded to 20. Also used as a DFU
-  trigger (see §3) with a magic payload.
-  - Colors encode as 4-byte big-endian ARGB `{i>>>24, i>>>16, i>>>8, i}`.
-  - u16 config values are big-endian; u32 config values are big-endian.
-- `0x32` (50) = **queue-pause / resume marker**: `[0x32, 0x00, z?0x22:0x11]`. Pauses
-  the command queue 5 s on write.
-- `0x33` (51) = **"send-message" LED/motor-with-meaning step**: 15-byte body
-  `[0x33, 0, r, g, b, color1(3B BE), color2(3B BE), color3(3B BE)] + durationU16LE`.
+  `[0x27, 0x00, propertyId:u8, 0x01, ...payload]` zero-padded to 20.
+  - Colours are the colour-mapped (ColorMapperHelper.b) ARGB int, 4 bytes big-endian
+    (so `[0xFF, R, G, B]`). `LowBatteryData` and `DisconnectedParamsData` use big-endian
+    u16/u32; `MinTouchDuration`, `MaxTouchDuration`, `MessageTimeout` are **u32
+    little-endian**; `UserMenu(colour, index)` = colour BE32 + index BE32 (property 0x24).
+- `0x32` (50) = **end-of-message marker**: `[0x32, 0x00, z?0x22:0x11]` — `0x22` after
+  `0x33` steps, `0x11` after queued `0x26` frames. Written only *after* the frames; once
+  written the app pauses its command queue 5 s (resumed early by state CONNECTED).
+- `0x33` (51) = **"send-message" step** (BleAppCommandHelper.a):
+  `[0x33, 0x00, strength, bright1, bright2, bright3, RGB1(3B), RGB2(3B), RGB3(3B), ms:u16LE]`
+  (17 bytes, zero-padded). Touch playback uses brightness 80,80,80 and the same colour in all
+  three slots; gaps are a frame with everything 0 and `ms` = gap length.
 - `0x31` (49) = PAIRED_SIGNAL handler response write: `[0x31, 0x00, 0x11, 0x22, 0x33, 0x44]`.
 - `0x34` (52) = ANCS-ish toggle: `[0x34, 0x00, z?0x11:0x22]`.
-- `0x25` (37) = **DFU enter**: `[0x25, 0x00, 0x11, 0x22, 0x33, 0x44]`.
+- `0x25` (37) = **DFU enter**: `[0x25, 0x00, 0x11, 0x22, 0x33, 0x44]` (on `d3c0ffa6`).
 
 **ConfigurationProperty IDs** (used as `propertyId` in the `0x27` frame and echoed in
 config reads):
@@ -129,54 +142,96 @@ u32BE@13`; `BleParamsData` = six u16LE at [4,6,8,10,12,14];
 - `BondState`: `0x00` = NO_STATE, `0x82` = WAITING_TOKEN, `0x83` = WAITING_AUID,
   `0x84` = OOBE, `0x85` = CONNECTED, `0x86` = MSG, `0x87` = FACTORY,
   `0x88` = QUEUE_EXECUTING. (Stored as signed bytes −126…−120.)
-- WAITING_TOKEN → writes ASCII "12345678" to `d3c0ffa1`. WAITING_AUID → writes
-  device-id u32LE to `d3c0ffa2`. CONNECTED → resumes queue, reads firmware (`00002a26`).
+- Session start (manager constructor): read `d3c0ff06` (battery), enable notifications on
+  `d3c0ff06`, `d3c0ffa5`, `d3c0ffa4`; then v2 writes the token at once, v4/mini read
+  `d3c0ffa4`. Each *new* bond state is handled once (repeats ignored, initial NO_STATE):
+  WAITING_TOKEN → writes ASCII "12345678" to `d3c0ffa1`. WAITING_AUID → writes
+  device-id u32LE to `d3c0ffa2`. OOBE → setup mode (the user double-taps to pair).
+  CONNECTED → resumes queue; the first time, reads firmware (`00002a26`) — that answer is
+  "device paired" (settings go out, §1.7). MSG → pause queue 15 s. QUEUE_EXECUTING
+  (notified) → re-read the state after 5 s.
+- After the firmware read: v2 (fw ≥ 2.5.0) toggles ANCS by OS-bond state; v4/mini write
+  ANCS off and, if not OS-bonded, enable notifications on `d3c0ffa8` to start bonding.
+- On OS bond (`D()`): `LOW_BAT_THRESHOLD [10]`; `LOW_BAT_COLOR [1, 1000 BE16, 500 BE16,
+  1171 BE32, 0x00FF0000 BE32]`; `MIN_TOUCH_DURATION 50 (u32LE)`; `DISCONNECTED_PARAM`
+  all zero; v2 also `ANCS_PARAM [0]`.
 
 **Touch / tap notify — characteristic `d3c0ffa5`**:
 - If `value[0]==0x19` (25) and length ≥ 14 → treated as a BLE-params blob forwarded raw.
 - Otherwise parsed as the **AppEvent frame**:
   `[eventId:u8@0, counter:u8@1, touchDurationMs:u32LE@2, releaseDurationMs:u32LE@6, stopFlag:u32LE@10]`
   (v4 also reads `deviceId:u8@14`).
-- **AppEvent IDs**: `0x11` = AUID_RIGHT (paired/activate menu), `0x12` = AUID_ERROR,
-  `0x13` = PAIRED_SIGNAL (writes `0x31` reply), `0x14` = SEND_MSG (a touch segment
-  received from partner), `0x15` = SEND_MSG_TIMEOUT, `0x16` = TAP_DETECTED_SIGNAL,
-  `0x17` = NO_ACTION_DOUBLE_TAP_DETECTED.
+- **AppEvent IDs**: `0x11` = AUID_RIGHT (ignored), `0x12` = AUID_ERROR (→ OOBE),
+  `0x13` = PAIRED_SIGNAL (writes `[0x31,0,0x11,0x22,0x33,0x44]` to `d3c0ffa6`),
+  `0x14` = SEND_MSG (a touch segment the user recorded on this bracelet),
+  `0x15` = SEND_MSG_TIMEOUT, `0x16` = TAP_DETECTED_SIGNAL (only logged),
+  `0x17` = NO_ACTION_DOUBLE_TAP_DETECTED (the double-tap *action*, not a touch).
 - **Touch-pattern decode**: on SEND_MSG, `counter==1` starts a new pattern
   `[touchDuration]`; subsequent segments append `[releaseDuration, touchDuration]`
   (each clamped to ≥ 50 ms). `stopFlag == 0xFFFFFFFF` ends the pattern and delivers it
-  with its menu index. TouchTimeout with counter 0 clears the buffer.
+  (v2: menu FIRST; v4: the slot in byte 14 — if that's not the selected slot the app
+  records the new selection). SEND_MSG_TIMEOUT with counter 0 clears the buffer, then
+  delivers whatever is left. The mini reports the fixed pattern `[500,250,500,250,500]`
+  for every SEND_MSG / timeout event.
 
-**Sending a touch to the partner:** the on/off millisecond pattern list is converted to
-a sequence of `0x33` (send-msg LED/motor) frames with a color gradient between
-`color1 → color2`, bracketed by `0x32` pause markers (`0x22` before, `0x11` after), one
-command per 200 ms step, written to `d3c0ffa6`. v4 additionally writes `SELECTED_USER`.
+**Playing a touch** (BleBondManagerV2Base.g, colours through ColorMapperHelper.b,
+strength = the user's vibration level, 80 if unset, all on `d3c0ffa6`):
+- one colour (start == end): per on/off pair one queued `0x26` frame `[queue 1, strength,
+  vib = on, ledMode 2, RGB, brightness 80, transition = ⌊on·0.25⌋, hold = on − 2·transition,
+  sleep = off, execute = on + off]` (a missing last off = 0), then `[0x32, 0, 0x11]`;
+- gradient: for each on segment `n = max(1, ⌊on/200⌋)` and **n + 1** `0x33` frames of
+  200 ms (Kotlin `0..n`), colour = start→end blend at elapsed/total; each gap one all-zero
+  `0x33` frame with `ms` = gap; then `[0x32, 0, 0x22]`. No opening marker.
+- mini always plays `[500,250,500,250,500]`; an empty pattern falls back to it. v4 then
+  writes `SELECTED_USER` = the touch's partner slot (if its menu is enabled).
 
-**Battery:** delivered through the state char and the firmware DIS read. v2 parses
-`[level:u8@0, reserved:u8@1]`.
+**Battery:** `d3c0ff06` in service `d3c00001` (read + notify), `[level:u8@0, reserved:u8@1]`.
+**Charging:** state byte 1 (`CHARGING` and `FULL_CHARGE` both reported as charging).
 
 **Motor strength / vibration:** writes `MOTOR_STRENGTH` (property `0x18`), one byte
-strength. Valid strengths: `{28, 33, 40, 58, 60, 73, 80, 88, 100}`; valid levels
-`{0, 1, 2, 3, 4}`.
+strength. Valid strengths: `{28, 33, 40, 58, 60, 73, 80, 88, 100}`; the balance `{0…4}`
+(2 = centre) is used only by v3. Preview: `0x26` with strength, 2000 ms, ledMode 4.
+
+**User colour** (`f()`): `TOUCH_COLOR`, then v2 `DOUBLE_TAP_COLOR`, v4/mini
+`UserMenu(colour, 0x80)`. **v4 partner menu** (`A()`): `UserMenu(colour, slot|0x80)` for
+an active slot, `UserMenu(0xFF000000, slot&0x7F)` otherwise, slot 1 shown only when slot 2
+or 3 is active; then `SELECTED_USER` = min(last active slot, selected). SELECTED_USER is
+skipped while neither slot 2 nor 3 is active.
 
 ### 1.4 v1 protocol (legacy)
 
-- Main write char `d3c0ff06` on service `d3c00002`.
-- **FF06 frame**: `[opcode:u16LE@0, seq:u16LE@2, ...payload]`, 16 bytes.
-  - `0x21` (33) ColorCommand: `[op, seq, color:u32LE@4, 100:u8@7]`.
-  - `0x26` (38) LgtVibCommand: `[op, seq, ledId:u8@4, type:u8@5, mode:u8@6, 1:u8@7, (optional steps:u16LE@8, duration:u16LE@10)]`.
-  - `0x27` (39) ActConfigCommand: `[op, seq, param:u32LE@4, value:u32LE@8]` (params 1003/1006 for colors).
-  - `0x25` (37) generic 8-byte config (reset-user / selection).
-- Firmware version read from char `d3c0ff03`, bytes `[patch@0, minor@1]`, generation = 1.
-- State notify char `d3c0ffa2`: `[bondEventId@0, pairedEventId@1, chargingId@2]`;
-  charging 0 = not, 1 = yes; bondEvent 131/132; pairedEvent 244 → write device-id to
-  `d3c0ffa1`, 246 = resume, 247 = message recording.
-- Battery read char `d3c0ffa1` as `[u16@0]` → `pct = max(0, min(400, raw-3700))*100/400`.
-- Color palette is an int[11] ARGB table indexed by a `ColorInfo.ledId`.
+- Commands are written to **`d3c0ffa6`** on service `d3c00002` (the class is named
+  `WriteFF06Command`, but `d3c0ff06` is the battery characteristic).
+- **Frame**: `[opcode:u16LE@0, seq:u16LE@2, ...payload]`, 16 bytes (8 for the short
+  commands), zero-filled; `seq` increments per command and wraps after 65535.
+  - `0x21` (33) ColorCommand: `[op, seq, color:u32LE@4]` then byte 7 overwritten with 100.
+  - `0x26` (38) LgtVibCommand: `[op, seq, ledId:u8@4, mode:u8@5, kind:u8@6, 1:u8@7, (100:u16LE@8, steps:u16LE@10)]`.
+    A touch = one frame per on/off entry, modes alternating 2, 1, 2, …, kind 1, steps =
+    `max(100, ms)·10 / ledSteps` (ledSteps 100, 30 for red); then a closing frame mode 2,
+    kind 2 without the timing words.
+  - `0x27` (39) ActConfigCommand (16 B): `[op, seq, param:u32LE@4, value:u32LE@8]`; user
+    colour = param 1003 (palette ARGB), 1006 (LED id), then SaveConfig (8 B, `1000:u32LE@4`).
+  - `0x25` (37) DFU (8 B, `-1@4`); `0x29` (41) reboot (sent after 10 ACR_BUSY acks).
+- Session: read `d3c0ff03` (firmware `[patch@0, minor@1]` → `1.minor.patch`), enable
+  notify + read `d3c0ff06`; after the firmware read (if no update is needed) enable
+  notifications on `d3c0ffa5`, `d3c0ffa4`, `d3c0ffa7` and write "12345678" to `d3c0ffa1`.
+- State notify `d3c0ffa4`: `[bondEventId@0, pairedEventId@1, chargingId@2]`; charging
+  0 = not, 1 = yes; pairedEvent 244 → write the AUID u32LE to `d3c0ffa2`, 246 = connected
+  ("device paired", queue resumed), 247 = busy (queue paused 30 s; the listener's
+  double-tap callback is raised).
+- Event notify `d3c0ffa5`: `[id@0, counter@1, count:u16LE@2, touchMs:u16LE@4]`; 18 = AUID
+  error, 19 = paired signal → write the single byte `0x31` to `d3c0ffa6`, 20 = touch
+  segment (count 1 starts, 0xFFFE timeout / 0xFFFF end; gaps from arrival times; all
+  rounded to 50 ms).
+- Ack notify `d3c0ffa7`: `[result:u16LE@0, count:u16LE@2]` (1 = ACR_SUCCESS, 11 = BUSY…).
+- Battery `d3c0ff06` (service `d3c00001`) as `[mV u16LE]` → `pct = max(0, min(400, mV-3700))*100/400`.
+- Colours: ColorMapperHelper.a snaps to the base palette; `ColorInfo.ledId` 0…10 indexes
+  the ARGB table `BleColorTable`.
 
 ### 1.5 v3 protocol
 
 - All app commands written to FFB1 `d3c0ffb1`; touch patterns written to FFB2
-  `d3c0ffb2`; both WRITE_NO_RESPONSE.
+  `d3c0ffb2`; both with the default write type (with response).
 - **FFB1 write frame**: `[prefix:u8, cmd:u8, ...args]`, written at its exact length (not
   padded). prefix `1` = normal app command, `3` = token: `[3] + "12345678"` (9 bytes), sent
   only after the bracelet reports `WAITING_TOKEN` (130); `7` = AUID: `[7, id]` — a **single
@@ -185,17 +240,21 @@ strength. Valid strengths: `{28, 33, 40, 58, 60, 73, 80, 88, 100}`; valid levels
   sent the token and a 4-byte AUID padded to 20 bytes unprompted on every connect; fixed.)
   - cmd `0x4B` (75) LED color: `[1, 0x4B, 0x00, displayLed:u8, r:u8, g:u8, b:u8]`
     (DisplayLed ALL = 0, LED_0 = 1); clear with `[1, 0x4B, 0x01]`.
-  - cmd `0x48` (72) vibration: `[1, 0x48, 0x00, level, balance, 3]`; variant
-    `[1, 0x48, 0x02, level, balance, 3]`.
+  - cmd `0x48` (72) vibration: preview `[1, 0x48, 0x00, level, balance, 3]`; save
+    `[1, 0x48, 0x02, level, balance, 3]` (levels 28…100 as v2, balance 0…4, 2 = centre).
+    The ack `[0x0A, 0x48, level, balance]` is answered with a save if it differs from the
+    user's setting.
+  - The original sends no user-colour command (`f()` is a no-op on v3).
   - cmd `0x45` (69) user-menu/select: enable `[1, 0x45, 0x01]`; set menu
     `[1, 0x45, 0x00] + user1(4B) + user2(4B) + user3(4B)` where each user block =
     `[activeState:u8, r:u8, g:u8, b:u8]`.
   - cmd `0x2A` (42) = DFU enter (`[1, 0x2A]`).
   - cmds `0x19, 0x1B, 0x41, 0x42, 0x49, 0x1C` written on CONNECTED to enable features/notifications.
   - cmds `0x43` / `0x44` = ANCS on/off.
-- **FFB2 touch frame**: header `[deviceId, totalLen, chunkCount, color1(3B BE),
-  color2(3B BE), stopFlag]` followed by the on/off duration bytes chunked 20 per
-  packet, remaining bytes padded `0xFF`.
+- **FFB2 touch frame** (BleBondManagerV3.g): header `[slot (MenuIndex 1…3), sampleCount,
+  ceil(count/20), color1 R,G,B, color2 R,G,B, replyFlag]` (colours not colour-mapped;
+  replyFlag is 0 when playing a received touch), then the 50 ms position samples 20 per
+  packet; every packet padded with `0xFF` to 20 bytes.
 - **FFB1 notify decode**: first byte = category:
   - `0x02` onBondEvent: `[0x02, eventId:u8@1, ...]` — eventId `0x13` = PAIRED_SIGNAL,
     `0xB2` (178) = NO_ACTION_DOUBLE_TAP, `0xB3` (179), `0xB4` (180) = USER_SELECTED
@@ -206,8 +265,8 @@ strength. Valid strengths: `{28, 33, 40, 58, 60, 73, 80, 88, 100}`; valid levels
     `138` = WAIT_FOR_ACT_PAIRED, `141` = WAIT_DOUBLE_TAP, `142` = TEST_COLORS,
     `143` = WAITING_START_AUTH.
   - `0x0A` (10) onAckReceived: `[0x0A, ackCmd:u8@1, ...]` — `0x45` = user-color menu
-    (3×[state, r, g, b]@2..), `0x48` = vibration `[level@2, balance@3]`, battery-settings
-    ack `[lowVal, lowRGB, critVal, critRGB]`, `0x4A` = accel sensitivity.
+    (3×[state, r, g, b]@2..), `0x48` = vibration `[level@2, balance@3]`, `0x49` = battery
+    settings `[low%@2, R, G, B, critical%@6, R, G, B]`, `0x4A` = accel sensitivity.
   - `0xAA` (−86) = lot number `bytes[1..5]`; `0xAB` (−85) = device id `bytes[1..5]`;
     `0xAE` (−82) = health stats; `0xAF` (−81) = flash stats `[u16@1, u16@3, u16@5]`;
     `0xB0` (−80) = ANCS; `0xAC` (−84) = firmware `[minor@1, major@2, generation@3]`.
@@ -230,8 +289,12 @@ The client registers a receiver for `ACTION_PAIRING_REQUEST`,
 2. Instantiate the version manager; enable notifications on the state + event
    characteristics (write CCCD `00002902` = ENABLE_NOTIFICATION_VALUE).
 3. Bracelet reports BondState WAITING_TOKEN → app writes token "12345678";
-   WAITING_AUID → app writes AUID (device index / user id, u32LE); OOBE/PAIRED signalled
-   via AppEvent `0x11` / `0x13`.
+   WAITING_AUID → app writes AUID (device index / user id, u32LE); the PAIRED signal
+   (AppEvent `0x13`) is answered. "Device paired" = firmware read (v2/v4/mini 2A26, v3
+   0xAC answer) or v1 paired state 246. Then (BleBondClient listener `j()`), once per
+   connection: user colour `f()`, vibration `B(level, balance)` (if set), partner menu
+   `A()` (v3: `[1,0x45,1]` read + diff write; v4: menu entries), saved slot `s()` (v4
+   SELECTED_USER).
 4. v2/v4/mini/v3 optionally call `createBond()` / enable ANCS (property `0x33`) when the
    OS bond is absent. A successful Android `createBond` →
    `ACTION_BOND_STATE_CHANGED` = BONDED(12) → the manager writes default config.
@@ -329,8 +392,8 @@ Both device types use **Nordic Secure DFU** (`no.nordicsemi.android.dfu`), feedi
 firmware ZIP bundled as an app raw resource.
 
 - **Trigger (Bond Touch):** write the DFU-enter command on the running protocol —
-  v2/v4/mini `0x25` magic `[0x25, 0x00, 0x11, 0x22, 0x33, 0x44]` to `d3c0ffa5`; v3 FFB1
-  `[0x01, 0x2A]`; v1 `FF06` DfuCommand. The bracelet reboots into its DFU bootloader
+  v2/v4/mini `0x25` magic `[0x25, 0x00, 0x11, 0x22, 0x33, 0x44]` (zero-padded to 20) to
+  `d3c0ffa6`; v3 FFB1 `[0x01, 0x2A]`; v1 DfuCommand (`0x25`, 8 bytes) to `d3c0ffa6`. The bracelet reboots into its DFU bootloader
   advertising one of the `*_DFU` names.
 - **DFU target address derivation:** take the connected MAC, increment the 48-bit
   address by 1, and separately XOR bytes[4] and bytes[5] with `0xAA` — both candidate

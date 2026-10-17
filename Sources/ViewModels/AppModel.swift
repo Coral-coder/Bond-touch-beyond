@@ -130,6 +130,8 @@ final class AppModel: ObservableObject {
 
     /// A heartbeat on screen now (the live EKG card), and its monitor beep.
     @Published var heartbeatShow: HeartbeatShow?
+    /// Counts double taps on the user's bracelet (Private Space unlocks on one).
+    @Published var braceletDoubleTaps = 0
     private let heartbeatSound = HeartbeatSound()
 
     /// Plays a heartbeat: on a Bond Touch More the EKG itself (the light rests mid-band and
@@ -214,6 +216,31 @@ final class AppModel: ObservableObject {
                 if let bpm = touch.heartbeatBPM { self?.haptics.playHeartbeat(bpm: bpm) } else { self?.haptics.play(touch) }
             }
         }
+        // A double tap on the bracelet is an action, not a touch: it unlocks Private Space.
+        bracelet.onDoubleTap = { [weak self] in
+            Task { @MainActor in
+                self?.braceletDoubleTaps += 1
+                NetLog.shared.log(.recv, "Bracelet double-tapped")
+            }
+        }
+        // Choosing a partner on the bracelet selects them in the app (slot n = n-th partner,
+        // as the partner menu is laid out), and choosing in the app tells the bracelet.
+        bracelet.onSlotSelected = { [weak self] slot in
+            Task { @MainActor in
+                guard let self, self.partners.indices.contains(slot - 1) else { return }
+                self.selectedPartnerID = self.partners[slot - 1].id
+            }
+        }
+        $selectedPartnerID.removeDuplicates()
+            .sink { [weak self] id in
+                Task { @MainActor in
+                    guard let self, let id, let i = self.partners.firstIndex(where: { $0.id == id }) else { return }
+                    self.bracelet.selectPartnerSlot(i + 1)
+                }
+            }
+            .store(in: &statusWatch)
+        // The bracelet shows the user's own colour (sent at every pairing).
+        bracelet.setUserColor(store.profile.colorRGB)
         watch.start(self)
         recovery.start(bracelet)
         AppModel.shared = self

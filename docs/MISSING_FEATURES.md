@@ -3,6 +3,20 @@
 Audited from the decompiled original Android app (jadx), checked against `docs/FEATURES.md`
 and our Swift code (October 2026). Sizes: S = small, M = medium, L = large.
 
+## Done since this audit (not yet tested on a device)
+
+- All of section 0: v2/v4/mini playback frames, v1 characteristic, taps/double-tap,
+  v2-base paired reply and handshake order, Private Space double-tap unlock and 72 h
+  expiry, favourite flag kept, vibration + colour sent to the bracelet, meaning play button.
+- Bracelet: settings re-sent after every pairing; vibration Low/Medium/High/Strong +
+  fine-tune + balance (Bond Touch More) with live preview; user colour with live preview;
+  device card (battery, charging, firmware, model, battery-alert lights); partner slot
+  chosen on the bracelet selects it in the app and vice versa (v3 event 180, v4 0x37).
+- Touch delivery from every partner in its slot, up to 15 min old.
+- Library: replay on own bracelet, delete confirmation.
+- Heartbeat as an EKG (bracelet light, screen, beep), in history; location sharing on by
+  default and kept across reinstalls.
+
 ## 0. Broken — we claim or attempt it, but it doesn't work (fix first)
 
 | Issue | Detail | Size |

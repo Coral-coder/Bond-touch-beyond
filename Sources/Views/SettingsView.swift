@@ -118,25 +118,51 @@ private struct PersonalDetailsView: View {
         .scrollContentBackground(.hidden)
         .navigationTitle("Personal details")
         .onAppear { color = Color(rgbInt: store.profile.colorRGB) }
-        .onChange(of: color) { store.profile.colorRGB = $0.rgbInt; Task { await model.publishProfile() } }
+        .onChange(of: color) {
+            store.profile.colorRGB = $0.rgbInt
+            model.bracelet.setUserColor($0.rgbInt)
+            Task { await model.publishProfile() }
+        }
     }
 }
 
 private struct BraceletSettingsView: View {
     @EnvironmentObject var model: AppModel
+    var body: some View {
+        BraceletSettingsContent(bracelet: model.bracelet)
+    }
+}
+
+/// The bracelet's own settings, as the original app's bracelet screen: vibration strength
+/// (Low / Medium / High / Strong, fine-tunable) and — on a Bond Touch More, with its two
+/// motors — the balance between them, each felt on the bracelet as you change it; your
+/// colour on the bracelet, previewed live; and the device: battery, charging, firmware.
+/// Settings are kept and re-sent every time the bracelet pairs.
+private struct BraceletSettingsContent: View {
+    @EnvironmentObject var model: AppModel
     @EnvironmentObject var store: LocalStore
+    @ObservedObject var bracelet: BraceletManager
+    // The bracelet manager stores these; read here so the controls show the saved values.
+    @AppStorage("BondVibrationLevel") private var level = 80
+    @AppStorage("BondVibrationBalance") private var balance = 2
+    @State private var color: Color = .pink
+    @State private var previewEnd: Task<Void, Never>?
+
+    /// The original's four steps.
+    private struct Preset: Identifiable { let name: String; let level: Int; var id: Int { level } }
+    private static let presets = [Preset(name: "Low", level: 33), Preset(name: "Medium", level: 58),
+                                  Preset(name: "High", level: 80), Preset(name: "Strong", level: 100)]
+    private var levels: [Int] { BondGATT.vibrationLevels }
+
     var body: some View {
         ScrollView {
             VStack(spacing: 16) {
                 ConnectView()
-                GlassCard {
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text("Vibration strength: \(Int(store.vibrationStrength))").foregroundStyle(.white)
-                        Slider(value: $store.vibrationStrength, in: 0...255, step: 5).tint(Theme.accent)
-                    }
-                }
+                if bracelet.isReady { deviceCard }
+                vibrationCard
+                colorCard
                 Button {
-                    model.bracelet.reconnect()
+                    bracelet.reconnect()
                 } label: {
                     Label(model.braceletState == .connected ? "Reconnect" : "Reconnect now",
                           systemImage: "arrow.clockwise")
@@ -150,7 +176,7 @@ private struct BraceletSettingsView: View {
                     .font(.caption).foregroundStyle(Theme.subtitle)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 Button(role: .destructive) {
-                    model.bracelet.disconnect()
+                    bracelet.disconnect()
                 } label: {
                     Text("Disconnect bracelet")
                         .frame(maxWidth: .infinity)
@@ -163,6 +189,126 @@ private struct BraceletSettingsView: View {
             .padding(20)
         }
         .navigationTitle("My Bond Touch Bracelet")
+        .onAppear { color = Color(rgbInt: store.profile.colorRGB) }
+        .onDisappear { previewEnd?.cancel(); bracelet.endColorPreview() }
+    }
+
+    // MARK: Device
+
+    private var deviceCard: some View {
+        GlassCard {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Device").font(Theme.font(15, .heavy)).foregroundStyle(.white)
+                row("Model", bracelet.modelNumber ?? (bracelet.isThirdGeneration ? "Bond Touch More" : "Bond Touch"))
+                row("Battery", batteryText)
+                row("Firmware", bracelet.firmwareVersion ?? "—")
+                if let alert = bracelet.batteryAlert {
+                    HStack(spacing: 8) {
+                        Text("Battery lights").foregroundStyle(Theme.subtitle)
+                        Spacer()
+                        Circle().fill(Color(rgbInt: alert.lowRGB)).frame(width: 10, height: 10)
+                        Text("low \(alert.lowPercent)%").foregroundStyle(.white)
+                        Circle().fill(Color(rgbInt: alert.criticalRGB)).frame(width: 10, height: 10)
+                        Text("critical \(alert.criticalPercent)%").foregroundStyle(.white)
+                    }
+                    .font(Theme.font(13))
+                }
+            }
+        }
+    }
+
+    private var batteryText: String {
+        guard let pct = bracelet.batteryPercent else { return bracelet.charging == true ? "Charging" : "—" }
+        return bracelet.charging == true ? "\(pct)% · charging" : "\(pct)%"
+    }
+
+    private func row(_ title: String, _ value: String) -> some View {
+        HStack {
+            Text(title).foregroundStyle(Theme.subtitle)
+            Spacer()
+            Text(value).foregroundStyle(.white).monospacedDigit()
+        }
+        .font(Theme.font(14))
+    }
+
+    // MARK: Vibration
+
+    private var vibrationCard: some View {
+        GlassCard {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Vibration").font(Theme.font(15, .heavy)).foregroundStyle(.white)
+                Picker("Strength", selection: Binding(get: { nearestPreset }, set: { apply(level: $0) })) {
+                    ForEach(Self.presets) { Text($0.name).tag($0.level) }
+                }
+                .pickerStyle(.segmented)
+                // Fine-tune between the bracelet's nine strengths.
+                HStack {
+                    Image(systemName: "speaker.wave.1").foregroundStyle(Theme.subtitle)
+                    Slider(value: Binding(get: { Double(levels.firstIndex(of: level) ?? 6) },
+                                          set: { apply(level: levels[Int($0.rounded())]) }),
+                           in: 0...Double(levels.count - 1), step: 1)
+                        .tint(Theme.accent)
+                    Image(systemName: "speaker.wave.3").foregroundStyle(Theme.subtitle)
+                }
+                .accessibilityLabel("Fine-tune strength")
+                if bracelet.isThirdGeneration {
+                    // The Bond Touch More's two motors: which side vibrates more.
+                    Text("Balance").font(Theme.font(13, .semibold)).foregroundStyle(.white)
+                    HStack {
+                        Text("Left").font(Theme.font(12)).foregroundStyle(Theme.subtitle)
+                        Slider(value: Binding(get: { Double(balance) }, set: { apply(balance: Int($0.rounded())) }),
+                               in: 0...4, step: 1)
+                            .tint(Theme.accent)
+                        Text("Right").font(Theme.font(12)).foregroundStyle(Theme.subtitle)
+                    }
+                    .accessibilityLabel("Motor balance")
+                }
+                Text(bracelet.isReady ? "Your bracelet buzzes as you change it."
+                                      : "Saved — sent to your bracelet when it connects.")
+                    .font(.caption).foregroundStyle(Theme.subtitle)
+            }
+        }
+    }
+
+    private var nearestPreset: Int {
+        Self.presets.min { abs($0.level - level) < abs($1.level - level) }?.level ?? 80
+    }
+
+    private func apply(level new: Int? = nil, balance newBalance: Int? = nil) {
+        let l = new ?? level, b = newBalance ?? balance
+        guard l != level || b != balance else { return }
+        bracelet.setVibration(level: l, balance: b)
+        bracelet.previewVibration(level: l, balance: b)
+        level = l; balance = b
+    }
+
+    // MARK: Colour
+
+    private var colorCard: some View {
+        GlassCard {
+            VStack(alignment: .leading, spacing: 10) {
+                ColorPicker("Your colour", selection: $color, supportsOpacity: false)
+                    .foregroundStyle(.white).font(Theme.font(15, .heavy))
+                Text(bracelet.isReady ? "Your bracelet lights up in it while you choose. Your partner sees your touches in this colour."
+                                      : "Your partner sees your touches in this colour.")
+                    .font(.caption).foregroundStyle(Theme.subtitle)
+            }
+        }
+        .onChange(of: color) { new in
+            let rgb = new.rgbInt
+            guard rgb != store.profile.colorRGB else { return }
+            store.profile.colorRGB = rgb
+            bracelet.setUserColor(rgb)
+            bracelet.previewColor(rgb)
+            // The preview goes out 2 s after the last change.
+            previewEnd?.cancel()
+            previewEnd = Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 2_000_000_000)
+                guard !Task.isCancelled else { return }
+                bracelet.endColorPreview()
+                await model.publishProfile()
+            }
+        }
     }
 }
 

@@ -38,6 +38,12 @@ struct PrivateSpaceView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbarColorScheme(.dark, for: .navigationBar)
         .onAppear(perform: begin)
+        // As the original: a double tap on your own (connected) bracelet unlocks it.
+        .onChange(of: model.braceletDoubleTaps) { _ in
+            guard phase == .locked else { return }
+            entry = ""; error = nil
+            phase = .unlocked
+        }
     }
 
     private var lockTitle: String {
