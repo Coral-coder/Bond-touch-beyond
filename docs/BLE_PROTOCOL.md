@@ -384,6 +384,55 @@ there is no standard Heart-Rate-Service (0x180D / 0x2A37) usage.
 factoryTestMode)`. Firmware thresholds: current/DFU-needed `1.0.3.10`, min supported
 `1.0.2.0`.
 
+**Handshake, in detail** (`HeartBleManager.onHeartState` / `onHeartEvent` /
+`onFirmwareVersion`, re-read from the decompiled code; implemented in
+`Sources/Bluetooth/HeartPendant.swift`):
+
+1. Scan by name `BondHeart` (and `BOND_H_DFU`). Once paired, scan results from any other
+   address are ignored (`HEART_SAVED_BLE_DEVICE_ADDRESS`). Connect with 5 retries × 200 ms.
+2. Discover; require service `014F0A00` with `FA01`/`FA02`/`FA03` and battery `180F/2A19`.
+   Enable notifications on `FA01` and on the battery level.
+3. React to state frames on `FA01`:
+   - `130` WAITING_TOKEN → manager state *Authentication*; write the token, then the AUID.
+   - `131` WAITING_AUID → *Authentication*; write the AUID.
+   - `132` OOBE → manager state *Oobe* (the UI shows "Your pendant should be flashing right
+     now. Double-tap it again to continue."). The pendant then sends event `19` PAIRED_SIG
+     and the app answers `[0x07, 0x31]`.
+   - `133` CONNECTED → write **`[0x1C, 0x31]` to `FA02` (read firmware)**; the pendant
+     answers with acknowledgement `0x0A, 28, major, minor, patch, build` on `FA01`.
+4. On the firmware ack the battery is read; then: firmware ≥ `1.0.3.10` → *Connected*;
+   older and battery ≥ 50 % → *DfuNeeded*; older and lower → *BatteryNeeded*.
+   (Manager states: `Authentication`, `Oobe`, `Connected`, `DfuNeeded`, `BatteryNeeded`.)
+5. Events `20…26` are only forwarded to the UI (timeout, wrong token, unsupported id,
+   no auth, factory button/shake).
+
+Details of the frames:
+- AUID: `Random.nextInt()` once, stored as `HEART_SAVED_AUID`; frame
+  `[0x0A, auid u32 LE, 0, 0, 0, 0]` (Nordic `FORMAT_UINT32` = 20, little-endian).
+- savePattern: the payload is `normalized.subList(0, min(19, size - 1))` — **the last
+  interval is always dropped**; each value is written as `FORMAT_UINT8` (17), so an interval
+  under 260 ms would wrap (we clamp to 0…255). The intervals are the heartbeat's
+  `pattern`, i.e. the RR intervals in ms from the recording.
+- `FA03` read (`HeartbeatCountCharacteristicResponse`): `u32 LE @0` and `u32 LE @4`. The app
+  returns `@0` and stores it as the heartbeat's played ("felt") count; the debug log labels
+  the two "beats count" / "played count" in an order that suggests `@0` = played,
+  `@4` = beats (unconfirmed). The dashboard reads it with a 1 s timeout per attempt, up to
+  30 s.
+- All writes use the Nordic default write type (with response).
+- `setSetting [0x10, 0x33]` exists, no caller found that explains it.
+- Forgetting a pendant clears `HEART_SAVED_BLE_DEVICE_ADDRESS`, `HEART_SAVED_AUID`,
+  `HEART_SAVED_BLE_DEVICE_FW_VERSION` and the last battery level, then removes the OS bond.
+- `FA03` is encrypted: on iOS the first read triggers the system pairing prompt.
+- Pendant firmware ships in the APK as `res/raw/heart_dfu_v102.zip` and
+  `heart_dfu_v103.zip` (Nordic DFU packages, bootloader name `BOND_H_DFU`). Not used by
+  this app yet.
+- The original records a heartbeat with CameraX: 600 frames (~20 s at 30 fps), per frame
+  the mean HSV hue of the image, then RR intervals from the peaks (`HeartBeatAnalyzer`,
+  `BpmInfo`).
+
+Note for the bracelet side: `"BondHeart"` starts with `"BOND"`, so the bracelet's name filter
+must exclude it (`BondGATT.isBondName`).
+
 ---
 
 ## 3. DFU / firmware update

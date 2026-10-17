@@ -90,9 +90,11 @@ targets:
         UIRequiresFullScreen: true
         ITSAppUsesNonExemptEncryption: false
         # CoreBluetooth usage strings are required or the app is rejected / crashes on first scan.
-        NSBluetoothAlwaysUsageDescription: Bond Touch Beyond uses Bluetooth to talk to your bracelet.
-        NSBluetoothPeripheralUsageDescription: Bond Touch Beyond uses Bluetooth to talk to your bracelet.
-        NSHealthShareUsageDescription: Bond Touch Beyond reads your heart rate so you can send your live heartbeat to your partner's bracelet.
+        NSBluetoothAlwaysUsageDescription: Bond Touch Beyond uses Bluetooth to talk to your bracelet and your Bond Heart pendant.
+        NSBluetoothPeripheralUsageDescription: Bond Touch Beyond uses Bluetooth to talk to your bracelet and your Bond Heart pendant.
+        # Bond Heart: a heartbeat is recorded with the camera and flash (fingertip on the lens).
+        NSCameraUsageDescription: Bond Touch Beyond records your heartbeat with the camera and flash while your fingertip covers them. Nothing is photographed or stored.
+        NSHealthShareUsageDescription: Bond Touch Beyond reads your heart rate (and Apple Watch beat-to-beat recordings, for Bond Heart) so you can send your heartbeat to your partner's bracelet or pendant.
         NSHealthUpdateUsageDescription: Bond Touch Beyond does not write to Health; this permission is required by the HealthKit framework.
         NSLocationWhenInUseUsageDescription: Bond Touch Beyond keeps running in the background so your partner's touches reach your bracelet while your phone is locked, and shows your location on the map if you share it with your partner.
         NSFaceIDUsageDescription: Bond Touch Beyond uses Face ID to unlock your Private Space.
