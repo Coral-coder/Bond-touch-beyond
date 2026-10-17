@@ -312,20 +312,46 @@ private struct BraceletSettingsContent: View {
     }
 }
 
-/// Toggles whether the bracelet buzzes for app notifications (ANCS in the original).
+/// How the bracelet tells you about a new Private Space message (the original's General /
+/// Secret notifications). Feel each one on the bracelet.
 private struct BraceletNotificationsView: View {
-    @AppStorage("braceletNotifications") private var enabled = true
+    @EnvironmentObject var model: AppModel
+    @AppStorage("braceletNotifyStyle") private var style = AppModel.BraceletNotify.general.rawValue
+
     var body: some View {
         VStack(spacing: 16) {
             GlassCard {
-                Toggle("Buzz for notifications", isOn: $enabled)
-                    .foregroundStyle(.white).tint(Theme.accent)
+                VStack(alignment: .leading, spacing: 12) {
+                    Picker("New messages", selection: $style) {
+                        Text("Off").tag(AppModel.BraceletNotify.off.rawValue)
+                        Text("General").tag(AppModel.BraceletNotify.general.rawValue)
+                        Text("Secret").tag(AppModel.BraceletNotify.secret.rawValue)
+                    }
+                    .pickerStyle(.segmented)
+                    Text(detail).font(.footnote).foregroundStyle(Theme.subtitle)
+                    if style != AppModel.BraceletNotify.off.rawValue {
+                        Button("Feel it on my bracelet") {
+                            let s = AppModel.BraceletNotify(rawValue: style) ?? .general
+                            _ = model.bracelet.play(AppModel.notification(s, colorRGB: model.selectedPartner?.colorRGB ?? model.store.profile.colorRGB),
+                                                    holdIfOffline: false)
+                        }
+                        .disabled(!model.bracelet.isReady)
+                    }
+                }
             }
-            Text("When on, your bracelet buzzes for incoming touches and messages.")
+            Text("At most one every 30 seconds, and never during Do Not Disturb.")
                 .font(.footnote).foregroundStyle(Theme.subtitle)
             Spacer()
         }
         .padding(20).navigationTitle("Bracelet notifications")
+    }
+
+    private var detail: String {
+        switch AppModel.BraceletNotify(rawValue: style) ?? .general {
+        case .off: return "Your bracelet stays still for new messages."
+        case .general: return "A quick triple buzz in your partner's colour."
+        case .secret: return "A rainbow sweep — only you know what it means."
+        }
     }
 }
 

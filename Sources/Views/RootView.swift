@@ -12,6 +12,7 @@ struct RootView: View {
             content
         }
         .overlay(alignment: .top) { RecoveryBanner().padding(.top, 60) }
+        .overlay(alignment: .top) { BraceletPromptBanner().padding(.top, 60) }
         // A heartbeat arriving (or replayed): the live EKG, over whatever screen is open.
         .overlay(alignment: .top) {
             if let show = model.heartbeatShow {

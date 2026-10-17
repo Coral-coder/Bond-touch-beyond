@@ -42,6 +42,9 @@ final class BraceletManager: NSObject, ObservableObject {
     @Published private(set) var modelNumber: String?
     @Published private(set) var charging: Bool?
     @Published private(set) var batteryAlert: BondGATT.BatteryAlertSettings?
+    /// The bracelet is in setup mode and waits for a double tap to pair with this phone
+    /// (the original shows "double-tap the flashing bracelet").
+    @Published private(set) var needsSetupTap = false
 
     // The user's bracelet settings, kept across launches and (re)applied after every pairing
     // (the original's UserBraceletData + SAVED_USER_INDEX).
@@ -600,6 +603,7 @@ final class BraceletManager: NSObject, ObservableObject {
     /// (A()) and saved slot (s()), in that order.
     private func devicePaired() {
         markConnected()
+        DispatchQueue.main.async { self.needsSetupTap = false }
         guard !paired, let gen else { return }
         paired = true
         if let rgb = userColor { enqueue(userColorWrites(gen, rgb: rgb)) }
@@ -694,6 +698,7 @@ final class BraceletManager: NSObject, ObservableObject {
             sendAuid()
         case 0x84:
             NetLog.shared.record(.fail, "Bracelet is in setup mode — double-tap it to pair")
+            DispatchQueue.main.async { self.needsSetupTap = true }
         case 0x85:
             // Connected, queue free: resume writes; the first time, read the firmware —
             // that answer is what makes the bracelet paired.
@@ -902,6 +907,7 @@ final class BraceletManager: NSObject, ObservableObject {
                 sendAuid()
             case 132:
                 NetLog.shared.record(.fail, "Bracelet is in setup mode", "Double-tap the bracelet to pair it with this phone")
+                DispatchQueue.main.async { self.needsSetupTap = true }
             case 133:
                 NetLog.shared.record(.ok, "Bracelet: handshake complete")
                 if !v3FirmwareRead, !v3FeaturesSent {

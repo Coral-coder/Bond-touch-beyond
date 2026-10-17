@@ -126,6 +126,47 @@ extension AppModel {
         list.sort { $0.sentAt < $1.sentAt }
         messagesByBond[bondID] = list
         ChatArchive.save(messagesByBond)
+        if fresh.contains(where: { $0.senderID != myUserID && $0.senderID != ChatMessage.legacySelf
+                                   && Date().timeIntervalSince($0.sentAt) < 5 * 60 }) {
+            notifyBracelet(bondID: bondID)
+        }
+    }
+
+    // MARK: - Bracelet notifications
+
+    /// How the bracelet tells you about a new Private Space message, as the original:
+    /// General — a quick triple buzz in the partner's colour; Secret — a rainbow sweep that
+    /// only you know the meaning of; or off.
+    enum BraceletNotify: String, CaseIterable { case off, general, secret }
+
+    static var braceletNotify: BraceletNotify {
+        BraceletNotify(rawValue: UserDefaults.standard.string(forKey: "braceletNotifyStyle") ?? "") ?? .general
+    }
+
+    /// At most one every 30 seconds; never during Do Not Disturb.
+    private func notifyBracelet(bondID: String) {
+        let style = Self.braceletNotify
+        guard style != .off, !store.quiet() else { return }
+        let key = "BraceletNotifiedAt"
+        if let last = UserDefaults.standard.object(forKey: key) as? Date, Date().timeIntervalSince(last) < 30 { return }
+        UserDefaults.standard.set(Date(), forKey: key)
+        // The chat bond may be the iCloud link for an original-app partner: use whoever it is.
+        let partner = partners.first { $0.id == bondID || chatBondID(for: $0.id) == bondID }
+        _ = bracelet.play(Self.notification(style, colorRGB: partner?.colorRGB ?? store.profile.colorRGB),
+                          holdIfOffline: false)
+    }
+
+    static func notification(_ style: BraceletNotify, colorRGB: Int) -> TouchMessage {
+        switch style {
+        case .secret:
+            // A sweep along the whole bar, red → violet.
+            let sweep = (0..<TouchPattern.positions).flatMap { p in [TouchPattern.sample([p]), TouchPattern.sample([p])] }
+            return TouchMessage(senderID: "notification", pattern: sweep + sweep.reversed(), generation: 3,
+                                colorRGB: 0xFF2A2A, endColorRGB: 0x8A2BE2)
+        default:
+            return TouchMessage(senderID: "notification", pattern: [90, 90, 90, 90, 90], generation: 2,
+                                colorRGB: colorRGB)
+        }
     }
 
     /// The id of our latest message the partner's phone has received, for a "Seen" under it.
