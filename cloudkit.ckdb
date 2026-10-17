@@ -11,7 +11,20 @@ DEFINE SCHEMA
     -- kept so this import only ADDS (Production doesn't allow removing fields). They're unused.
     --
     -- Import in the CloudKit Console (Development schema), then Deploy Schema Changes to
-    -- Production.
+    -- Production. An import REPLACES the whole schema, so this file is complete — including
+    -- CloudKit's own built-in Users type, which can't be removed.
+
+    RECORD TYPE Users (
+        "___createTime" TIMESTAMP,
+        "___createdBy"  REFERENCE,
+        "___etag"       STRING,
+        "___modTime"    TIMESTAMP,
+        "___modifiedBy" REFERENCE,
+        "___recordID"   REFERENCE QUERYABLE,
+        roles           LIST<INT64>,
+        GRANT WRITE TO "_creator",
+        GRANT READ TO "_world"
+    );
 
     RECORD TYPE Bond (
         ownerName   STRING,
