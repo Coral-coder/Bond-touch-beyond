@@ -286,7 +286,8 @@ actor CloudRelay {
     func sendTouch(_ touch: TouchMessage, bond: Bond) async throws {
         let body = TouchPayload(id: touch.id, sentAt: touch.sentAt, pattern: touch.pattern, generation: touch.generation,
                                 colorRGB: touch.colorRGB, endColorRGB: touch.endColorRGB,
-                                meaningLabel: touch.meaningLabel, meaningEmoji: touch.meaningEmoji)
+                                meaningLabel: touch.meaningLabel, meaningEmoji: touch.meaningEmoji,
+                                heartbeatBPM: touch.heartbeatBPM)
         try await sendEvent(.touch, bond: bond) { (seq: Int) -> TouchPayload in var b = body; b.seq = seq; return b }
     }
 
@@ -423,7 +424,8 @@ actor CloudRelay {
                 events.touches.append(TouchMessage(id: t.id, bondID: code, senderID: partnerID, pattern: t.pattern,
                                                    generation: t.generation, colorRGB: t.colorRGB,
                                                    endColorRGB: t.endColorRGB, sentAt: t.sentAt,
-                                                   meaningLabel: t.meaningLabel, meaningEmoji: t.meaningEmoji))
+                                                   meaningLabel: t.meaningLabel, meaningEmoji: t.meaningEmoji,
+                                                   heartbeatBPM: t.heartbeatBPM))
             }
             for (seq, r) in messageRefs {
                 guard let m = open(MessagePayload.self, records[r.id], code), m.seq == seq else { continue }
@@ -481,6 +483,8 @@ private struct TouchPayload: Codable {
     /// The saved meaning it was sent as, so the partner sees the name over it.
     var meaningLabel: String? = nil
     var meaningEmoji: String? = nil
+    /// Set when it's a heartbeat (the pattern is then the EKG).
+    var heartbeatBPM: Int? = nil
 }
 private struct MessagePayload: Codable {
     var seq = 0

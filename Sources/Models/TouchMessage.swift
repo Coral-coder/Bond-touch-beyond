@@ -25,10 +25,13 @@ struct TouchMessage: Identifiable, Codable, Equatable {
     /// matches one — shown over the touch on Home.
     var meaningLabel: String?
     var meaningEmoji: String?
+    /// Set when this is a heartbeat (beats per minute): `pattern` then holds the EKG, and
+    /// it plays, shows and is listed as a heartbeat.
+    var heartbeatBPM: Int?
 
     init(id: UUID = UUID(), bondID: String = "", senderID: String, pattern: [Int], generation: Int = 2,
          colorRGB: Int, endColorRGB: Int? = nil, sentAt: Date = Date(),
-         meaningLabel: String? = nil, meaningEmoji: String? = nil) {
+         meaningLabel: String? = nil, meaningEmoji: String? = nil, heartbeatBPM: Int? = nil) {
         self.id = id
         self.bondID = bondID
         self.senderID = senderID
@@ -39,10 +42,11 @@ struct TouchMessage: Identifiable, Codable, Equatable {
         self.sentAt = sentAt
         self.meaningLabel = meaningLabel
         self.meaningEmoji = meaningEmoji
+        self.heartbeatBPM = heartbeatBPM
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, bondID, senderID, pattern, generation, colorRGB, endColorRGB, sentAt, meaningLabel, meaningEmoji
+        case id, bondID, senderID, pattern, generation, colorRGB, endColorRGB, sentAt, meaningLabel, meaningEmoji, heartbeatBPM
     }
 
     init(from decoder: Decoder) throws {
@@ -57,6 +61,7 @@ struct TouchMessage: Identifiable, Codable, Equatable {
         sentAt = try c.decode(Date.self, forKey: .sentAt)
         meaningLabel = try c.decodeIfPresent(String.self, forKey: .meaningLabel)
         meaningEmoji = try c.decodeIfPresent(String.self, forKey: .meaningEmoji)
+        heartbeatBPM = try c.decodeIfPresent(Int.self, forKey: .heartbeatBPM)
     }
 
     /// The pattern as on/off milliseconds (for generation-2 bracelets).

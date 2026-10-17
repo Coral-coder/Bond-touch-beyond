@@ -323,12 +323,27 @@ struct HomeView: View {
         let mine = touch.senderID == model.myUserID || touch.senderID == ChatMessage.legacySelf
         let meaning = model.meaningTag(for: touch)
         return HStack(spacing: 12) {
-            TouchViz(pattern: touch.pattern, generation: touch.generation,
-                     colorRGB: touch.colorRGB, endColorRGB: touch.endColorRGB, height: 64)
+            Group {
+                if let bpm = touch.heartbeatBPM {
+                    // A heartbeat is listed as its EKG, with the BPM.
+                    EKGView(bpm: bpm, colorRGB: touch.colorRGB)
+                        .frame(height: 64)
+                        .overlay(alignment: .topLeading) {
+                            Label("\(bpm) BPM", systemImage: "heart.fill")
+                                .font(Theme.font(12, .heavy)).foregroundStyle(.white)
+                                .padding(.horizontal, 9).padding(.vertical, 4)
+                                .background(Capsule().fill(.black.opacity(0.45)))
+                                .accessibilityLabel("Heartbeat, \(bpm) beats per minute")
+                        }
+                } else {
+                    TouchViz(pattern: touch.pattern, generation: touch.generation,
+                             colorRGB: touch.colorRGB, endColorRGB: touch.endColorRGB, height: 64)
+                }
+            }
                 .frame(maxWidth: .infinity)
                 .overlay {
                     // A touch that is a saved meaning wears its name right across it.
-                    if let meaning {
+                    if touch.heartbeatBPM == nil, let meaning {
                         HStack(spacing: 6) {
                             if !meaning.emoji.isEmpty { Text(meaning.emoji).font(.system(size: 17)) }
                             Text(meaning.label).font(Theme.font(16, .heavy)).lineLimit(1).minimumScaleFactor(0.7)

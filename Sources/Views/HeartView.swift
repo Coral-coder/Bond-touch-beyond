@@ -1,7 +1,8 @@
 import SwiftUI
 
 /// Send your heartbeat: one press reads your current heart rate (Apple Watch / Health) and
-/// sends 5 seconds of it to your partner's bracelet, which beats in time and then stops.
+/// sends 5 seconds of it to your partner's bracelet as an EKG, which beats in time and then
+/// stops. It's listed in history on both phones.
 struct HeartView: View {
     @EnvironmentObject var model: AppModel
     @EnvironmentObject var heart: HeartRateService
@@ -42,6 +43,14 @@ struct HeartView: View {
             .accessibilityLabel("Send my heartbeat to \(partnerName)")
             .onChange(of: model.sendingHeartbeat) { on in if on { beatStart = Date() } }
 
+            // What's being sent, as it plays on their bracelet: the EKG.
+            if model.sendingHeartbeat, let bpm = sentBPM ?? heart.currentBPM {
+                EKGView(bpm: bpm, start: beatStart)
+                    .frame(height: 90)
+                    .padding(.horizontal, 12)
+                    .transition(.opacity)
+            }
+
             Text(model.sendingHeartbeat
                  ? "\(partnerName)'s bracelet is beating with your heart for 5 seconds."
                  : "Press to send 5 seconds of your heartbeat to \(partnerName).")
@@ -58,8 +67,8 @@ struct HeartView: View {
                 Text(model.statusLine).font(Theme.font(13)).foregroundStyle(Theme.amber)
                     .multilineTextAlignment(.center).padding(.horizontal, 24)
             }
-            if model.partnerHeartbeatActive {
-                Label("\(partnerName)'s heartbeat is playing on your bracelet", systemImage: "waveform.path.ecg")
+            if let show = model.heartbeatShow, show.name != "Your" {
+                Label("\(show.name)'s heartbeat is playing on your bracelet", systemImage: "waveform.path.ecg")
                     .font(Theme.font(13, .semibold)).foregroundStyle(Theme.pink)
             }
             Spacer()

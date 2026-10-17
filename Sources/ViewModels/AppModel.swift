@@ -119,6 +119,7 @@ final class AppModel: ObservableObject {
     /// background the phone can't run its own vibration, so the touch is held for the
     /// bracelet and the push notification is what buzzes.
     func feel(_ touch: TouchMessage) {
+        if let bpm = touch.heartbeatBPM { feelHeartbeat(touch, bpm: bpm); return }
         let foreground = UIApplication.shared.applicationState == .active
         if bracelet.play(touch, holdIfOffline: !foreground) { return }
         if foreground {
@@ -127,17 +128,53 @@ final class AppModel: ObservableObject {
         }
     }
 
-    /// Plays a partner's heartbeat on the bracelet, or lub-dubs the phone if it isn't connected.
-    func feelHeartbeat(bpm: Int) {
-        bracelet.playHeartbeat(bpm: bpm)       // also drives the on-screen heartbeat
-        if !bracelet.isReady { haptics.playHeartbeat(bpm: bpm) }
+    /// A heartbeat on screen now (the live EKG card), and its monitor beep.
+    @Published var heartbeatShow: HeartbeatShow?
+    private let heartbeatSound = HeartbeatSound()
+
+    /// Plays a heartbeat: on a Bond Touch More the EKG itself (the light rests mid-band and
+    /// jumps up and down on each beat, the motors following); on other bracelets a pulse per
+    /// beat; with no bracelet, on the phone. On screen it's a live EKG with a beep per beat.
+    func feelHeartbeat(_ touch: TouchMessage, bpm: Int) {
+        let foreground = UIApplication.shared.applicationState == .active
+        let seconds = 5.0
+        if bracelet.isReady {
+            if bracelet.isThirdGeneration { _ = bracelet.play(touch, holdIfOffline: false) }
+            else { bracelet.playHeartbeat(bpm: bpm, seconds: seconds, colorRGB: touch.colorRGB) }
+        } else if foreground {
+            haptics.playHeartbeat(bpm: bpm, seconds: seconds)
+        }
+        guard foreground else { return }
+        let mine = touch.senderID == myUserID || touch.senderID == ChatMessage.legacySelf
+        let name = mine ? "Your" : (partners.first { $0.id == touch.bondID }?.displayName ?? "Partner")
+        let show = HeartbeatShow(bpm: bpm, colorRGB: touch.colorRGB, name: mine ? "Your" : name,
+                                 start: Date(), seconds: seconds)
+        heartbeatShow = show
+        heartbeatSound.play(bpm: bpm, seconds: seconds, start: show.start)
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: UInt64((seconds + 0.6) * 1_000_000_000))
+            if self.heartbeatShow?.id == show.id { self.heartbeatShow = nil }
+        }
+    }
+
+    func dismissHeartbeat() {
+        heartbeatShow = nil
+        heartbeatSound.stop()
+    }
+
+    /// A heartbeat as a touch: the EKG on the Bond Touch More bar, tagged with its BPM.
+    func heartbeatTouch(bpm: Int, bondID: String, senderID: String, id: UUID = UUID(), sentAt: Date = Date()) -> TouchMessage {
+        TouchMessage(id: id, bondID: bondID, senderID: senderID, pattern: EKG.samples(bpm: bpm),
+                     generation: 3, colorRGB: EKG.colorRGB, sentAt: sentAt, heartbeatBPM: bpm)
     }
     let store = LocalStore()
     let heart = HeartRateService()
     let location = LocationService()
     let relay = CloudRelay()
 
-    @Published var sharingLocation = false
+    /// Location sharing — on unless the user turned it off. Kept in the Keychain, so it stays
+    /// as set across updates and reinstalls.
+    @Published var sharingLocation = StickySetting.bool("shareLocation", default: true)
 
     var selectedPartner: Partner? { partners.first { $0.id == selectedPartnerID } }
     var activeBond: Bond? { selectedPartner?.bond }
@@ -173,7 +210,9 @@ final class AppModel: ObservableObject {
         watchStatusForPresence()
         // A touch that didn't make it to the bracelet plays on the phone instead.
         bracelet.onPlayFailed = { [weak self] touch in
-            Task { @MainActor in self?.haptics.play(touch) }
+            Task { @MainActor in
+                if let bpm = touch.heartbeatBPM { self?.haptics.playHeartbeat(bpm: bpm) } else { self?.haptics.play(touch) }
+            }
         }
         watch.start(self)
         recovery.start(bracelet)
@@ -197,6 +236,7 @@ final class AppModel: ObservableObject {
 
     func setLocationSharing(_ on: Bool) {
         sharingLocation = on
+        StickySetting.set("shareLocation", on)
         Task { await legacySetSharing(on) }
         if on {
             location.start()
@@ -234,6 +274,8 @@ final class AppModel: ObservableObject {
         bracelet.startScanning()
         // The original backend works without iCloud, so start it first and independently.
         startLegacySync()
+        // Sharing stays as the user left it (on by default) — it isn't reset by an update.
+        if sharingLocation { setLocationSharing(true) }
         iCloudStatus = await relay.accountStatusMessage()
         guard iCloudStatus == nil else {
             statusLine = "iCloud is not signed in."
@@ -476,7 +518,8 @@ final class AppModel: ObservableObject {
     /// colours and name, and for an original-app partner by meaning id, so their bracelet
     /// plays it as the meaning.
     func sendTouch(pattern: [Int], generation: Int = 2, colorRGB: Int, endColorRGB: Int? = nil,
-                   toBondID: String? = nil, meaning given: TouchMeaning? = nil, matchMeaning: Bool = true) async {
+                   toBondID: String? = nil, meaning given: TouchMeaning? = nil, matchMeaning: Bool = true,
+                   heartbeatBPM: Int? = nil) async {
         guard let bond = bond(for: toBondID) else { return }
         // Finish sending even if the app goes to the background meanwhile (e.g. a touch
         // made on the bracelet while the phone is locked).
@@ -494,7 +537,8 @@ final class AppModel: ObservableObject {
                                  generation: meaning?.touchGeneration ?? generation,
                                  colorRGB: meaning?.colorRGB ?? colorRGB,
                                  endColorRGB: meaning?.endColorRGB ?? endColorRGB,
-                                 meaningLabel: meaning?.label, meaningEmoji: meaning?.emoji)
+                                 meaningLabel: meaning?.label, meaningEmoji: meaning?.emoji,
+                                 heartbeatBPM: heartbeatBPM)
         let route = bond.legacy ? "original Bond API" : "iCloud"
         NetLog.shared.log(.send, "Send \(meaning.map { "\"\($0.label)\"" } ?? "touch") → \(bond.partnerName) (\(route))",
                           "gen \(touch.generation), \(touch.pattern.count) samples")
@@ -518,8 +562,12 @@ final class AppModel: ObservableObject {
                 NetLog.shared.log(.ok, "Touch → iCloud accepted", "\(bond.partnerName)")
                 // Wake their phone right away (CloudKit's own push can lag in deep sleep).
                 let me = store.profile.name.isEmpty ? "Someone" : store.profile.name
-                let body = meaning.map { "\($0.emoji) \($0.label)".trimmingCharacters(in: .whitespaces) } ?? "❤️"
-                await pushPartner(bondID: bond.id, title: "\(me) touched you", body: body, touch: touch)
+                if let bpm = heartbeatBPM {
+                    await pushPartner(bondID: bond.id, title: "\(me)'s heartbeat", body: "💓 \(bpm) BPM", touch: touch)
+                } else {
+                    let body = meaning.map { "\($0.emoji) \($0.label)".trimmingCharacters(in: .whitespaces) } ?? "❤️"
+                    await pushPartner(bondID: bond.id, title: "\(me) touched you", body: body, touch: touch)
+                }
             }
             recordTouch(touch)
         } catch {
@@ -586,7 +634,8 @@ final class AppModel: ObservableObject {
         return TouchMessage(id: sent.id, bondID: partner.id, senderID: "\(partner.id)-\(partnerRole)",
                             pattern: sent.pattern, generation: sent.generation, colorRGB: sent.colorRGB,
                             endColorRGB: sent.endColorRGB, sentAt: sent.sentAt,
-                            meaningLabel: sent.meaningLabel, meaningEmoji: sent.meaningEmoji)
+                            meaningLabel: sent.meaningLabel, meaningEmoji: sent.meaningEmoji,
+                            heartbeatBPM: sent.heartbeatBPM)
     }
 
     /// Plays a partner's incoming touch on the bracelet (or the phone) once — however many
@@ -594,7 +643,9 @@ final class AppModel: ObservableObject {
     /// slot, up to 15 minutes old (as the original app), and not during Do Not Disturb.
     private var deliveredTouchIDs: Set<UUID> = []
     func deliver(_ touch: TouchMessage) {
-        guard !store.doNotDisturb, Date().timeIntervalSince(touch.sentAt) < 15 * 60,
+        // A heartbeat is live: it plays only within 2 minutes (it's still kept in history).
+        let maxAge: TimeInterval = touch.heartbeatBPM == nil ? 15 * 60 : 120
+        guard !store.doNotDisturb, Date().timeIntervalSince(touch.sentAt) < maxAge,
               deliveredTouchIDs.insert(touch.id).inserted else { return }
         feel(touch)
     }
@@ -689,11 +740,14 @@ final class AppModel: ObservableObject {
             // Every partner's touches play, each in its own slot (as the original app); `deliver`
             // skips stale ones, repeats (already played from a push) and Do Not Disturb.
             events.touches.forEach(deliver)
-            // A heartbeat plays once, for 5 s — and only if it's fresh (not one that was
-            // sent long ago and is only now being fetched).
-            if !store.doNotDisturb, let bpm = events.latestBPM, let at = events.latestBPMAt,
-               Date().timeIntervalSince(at) < 60 {
-                feelHeartbeat(bpm: bpm)
+            // A heartbeat from an older build (its own record, not in the touch ring): listed
+            // in history like any heartbeat, and played if fresh.
+            if let bpm = events.latestBPM, let at = events.latestBPMAt {
+                let hb = heartbeatTouch(bpm: bpm, bondID: partner.id, senderID: "\(partner.id)-\(partner.bond.isOwner ? "B" : "A")",
+                                        id: TouchMessage.stableID(from: "hb-\(partner.id)-\(Int(at.timeIntervalSince1970))"),
+                                        sentAt: at)
+                recordTouch(hb)
+                deliver(hb)
             }
         }
     }
@@ -717,34 +771,19 @@ final class AppModel: ObservableObject {
             return nil
         }
         sendingHeartbeat = true
+        statusLine = ""
         defer { Task { @MainActor in try? await Task.sleep(nanoseconds: 5_000_000_000); self.sendingHeartbeat = false } }
+        // It goes as a touch tagged with the BPM: over iCloud the EKG itself (in the touch ring
+        // and inside the push, so it plays right away and shows in history on both phones);
+        // to an original-app partner, a press per beat (their app only knows touches).
         if bond.legacy {
-            // 5 s of heartbeats as an on/off pattern, shaped like a real heart: each beat is
-            // a big "lub" press (150 ms), a short gap, a smaller "dub" press (90 ms), then a
-            // rest to the next beat. On the partner's bracelet it buzzes lub-dub, lub-dub.
-            let period = 60_000 / max(bpm, 30)
-            let beats = max(1, 5_000 / period)
-            var pattern: [Int] = []
-            let lubDub = period >= 150 + 150 + 90 + 80
-            for i in 0..<beats {
-                pattern.append(150)                                   // lub (on)
-                if lubDub {
-                    pattern.append(150)                               // gap (off)
-                    pattern.append(90)                                // dub (on)
-                    if i < beats - 1 { pattern.append(max(period - 390, 80)) }  // rest (off)
-                } else if i < beats - 1 {
-                    pattern.append(max(period - 150, 80))             // rest (off)
-                }
-            }
-            await sendTouch(pattern: pattern, generation: 2, colorRGB: 0xE85D75, toBondID: bond.id, matchMeaning: false)
+            await sendTouch(pattern: EKG.onOff(bpm: bpm), generation: 2, colorRGB: EKG.colorRGB,
+                            toBondID: bond.id, matchMeaning: false, heartbeatBPM: bpm)
         } else {
-            do {
-                try await relay.sendHeartbeat(bpm: bpm, bond: bond, senderID: myUserID)
-                let me = store.profile.name.isEmpty ? "Someone" : store.profile.name
-                await pushPartner(bondID: bond.id, title: "\(me)'s heartbeat", body: "💓 \(bpm) bpm")
-            }
-            catch { statusLine = "Heartbeat failed: \(error.localizedDescription)"; return nil }
+            await sendTouch(pattern: EKG.samples(bpm: bpm), generation: 3, colorRGB: EKG.colorRGB,
+                            toBondID: bond.id, matchMeaning: false, heartbeatBPM: bpm)
         }
+        if statusLine.hasPrefix("Send failed") { statusLine = "Heartbeat " + statusLine.lowercased(); return nil }
         return bpm
     }
 }

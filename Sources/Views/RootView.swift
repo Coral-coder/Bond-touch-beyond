@@ -12,6 +12,15 @@ struct RootView: View {
             content
         }
         .overlay(alignment: .top) { RecoveryBanner().padding(.top, 60) }
+        // A heartbeat arriving (or replayed): the live EKG, over whatever screen is open.
+        .overlay(alignment: .top) {
+            if let show = model.heartbeatShow {
+                HeartbeatOverlay(show: show) { model.dismissHeartbeat() }
+                    .padding(.top, 54)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
+        }
+        .animation(.spring(response: 0.45, dampingFraction: 0.85), value: model.heartbeatShow)
         .confirmationDialog("Which bracelet is this firmware for?",
                             isPresented: Binding(get: { recovery.pendingImport != nil },
                                                  set: { if !$0 { recovery.pendingImport = nil } }),
