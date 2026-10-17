@@ -71,7 +71,20 @@ final class AppModel: ObservableObject {
     /// through their iCloud bond.
     var partners: [Partner] {
         let migrated = migratedLegacyIDs
-        return cloudPartners + legacyPartners.filter { !migrated.contains($0.id) }
+        let all = cloudPartners + legacyPartners.filter { !migrated.contains($0.id) }
+        // In the user's order; anyone not placed yet keeps their place after those who are.
+        let order = store.partnerOrder
+        return all.enumerated().sorted { a, b in
+            let ia = order.firstIndex(of: a.element.id) ?? order.count + a.offset
+            let ib = order.firstIndex(of: b.element.id) ?? order.count + b.offset
+            return ia < ib
+        }.map(\.element)
+    }
+
+    /// Saves a new partner order (from the Reorder screen).
+    func reorderPartners(_ ids: [String]) {
+        objectWillChange.send()
+        store.partnerOrder = ids
     }
     /// Every invite the user sent that has not been accepted yet.
     var pendingBonds: [Bond] { cloudPending + legacyPending }
@@ -219,9 +232,9 @@ final class AppModel: ObservableObject {
         }
         // The bracelet's partner slots follow the partner list: one slot per partner (up to
         // three), lit in that partner's colour — what the original app sends after pairing.
-        Publishers.CombineLatest($cloudPartners, $legacyPartners)
+        Publishers.CombineLatest3($cloudPartners, $legacyPartners, store.$partnerOrder)
             .debounce(for: .milliseconds(300), scheduler: DispatchQueue.main)
-            .sink { [weak self] _, _ in
+            .sink { [weak self] _, _, _ in
                 Task { @MainActor in
                     guard let self else { return }
                     self.bracelet.setPartnerMenu(self.partners.map { (id: $0.id, rgb: $0.colorRGB) })

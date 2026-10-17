@@ -61,6 +61,11 @@ final class LocalStore: ObservableObject {
     }
     /// iCloud bond codes this device belongs to (created or joined), persisted so bonds
     /// come back after relaunch. Maps code → true if we created it.
+    /// The user's order for their partners (bond ids, top first) — lists, the partner bar and
+    /// the bracelet's partner slots follow it.
+    @Published var partnerOrder: [String] = UserDefaults.standard.stringArray(forKey: "partnerOrder") ?? [] {
+        didSet { UserDefaults.standard.set(partnerOrder, forKey: "partnerOrder") }
+    }
     /// Saved places watched for arrival alerts.
     @Published var savedPlaces: [SavedPlace] {
         didSet { save(savedPlaces, for: .savedPlaces) }

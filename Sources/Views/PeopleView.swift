@@ -5,6 +5,7 @@ import SwiftUI
 /// it is never treated as an active partner.
 struct PeopleView: View {
     @EnvironmentObject var model: AppModel
+    @State private var reordering = false
 
     var body: some View {
         ScrollView {
@@ -20,6 +21,16 @@ struct PeopleView: View {
                         .padding(.top, 50)
                 }
 
+                if model.partners.count > 1 {
+                    HStack {
+                        Spacer()
+                        Button { reordering = true } label: {
+                            Label("Reorder", systemImage: "arrow.up.arrow.down")
+                                .font(Theme.font(13, .bold)).foregroundStyle(Theme.accent)
+                        }
+                        .accessibilityHint("Choose the order of your partners")
+                    }
+                }
                 if !model.partners.isEmpty {
                     GlassCard(padding: 0) {
                         VStack(spacing: 0) {
@@ -54,6 +65,7 @@ struct PeopleView: View {
             .padding(20)
         }
         .screenBackground()
+        .sheet(isPresented: $reordering) { ReorderPartnersSheet() }
     }
 
     private func partnerRow(_ partner: Partner) -> some View {
@@ -139,5 +151,43 @@ struct PeopleView: View {
             return "Last seen " + seen.formatted(.relative(presentation: .named))
         }
         return "Offline"
+    }
+}
+
+/// Drag partners into the order you like (top first). Home's partner bar, the lists and the
+/// bracelet's partner slots follow it — the partner on top is slot 1.
+private struct ReorderPartnersSheet: View {
+    @EnvironmentObject var model: AppModel
+    @Environment(\.dismiss) private var dismiss
+    @State private var order: [Partner] = []
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    ForEach(order) { p in
+                        HStack(spacing: 12) {
+                            AvatarRing(name: p.displayName, ringColor: Color(rgbInt: p.colorRGB), size: 36,
+                                       photo: model.photo(forBond: p.id), ringWidth: 2)
+                            Text(p.displayName).font(Theme.font(16, .bold))
+                        }
+                    }
+                    .onMove { order.move(fromOffsets: $0, toOffset: $1) }
+                } footer: {
+                    Text("Drag to reorder. The partner at the top is slot 1 on your bracelet.")
+                }
+            }
+            .environment(\.editMode, .constant(.active))
+            .navigationTitle("Reorder partners")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { model.reorderPartners(order.map(\.id)); dismiss() }
+                }
+            }
+        }
+        .onAppear { order = model.partners }
+        .preferredColorScheme(.dark)
     }
 }
