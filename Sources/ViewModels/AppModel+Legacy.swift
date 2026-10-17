@@ -161,8 +161,9 @@ extension AppModel {
                 seen.insert(touchId)
                 let msg = (t["message"] as? [String: Any]) ?? [:]
                 let ms = (msg["timestamp"] as? NSNumber)?.doubleValue ?? Date().timeIntervalSince1970 * 1000
-                let meaningName = t["meaning"] as? String
-                let meaning = meanings.first { $0.label == meaningName }
+                // `meaning` is the id of the saved meaning the server matched (not its name).
+                let meaningRef = BondBackend.meaningRef(t["meaning"])
+                let meaning = meaningRef.flatMap { ref in meanings.first { $0.serverID == ref } }
                 let touch = TouchMessage(id: TouchMessage.stableID(from: touchId), bondID: id,
                                          senderID: (b["firebaseId"] as? String) ?? id,
                                          pattern: BondBackend.pattern(msg["pattern"]),
@@ -170,8 +171,7 @@ extension AppModel {
                                          colorRGB: meaning?.colorRGB ?? color,
                                          endColorRGB: meaning?.endColorRGB ?? color,
                                          sentAt: Date(timeIntervalSince1970: ms / 1000),
-                                         // The server names the meaning a touch was sent as.
-                                         meaningLabel: (meaningName?.isEmpty == false) ? meaningName : nil,
+                                         meaningLabel: meaning?.label,
                                          meaningEmoji: meaning?.emoji)
                 newTouches.append(touch)
                 if !firstSync, id == selectedPartnerID, !store.doNotDisturb { feel(touch) }
@@ -247,10 +247,14 @@ extension AppModel {
 
     // MARK: - Touches
 
-    func legacySendTouch(_ touch: TouchMessage, bond: Bond) async throws {
+    /// Sends a raw touch; returns the saved meaning the server matched it to, if any.
+    @discardableResult
+    func legacySendTouch(_ touch: TouchMessage, bond: Bond) async throws -> TouchMeaning? {
         let token = try await legacyToken()
-        try await BondBackend.sendTouch(bondId: bond.id, pattern: touch.pattern,
-                                        generation: touch.generation, bearer: token)
+        let result = try await BondBackend.sendTouch(bondId: bond.id, pattern: touch.pattern,
+                                                     generation: touch.generation, bearer: token)
+        guard let ref = result.meaningID else { return nil }
+        return meanings(for: bond).first { $0.serverID == ref }
     }
 
     // MARK: - Bonds / invites

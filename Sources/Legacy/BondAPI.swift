@@ -150,15 +150,25 @@ extension BondBackend {
     /// `POST bond/api/v3/bonds/{bondId}/touches {timestamp, pattern, generation}` → touch id.
     /// Generation 3 patterns are position samples (≤ 200); generation 2 on/off ms.
     @discardableResult
+    /// Returns the new touch's id and — as the original app reads it — the id of the saved
+    /// meaning the server matched the pattern to, if any.
+    @discardableResult
     static func sendTouch(bondId: String, pattern: [Int], generation: Int,
-                          bearer: String) async throws -> String? {
+                          bearer: String) async throws -> (id: String?, meaningID: String?) {
         let body: [String: Any] = [
             "timestamp": Int64(Date().timeIntervalSince1970 * 1000),
             "pattern": generation == 3 ? Array(TouchPattern.trimmed(pattern)) : (pattern.isEmpty ? [200] : pattern),
             "generation": generation == 3 ? "3" : "2"
         ]
-        let j = try await call("bond/api/v3/bonds/\(bondId)/touches", "POST", bearer: bearer, body: body)
-        return (j as? [String: Any])?["id"] as? String
+        let j = try await call("bond/api/v3/bonds/\(bondId)/touches", "POST", bearer: bearer, body: body) as? [String: Any]
+        return (j?["id"] as? String, meaningRef(j?["meaning"]))
+    }
+
+    /// A touch's `meaning` reference — a meaning id, sent as a string or a number.
+    static func meaningRef(_ value: Any?) -> String? {
+        if let s = value as? String, !s.isEmpty { return s }
+        if let n = value as? NSNumber { return n.stringValue }
+        return nil
     }
 
     /// `POST bond/api/v3/bonds/{bondId}/touches/basic {timestamp, meaningId}` — sends a saved

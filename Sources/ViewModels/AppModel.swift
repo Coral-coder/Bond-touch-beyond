@@ -483,7 +483,14 @@ final class AppModel: ObservableObject {
                 try await BondBackend.sendMeaningTouch(bondId: bond.id, meaningId: serverID,
                                                        bearer: try await legacyToken())
             } else if bond.legacy {
-                try await legacySendTouch(touch, bond: bond)
+                // As the original: the server tells us which saved meaning it matched.
+                if let matched = try await legacySendTouch(touch, bond: bond), touch.meaningLabel == nil {
+                    var tagged = touch
+                    tagged.meaningLabel = matched.label
+                    tagged.meaningEmoji = matched.emoji
+                    recordTouch(tagged)
+                    return
+                }
             } else {
                 try await relay.sendTouch(touch, bond: bond)
                 NetLog.shared.log(.ok, "Touch → iCloud accepted", "\(bond.partnerName)")
