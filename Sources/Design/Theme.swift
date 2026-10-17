@@ -39,6 +39,9 @@ enum Theme {
     static let subtitle = Color(rgbInt: 0xCFE3F2)
     static let mutedHeadline = Color(rgbInt: 0xDDEBF6)
 
+    // A faint HUD grid drawn over the sky for a subtle sci-fi depth.
+    static let grid = Color.white.opacity(0.045)
+
     static let corner: CGFloat = 20
     static let cardCorner: CGFloat = 24
 
@@ -50,20 +53,27 @@ enum Theme {
     }
 }
 
-/// The aero sky: navy gradient with soft blooms of teal, violet and pink light.
+/// The aero sky: navy gradient with soft blooms of teal, violet and pink light that drift
+/// slowly, under a faint HUD grid — a quietly futuristic, living backdrop.
 struct AeroSky: View {
+    @State private var drift = false
     var body: some View {
         ZStack {
             LinearGradient(colors: [Theme.bgTop, Theme.bgBottom], startPoint: .top, endPoint: .bottom)
             GeometryReader { geo in
                 let w = geo.size.width, h = geo.size.height
                 ZStack {
-                    bloom(Theme.accent, 0.34, w * 1.2).position(x: w * 0.15, y: 0)
-                    bloom(Theme.magenta, 0.26, w * 1.0).position(x: w, y: h * 0.35)
-                    bloom(Theme.pink, 0.22, w * 0.9).position(x: 0, y: h)
+                    bloom(Theme.accent, 0.34, w * 1.2).position(x: w * 0.15, y: drift ? h * 0.05 : -h * 0.03)
+                    bloom(Theme.magenta, 0.26, w * 1.0).position(x: drift ? w * 0.9 : w, y: h * 0.35)
+                    bloom(Theme.pink, 0.22, w * 0.9).position(x: drift ? w * 0.06 : 0, y: drift ? h * 0.94 : h)
                 }
+                .animation(.easeInOut(duration: 12).repeatForever(autoreverses: true), value: drift)
+                HUDGrid(spacing: 46)
+                    .stroke(Theme.grid, lineWidth: 0.5)
+                    .allowsHitTesting(false)
             }
         }
+        .onAppear { drift = true }
     }
 
     private func bloom(_ color: Color, _ opacity: Double, _ size: CGFloat) -> some View {
@@ -71,6 +81,23 @@ struct AeroSky: View {
             .fill(RadialGradient(colors: [color.opacity(opacity), .clear], center: .center,
                                  startRadius: 0, endRadius: size / 2))
             .frame(width: size, height: size)
+    }
+}
+
+/// A faint evenly-spaced grid of hairlines, drawn across the whole backdrop.
+struct HUDGrid: Shape {
+    var spacing: CGFloat = 46
+    func path(in rect: CGRect) -> Path {
+        var p = Path()
+        var x = rect.minX
+        while x <= rect.maxX {
+            p.move(to: CGPoint(x: x, y: rect.minY)); p.addLine(to: CGPoint(x: x, y: rect.maxY)); x += spacing
+        }
+        var y = rect.minY
+        while y <= rect.maxY {
+            p.move(to: CGPoint(x: rect.minX, y: y)); p.addLine(to: CGPoint(x: rect.maxX, y: y)); y += spacing
+        }
+        return p
     }
 }
 
@@ -83,7 +110,12 @@ struct GlassBackground<S: Shape>: View {
             .fill(.ultraThinMaterial)
             .overlay(shape.fill(LinearGradient(colors: [Theme.glassTop, Theme.glassBottom],
                                                startPoint: .top, endPoint: .bottom)))
-            .overlay(shape.stroke(LinearGradient(colors: [.white.opacity(0.55), .white.opacity(0.12)],
+            // A faint teal rim-light: the panel edge catches the sky's accent, like holo glass.
+            .overlay(shape.stroke(LinearGradient(colors: [Theme.accent.opacity(0.35), .clear, Theme.magenta.opacity(0.18)],
+                                                 startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 1.5)
+                .blur(radius: 1.5))
+            // The crisp bright top edge over it.
+            .overlay(shape.stroke(LinearGradient(colors: [.white.opacity(0.6), .white.opacity(0.1)],
                                                  startPoint: .top, endPoint: .bottom), lineWidth: 1))
             .shadow(color: Color.black.opacity(0.28), radius: 14, y: 8)
     }
@@ -117,8 +149,12 @@ struct AccentButtonStyle: ButtonStyle {
             .background(
                 Capsule().fill(LinearGradient(colors: [Color(rgbInt: 0x74D3CB), Theme.accentDeep],
                                               startPoint: .top, endPoint: .bottom))
+                    // A specular sheen across the top third, like light on a glass key.
+                    .overlay(Capsule().fill(LinearGradient(colors: [.white.opacity(0.45), .clear],
+                                                           startPoint: .top, endPoint: .center))
+                        .padding(1).mask(Capsule()))
                     .overlay(Capsule().stroke(.white.opacity(0.5), lineWidth: 1))
-                    .shadow(color: Theme.accent.opacity(0.28), radius: 10, y: 5)
+                    .shadow(color: Theme.accent.opacity(0.45), radius: 14, y: 5)
             )
             .opacity(configuration.isPressed ? 0.85 : 1)
             .scaleEffect(configuration.isPressed ? 0.98 : 1)
