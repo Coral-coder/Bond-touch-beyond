@@ -11,6 +11,11 @@ struct MapTabView: View {
         span: MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05))
     @State private var focused: String?
     @State private var didFit = false
+    /// City and time zone where a focused partner is (reverse-geocoded on this phone).
+    @State private var place: (id: String, city: String, zone: TimeZone?)?
+    @State private var lookAround: MKLookAroundScene?
+    @State private var showLookAround = false
+    private let geocoder = CLGeocoder()
 
     private struct Pin: Identifiable {
         let id: String
@@ -46,6 +51,18 @@ struct MapTabView: View {
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("Fit everyone")
+                }
+                HStack {
+                    Spacer()
+                    if let me = model.location.coordinate {
+                        Button { focused = nil; zoom(to: Pin(id: "me", partner: nil, coordinate: me)) } label: {
+                            Image(systemName: "location.fill")
+                                .font(.system(size: 15, weight: .bold)).foregroundStyle(.white)
+                                .frame(width: 44, height: 44).glass(Circle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Centre on me")
+                    }
                 }
                 Spacer()
                 if let id = focused, let p = model.partners.first(where: { $0.id == id }) {
@@ -102,10 +119,54 @@ struct MapTabView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(p.displayName).font(Theme.font(16, .heavy)).foregroundStyle(.white)
                 Text(detail(p)).font(Theme.font(13)).foregroundStyle(Theme.subtitle)
+                // Where they are and their time there, and how fresh the location is.
+                TimelineView(.periodic(from: .now, by: 30)) { ctx in
+                    Text(whereAndWhen(p, now: ctx.date)).font(Theme.font(12)).foregroundStyle(Theme.subtitle)
+                }
             }
             Spacer()
+            if lookAround != nil {
+                Button { showLookAround = true } label: {
+                    Image(systemName: "binoculars.fill")
+                        .font(.system(size: 16, weight: .bold)).foregroundStyle(.white)
+                        .frame(width: 42, height: 42).glass(Circle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Look Around at \(p.displayName)'s location")
+            }
         }
         .padding(14).glass(cornerRadius: 24)
+        .task(id: "\(p.id)-\(p.latitude ?? 0)-\(p.longitude ?? 0)") { await lookUp(p) }
+        .sheet(isPresented: $showLookAround) {
+            if let scene = lookAround { LookAroundSheet(scene: scene).ignoresSafeArea() }
+        }
+    }
+
+    private func whereAndWhen(_ p: Partner, now: Date) -> String {
+        var parts: [String] = []
+        if let place, place.id == p.id {
+            if !place.city.isEmpty { parts.append(place.city) }
+            if let zone = place.zone {
+                let f = DateFormatter()
+                f.timeZone = zone
+                f.timeStyle = .short
+                parts.append(f.string(from: now))
+            }
+        }
+        if let at = p.presence?.locationAt ?? p.lastSeen {
+            parts.append("updated " + at.formatted(.relative(presentation: .named, unitsStyle: .abbreviated)))
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    /// The partner's city and time zone, and whether Look Around imagery exists there.
+    private func lookUp(_ p: Partner) async {
+        guard let lat = p.latitude, let lng = p.longitude else { place = nil; lookAround = nil; return }
+        let loc = CLLocation(latitude: lat, longitude: lng)
+        if let mark = try? await geocoder.reverseGeocodeLocation(loc).first {
+            place = (p.id, mark.locality ?? mark.administrativeArea ?? "", mark.timeZone)
+        }
+        lookAround = try? await MKLookAroundSceneRequest(coordinate: loc.coordinate).scene
     }
 
     private func detail(_ p: Partner) -> String {
@@ -140,4 +201,13 @@ struct MapTabView: View {
                                    longitudeDelta: max((maxLng - minLng) * 1.5, 0.02)))
         if animated { withAnimation(.easeInOut(duration: 0.6)) { region = target } } else { region = target }
     }
+}
+
+/// Apple's Look Around at a partner's location (the original shows Street View).
+private struct LookAroundSheet: UIViewControllerRepresentable {
+    let scene: MKLookAroundScene
+    func makeUIViewController(context: Context) -> MKLookAroundViewController {
+        MKLookAroundViewController(scene: scene)
+    }
+    func updateUIViewController(_ vc: MKLookAroundViewController, context: Context) { vc.scene = scene }
 }
