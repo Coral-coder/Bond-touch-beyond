@@ -319,6 +319,16 @@ final class BraceletManager: NSObject, ObservableObject {
 
     var isReady: Bool { state == .connected && gen != nil }
 
+    /// Waits until every queued write has reached the bracelet (or `timeout` passes). Used
+    /// before telling iOS a background wake is done, so it doesn't suspend the app mid-touch.
+    @MainActor
+    func waitUntilIdle(timeout: TimeInterval) async {
+        let deadline = Date().addingTimeInterval(timeout)
+        while (writing || !writeQueue.isEmpty), bracelet != nil, Date() < deadline {
+            try? await Task.sleep(nanoseconds: 100_000_000)
+        }
+    }
+
     /// Plays a received heartbeat: one pulse per beat at `bpm` for `seconds` (5 s), then
     /// stops on its own.
     func playHeartbeat(bpm: Int, seconds: Double = 5, colorRGB: Int = 0xE85D75) {

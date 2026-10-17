@@ -174,7 +174,7 @@ extension AppModel {
                                          meaningLabel: meaning?.label,
                                          meaningEmoji: meaning?.emoji)
                 newTouches.append(touch)
-                if !firstSync, id == selectedPartnerID, !store.doNotDisturb { feel(touch) }
+                if !firstSync { deliver(touch) }
                 toAck.append((id, touchId))
             }
         }

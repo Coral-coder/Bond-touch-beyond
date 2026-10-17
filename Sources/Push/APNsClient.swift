@@ -22,7 +22,8 @@ actor APNsClient {
     /// the screen — still high priority with content-available, so it wakes the app at once.
     @discardableResult
     func send(toDeviceToken deviceToken: String, title: String, body: String, silent: Bool = false,
-              topic: String = AppConfig.bundleID, collapseID: String? = nil) async -> Bool {
+              topic: String = AppConfig.bundleID, collapseID: String? = nil,
+              extra: [String: Any] = [:]) async -> Bool {
         guard APNsSecrets.isConfigured, !deviceToken.isEmpty else { return false }
         guard let jwt = currentToken() else {
             NetLog.shared.record(.fail, "APNs: couldn't sign auth token")
@@ -44,7 +45,9 @@ actor APNsClient {
             "interruption-level": silent ? "passive" : "time-sensitive",
         ]
         if !silent { aps["sound"] = "default" }
-        let payload: [String: Any] = ["aps": aps]
+        // App data next to "aps" (e.g. the sealed touch) — under the 4 KB push limit.
+        var payload: [String: Any] = extra
+        payload["aps"] = aps
         request.httpBody = try? JSONSerialization.data(withJSONObject: payload)
 
         do {

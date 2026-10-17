@@ -214,7 +214,22 @@ final class AppModel: ObservableObject {
 
     // MARK: - Lifecycle
 
+    private var bootstrapTask: Task<Void, Never>?
+
+    /// Starts everything up. Safe to call from several places (the app delegate at launch —
+    /// also a background launch — and the first screen): it runs once, later callers wait
+    /// for it. It can run again only if iCloud wasn't ready (e.g. not signed in yet).
     func bootstrap() async {
+        if let running = bootstrapTask { await running.value; return }
+        let task = Task { await self.runBootstrap() }
+        bootstrapTask = task
+        await task.value
+        if !ready { bootstrapTask = nil }
+    }
+
+    private var inForeground: Bool { UIApplication.shared.applicationState != .background }
+
+    private func runBootstrap() async {
         loadMyPhoto()
         bracelet.startScanning()
         // The original backend works without iCloud, so start it first and independently.
@@ -238,9 +253,13 @@ final class AppModel: ObservableObject {
             ready = true
             statusLine = "Ready."
             await publishProfile()
-            await setOnline(true)
+            await setOnline(inForeground)
             await refreshAll()
-            startCloudPolling()
+            if inForeground { startCloudPolling() }   // a background launch just handles its push
+            if UIApplication.shared.backgroundRefreshStatus != .available {
+                NetLog.shared.log(.fail, "Background App Refresh is off for this app",
+                                  "Turn it on in Settings → General → Background App Refresh, or touches can't wake the bracelet while the app is closed")
+            }
             // A join link tapped before the app was ready (cold launch).
             if let code = AppModel.pendingJoinCode {
                 AppModel.pendingJoinCode = nil
@@ -497,7 +516,7 @@ final class AppModel: ObservableObject {
                 // Wake their phone right away (CloudKit's own push can lag in deep sleep).
                 let me = store.profile.name.isEmpty ? "Someone" : store.profile.name
                 let body = meaning.map { "\($0.emoji) \($0.label)".trimmingCharacters(in: .whitespaces) } ?? "❤️"
-                await pushPartner(bondID: bond.id, title: "\(me) touched you", body: body)
+                await pushPartner(bondID: bond.id, title: "\(me) touched you", body: body, touch: touch)
             }
             recordTouch(touch)
         } catch {
@@ -538,12 +557,43 @@ final class AppModel: ObservableObject {
 
     /// Wakes a cloud partner's phone directly via APNs (no-op if their token or our key is
     /// missing — CloudKit's own push still covers that case).
-    private func pushPartner(bondID: String, title: String, body: String) async {
+    ///
+    /// A touch rides inside the push, sealed with the bond's key, so the partner's phone can
+    /// play it on their bracelet the moment it wakes — no iCloud fetch first (a background
+    /// wake only gets a few seconds). The bond is named by its opaque locator, never its code.
+    private func pushPartner(bondID: String, title: String, body: String, touch: TouchMessage? = nil) async {
         guard let token = partnerPushTokens[bondID], !token.isEmpty else { return }
         // Their bracelet is connected → it plays the touch; don't buzz their phone too.
         let silent = partnerBraceletConnected[bondID] == true
+        let locator = BondCrypto.locator(forCode: bondID)
+        var extra: [String: Any] = ["bl": locator]
+        if let touch, let sealed = BondCrypto.seal(touch, code: bondID) { extra["bt"] = sealed.base64EncodedString() }
         await APNsClient.shared.send(toDeviceToken: token, title: title, body: body, silent: silent,
-                                     collapseID: "touch-\(bondID)")
+                                     collapseID: "t-\(locator.prefix(16))", extra: extra)
+    }
+
+    /// The touch carried in a partner's push, decrypted with that bond's key.
+    private func touchFromPush(_ userInfo: [AnyHashable: Any]) -> TouchMessage? {
+        guard let locator = userInfo["bl"] as? String, let b64 = userInfo["bt"] as? String,
+              let data = Data(base64Encoded: b64),
+              let partner = cloudPartners.first(where: { BondCrypto.locator(forCode: $0.id) == locator }),
+              let sent = BondCrypto.open(TouchMessage.self, from: data, code: partner.id) else { return nil }
+        // Same id and sender form as when it's fetched from iCloud, so it's never doubled.
+        let partnerRole = partner.bond.isOwner ? "B" : "A"
+        return TouchMessage(id: sent.id, bondID: partner.id, senderID: "\(partner.id)-\(partnerRole)",
+                            pattern: sent.pattern, generation: sent.generation, colorRGB: sent.colorRGB,
+                            endColorRGB: sent.endColorRGB, sentAt: sent.sentAt,
+                            meaningLabel: sent.meaningLabel, meaningEmoji: sent.meaningEmoji)
+    }
+
+    /// Plays a partner's incoming touch on the bracelet (or the phone) once — however many
+    /// ways it arrives (push, iCloud fetch, original backend) — from any partner, in their
+    /// slot, up to 15 minutes old (as the original app), and not during Do Not Disturb.
+    private var deliveredTouchIDs: Set<UUID> = []
+    func deliver(_ touch: TouchMessage) {
+        guard !store.doNotDisturb, Date().timeIntervalSince(touch.sentAt) < 15 * 60,
+              deliveredTouchIDs.insert(touch.id).inserted else { return }
+        feel(touch)
     }
 
     /// Unbonds: deletes the iCloud bond (owner only) or cancels the original-app bond, and
@@ -563,7 +613,19 @@ final class AppModel: ObservableObject {
 
     // MARK: - Receiving
 
-    func handleRemoteNotification() async { await refreshAll() }
+    /// A partner's push — possibly with the app just launched in the background. Finishes
+    /// starting up if needed, plays the touch the push carries straight away, syncs the rest,
+    /// then waits until the bracelet has the whole touch before letting iOS suspend the app.
+    func handleRemoteNotification(_ userInfo: [AnyHashable: Any] = [:]) async {
+        if !ready { await bootstrap() }
+        if let touch = touchFromPush(userInfo) {
+            NetLog.shared.log(.recv, "Touch in push ← \(partners.first { $0.id == touch.bondID }?.displayName ?? "partner")")
+            recordTouches([touch])
+            deliver(touch)
+        }
+        await refreshAll()
+        await bracelet.waitUntilIdle(timeout: 8)
+    }
 
     func refreshAll() async {
         defer { autoLinkPartners() }
@@ -621,18 +683,14 @@ final class AppModel: ObservableObject {
                 if let ready = p.bracelet { partnerBraceletConnected[partner.id] = ready }
             }
 
-            // Only the selected partner's touches/heartbeat drive the bracelet.
-            if partner.id == selectedPartnerID, !store.doNotDisturb {
-                // Only fresh touches buzz the band — not history fetched after a reinstall.
-                for touch in events.touches where Date().timeIntervalSince(touch.sentAt) < 120 {
-                    feel(touch)
-                }
-                // A heartbeat plays once, for 5 s — and only if it's fresh (not one that was
-                // sent long ago and is only now being fetched).
-                if let bpm = events.latestBPM, let at = events.latestBPMAt,
-                   Date().timeIntervalSince(at) < 60 {
-                    feelHeartbeat(bpm: bpm)
-                }
+            // Every partner's touches play, each in its own slot (as the original app); `deliver`
+            // skips stale ones, repeats (already played from a push) and Do Not Disturb.
+            events.touches.forEach(deliver)
+            // A heartbeat plays once, for 5 s — and only if it's fresh (not one that was
+            // sent long ago and is only now being fetched).
+            if !store.doNotDisturb, let bpm = events.latestBPM, let at = events.latestBPMAt,
+               Date().timeIntervalSince(at) < 60 {
+                feelHeartbeat(bpm: bpm)
             }
         }
     }

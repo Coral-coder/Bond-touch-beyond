@@ -6,8 +6,12 @@ import UserNotifications
 @main
 struct BondTouchBeyondApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
-    @StateObject private var model = AppModel()
     @Environment(\.scenePhase) private var scenePhase
+
+    /// The app's model is owned by the app delegate, not a view: iOS can launch the app in
+    /// the background for a partner's push (or a bracelet event) without ever showing a
+    /// screen, and the touch must still reach the bracelet.
+    private var model: AppModel { appDelegate.model }
 
     var body: some Scene {
         WindowGroup {
@@ -21,7 +25,6 @@ struct BondTouchBeyondApp: App {
                     else { model.recovery.handleOpened(url) }
                 }
                 .task { await model.bootstrap() }
-                .onAppear { appDelegate.model = model }
                 .onChange(of: scenePhase) { phase in
                     // Brief `.inactive` moments (Control Centre, alerts) don't count as leaving.
                     if phase == .active { Task { await model.setActive(true) } }
@@ -31,26 +34,30 @@ struct BondTouchBeyondApp: App {
     }
 }
 
-/// Minimal app delegate: registers for silent pushes and routes notifications into
-/// `AppModel`. No analytics, no third-party SDKs.
+/// Owns the app model and routes pushes into it — also when iOS launches the app in the
+/// background with no UI. No analytics, no third-party SDKs.
+@MainActor
 final class AppDelegate: NSObject, UIApplicationDelegate {
-    weak var model: AppModel?
+    let model = AppModel()
 
     func application(_ application: UIApplication,
                      didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         UNUserNotificationCenter.current().delegate = self
         // Ask to show alert pushes (a partner's touch wakes the phone reliably as an alert);
-        // register for a device token either way so CloudKit's silent push still works.
+        // register for a device token either way so pushes reach the app.
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in
             DispatchQueue.main.async { application.registerForRemoteNotifications() }
         }
+        // Start up straight away, even with no screen (a background launch for a push or a
+        // bracelet event), so iCloud, the bracelet and the original backend are ready.
+        Task { await model.bootstrap() }
         return true
     }
 
     func application(_ application: UIApplication,
                      didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
         let hex = deviceToken.map { String(format: "%02x", $0) }.joined()
-        Task { @MainActor in model?.updatePushToken(hex) }
+        model.updatePushToken(hex)
     }
 
     func application(_ application: UIApplication,
@@ -58,20 +65,26 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         NetLog.shared.log(.fail, "APNs: device token registration failed", error.localizedDescription)
     }
 
+    /// A partner's push, in the foreground or background (or after a background launch):
+    /// play the touch it carries on the bracelet, sync, and only report done once the
+    /// bracelet has the whole touch — iOS may suspend the app as soon as this returns.
     func application(_ application: UIApplication,
                      didReceiveRemoteNotification userInfo: [AnyHashable: Any]) async -> UIBackgroundFetchResult {
-        await model?.handleRemoteNotification()
+        let task = application.beginBackgroundTask(withName: "partner-push")
+        defer { application.endBackgroundTask(task) }
+        await model.handleRemoteNotification(userInfo)
         return .newData
     }
 }
 
 extension AppDelegate: UNUserNotificationCenterDelegate {
-    /// With the app open, a partner's push refreshes at once and shows silently — the bracelet
-    /// (or the phone's own vibration, if it isn't connected) already plays the touch.
-    func userNotificationCenter(_ center: UNUserNotificationCenter,
-                                willPresent notification: UNNotification) async
+    /// With the app open, a partner's push is handled at once and shows silently — the
+    /// bracelet (or the phone's own vibration, if it isn't connected) already plays the touch.
+    nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter,
+                                            willPresent notification: UNNotification) async
         -> UNNotificationPresentationOptions {
-        await model?.handleRemoteNotification()
+        let info = notification.request.content.userInfo
+        await MainActor.run { Task { await self.model.handleRemoteNotification(info) } }
         return [.banner, .list]
     }
 }
