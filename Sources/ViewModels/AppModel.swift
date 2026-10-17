@@ -55,6 +55,10 @@ final class AppModel: ObservableObject {
     var profileSyncedBondIDs: Set<String> = []
     /// The Apple Watch link (touch bar + meanings on the watch).
     let watch = WatchBridge()
+    /// The home-screen widget's snapshot updates (see AppModel+Widget).
+    var widgetWatch = Set<AnyCancellable>()
+    /// The partner photo last written for the widget: "bond#image" → thumbnail file.
+    var widgetPhotoCache: [String: String] = [:]
     /// Repairs a bracelet stuck in firmware-update mode.
     let recovery = FirmwareRecovery()
     /// Keeps the app running in the background for original-app partners.
@@ -176,6 +180,7 @@ final class AppModel: ObservableObject {
             Task { @MainActor in self?.haptics.play(touch) }
         }
         watch.start(self)
+        startWidgetSync()
         recovery.start(bracelet)
         AppModel.shared = self
     }
@@ -284,6 +289,7 @@ final class AppModel: ObservableObject {
             await setOnline(true)
             await refreshAll()
             startCloudPolling()
+            await processWidgetRequests()   // sends the widget queued while the app wasn't running
         } else if keeper.running {
             // Kept alive in the background: keep syncing and stay online.
             stopCloudPolling()            // cloud bonds wake on push, not a background poll
@@ -475,9 +481,12 @@ final class AppModel: ObservableObject {
     /// against the partner's saved meanings: a close match is sent *as* that meaning — its
     /// colours and name, and for an original-app partner by meaning id, so their bracelet
     /// plays it as the meaning.
+    ///
+    /// Returns whether it was sent (for the widget's Sent / Failed).
+    @discardableResult
     func sendTouch(pattern: [Int], generation: Int = 2, colorRGB: Int, endColorRGB: Int? = nil,
-                   toBondID: String? = nil, meaning given: TouchMeaning? = nil, matchMeaning: Bool = true) async {
-        guard let bond = bond(for: toBondID) else { return }
+                   toBondID: String? = nil, meaning given: TouchMeaning? = nil, matchMeaning: Bool = true) async -> Bool {
+        guard let bond = bond(for: toBondID) else { return false }
         // Finish sending even if the app goes to the background meanwhile (e.g. a touch
         // made on the bracelet while the phone is locked).
         let bg = UIApplication.shared.beginBackgroundTask(withName: "send-touch")
@@ -511,7 +520,7 @@ final class AppModel: ObservableObject {
                     tagged.meaningLabel = matched.label
                     tagged.meaningEmoji = matched.emoji
                     recordTouch(tagged)
-                    return
+                    return true
                 }
             } else {
                 try await relay.sendTouch(touch, bond: bond)
@@ -522,15 +531,18 @@ final class AppModel: ObservableObject {
                 await pushPartner(bondID: bond.id, title: "\(me) touched you", body: body, touch: touch)
             }
             recordTouch(touch)
+            return true
         } catch {
             statusLine = "Send failed: \(error.localizedDescription)"
             NetLog.shared.log(.fail, "Send touch failed (\(route))", error.localizedDescription)
+            return false
         }
     }
 
     /// Sends a saved meaning (Touch Language) — by id to an original-app partner, as a
-    /// labelled touch over iCloud.
-    func sendMeaning(_ meaning: TouchMeaning, toBondID: String? = nil) async {
+    /// labelled touch over iCloud. Returns whether it was sent.
+    @discardableResult
+    func sendMeaning(_ meaning: TouchMeaning, toBondID: String? = nil) async -> Bool {
         await sendTouch(pattern: meaning.pattern, generation: meaning.touchGeneration,
                         colorRGB: meaning.colorRGB, endColorRGB: meaning.endColorRGB,
                         toBondID: toBondID, meaning: meaning)
