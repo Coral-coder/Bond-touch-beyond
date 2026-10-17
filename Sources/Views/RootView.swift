@@ -51,7 +51,8 @@ struct RootView: View {
                     case .home: HomeView()
                     case .touches: MeaningsView()
                     case .map: MapTabView()
-                    case .chat: ChatView()
+                    // Chat lives inside Private Space, behind its lock, as the original.
+                    case .chat: NavigationStack { PrivateSpaceView() }
                     case .settings: NavigationStack { SettingsView() }
                     }
                 }

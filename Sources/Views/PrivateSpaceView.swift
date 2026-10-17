@@ -14,6 +14,7 @@ struct PrivateSpaceView: View {
     @State private var entry = ""
     @State private var firstCode = ""
     @State private var error: String?
+    @State private var section: Section = .chat
 
     private static let purpleTop = Color(rgbInt: 0x7A3B9E)
     private static let purpleBottom = Color(rgbInt: 0xC8558F)
@@ -38,6 +39,10 @@ struct PrivateSpaceView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbarColorScheme(.dark, for: .navigationBar)
         .onAppear(perform: begin)
+        // Locks again whenever the app leaves the screen.
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.didEnterBackgroundNotification)) { _ in
+            if store.hasPrivateSpace { entry = ""; phase = .locked }
+        }
         // As the original: a double tap on your own (connected) bracelet unlocks it.
         .onChange(of: model.braceletDoubleTaps) { _ in
             guard phase == .locked else { return }
@@ -166,30 +171,120 @@ struct PrivateSpaceView: View {
     // MARK: Unlocked
 
     private var unlockedView: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: 12) {
             HStack {
-                Label("Encrypted · messages kept for 72 hours", systemImage: "lock.fill")
+                Label("Encrypted · kept for 72 hours", systemImage: "lock.fill")
                     .font(.caption).foregroundStyle(.white.opacity(0.85))
                 Spacer()
+                Button { phase = .locked } label: {
+                    Image(systemName: "lock").font(.system(size: 15, weight: .bold)).foregroundStyle(.white)
+                }
+                .accessibilityLabel("Lock Private Space")
             }
-            .padding(.horizontal, 4)
-
-            VStack(spacing: 12) {
-                galleryCard
-                Spacer()
+            .padding(.horizontal, 16)
+            Picker("", selection: $section) {
+                Text("Chat").tag(Section.chat)
+                Text("Gallery").tag(Section.gallery)
+            }
+            .pickerStyle(.segmented)
+            .padding(.horizontal, 16)
+            // Kept out of screenshots and screen recordings, as the original.
+            ScreenshotShield {
+                Group {
+                    switch section {
+                    case .chat: ChatView()
+                    case .gallery: PrivateGallery()
+                    }
+                }
+                .environmentObject(model)
+                .environmentObject(store)
+                .environment(\.colorScheme, .dark)
+                .tint(Theme.accent)
             }
         }
-        .padding(Metric.buttonMargin)
+        .padding(.top, 8)
+        // A screenshot is still possible of the parts outside the shield (and on iOS versions
+        // where it can't hide anything): tell the partner, as the original does.
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.userDidTakeScreenshotNotification)) { _ in
+            Task { await model.sendChatText("📸 Took a screenshot of Private Space") }
+        }
     }
 
-    private var galleryCard: some View {
-        VStack(spacing: 10) {
-            Image(systemName: "photo.on.rectangle.angled").font(.system(size: 40)).foregroundStyle(.white)
-            Text("Shared gallery").font(.headline).foregroundStyle(.white)
-            Text("Photos you share here stay just between you two.")
-                .font(.footnote).foregroundStyle(.white.opacity(0.85)).multilineTextAlignment(.center)
+    enum Section { case chat, gallery }
+}
+
+/// The shared gallery: every photo in the chat with this partner, newest first, each with the
+/// time it has left (photos go after 72 hours, as the original). Tap one to see it full size.
+private struct PrivateGallery: View {
+    @EnvironmentObject var model: AppModel
+    @State private var open: ChatMessage?
+
+    private var photos: [ChatMessage] {
+        model.chatMessages(for: model.selectedPartnerID).filter { $0.kind == .image && $0.imageFile != nil }.reversed()
+    }
+
+    var body: some View {
+        ScrollView {
+            if photos.isEmpty {
+                VStack(spacing: 10) {
+                    Image(systemName: "photo.on.rectangle.angled").font(.system(size: 40)).foregroundStyle(.white)
+                    Text("Shared gallery").font(.headline).foregroundStyle(.white)
+                    Text("Photos you send each other in Private Space show here for 72 hours.")
+                        .font(.footnote).foregroundStyle(.white.opacity(0.85)).multilineTextAlignment(.center)
+                }
+                .frame(maxWidth: .infinity).padding(32)
+            } else {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 104), spacing: 6)], spacing: 6) {
+                    ForEach(photos) { msg in
+                        Button { open = msg } label: { tile(msg) }.buttonStyle(.plain)
+                    }
+                }
+                .padding(12)
+            }
         }
-        .frame(maxWidth: .infinity).padding(24)
-        .background(Color.white.opacity(0.12)).clipShape(RoundedRectangle(cornerRadius: Metric.cornerLarge))
+        .fullScreenCover(item: $open) { msg in PhotoViewer(message: msg) }
+    }
+
+    private func tile(_ msg: ChatMessage) -> some View {
+        Color.clear
+            .aspectRatio(1, contentMode: .fit)
+            .overlay {
+                if let file = msg.imageFile, let image = UIImage(contentsOfFile: ChatArchive.imageURL(file).path) {
+                    Image(uiImage: image).resizable().scaledToFill()
+                }
+            }
+            .clipped()
+            .overlay(alignment: .bottomTrailing) {
+                Text(timeLeft(msg)).font(.caption2.weight(.bold)).foregroundStyle(.white)
+                    .padding(.horizontal, 6).padding(.vertical, 3)
+                    .background(Capsule().fill(.black.opacity(0.5))).padding(5)
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+            .accessibilityLabel("Photo, \(timeLeft(msg))")
+    }
+
+    private func timeLeft(_ msg: ChatMessage) -> String {
+        let left = max(0, ChatArchive.lifetime - Date().timeIntervalSince(msg.sentAt))
+        let hours = Int(left / 3600)
+        return hours >= 1 ? "\(hours)h left" : "\(max(1, Int(left / 60)))m left"
+    }
+}
+
+private struct PhotoViewer: View {
+    @Environment(\.dismiss) private var dismiss
+    let message: ChatMessage
+
+    var body: some View {
+        ZStack(alignment: .topTrailing) {
+            Color.black.ignoresSafeArea()
+            if let file = message.imageFile, let image = UIImage(contentsOfFile: ChatArchive.imageURL(file).path) {
+                Image(uiImage: image).resizable().scaledToFit().frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+            Button { dismiss() } label: {
+                Image(systemName: "xmark.circle.fill").font(.system(size: 30)).foregroundStyle(.white.opacity(0.85))
+            }
+            .padding()
+            .accessibilityLabel("Close")
+        }
     }
 }
