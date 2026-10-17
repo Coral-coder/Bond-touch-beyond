@@ -132,7 +132,7 @@ final class CloudRelay {
             let isOwner = ownerID == myUserID
             let partnerProfile = try? await latestProfilePayload(code: code, otherThan: myUserID)
             let ownerName = (record["payload"] as? Data).flatMap { BondCrypto.open([String: String].self, from: $0, code: code)?["name"] }
-            let name = partnerProfile?["name"] ?? (isOwner ? "Pending…" : (ownerName ?? "Partner"))
+            let name = (partnerProfile?["name"] as? String) ?? (isOwner ? "Pending…" : (ownerName ?? "Partner"))
             bonds.append(Bond(id: code, partnerName: name, isOwner: isOwner, pending: isOwner && partnerProfile == nil))
         }
         return bonds

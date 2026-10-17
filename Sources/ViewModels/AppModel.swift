@@ -309,6 +309,56 @@ final class AppModel: ObservableObject {
         else { AppModel.pendingJoinCode = code }
     }
 
+    // MARK: - Sending a touch
+
+    private func bond(for id: String?) -> Bond? {
+        if let id { return partners.first { $0.id == id }?.bond }
+        return activeBond
+    }
+
+    /// Sends a touch to a bond (the selected partner when `toBondID` is nil): iCloud partners
+    /// get an encrypted relay record, original-app partners go through the Bond API. Records
+    /// it to the local feed either way.
+    func sendTouch(pattern: [Int], generation: Int = 2, colorRGB: Int, endColorRGB: Int? = nil,
+                   toBondID: String? = nil) async {
+        guard let bond = bond(for: toBondID) else { return }
+        // Finish sending even if the app goes to the background meanwhile (e.g. a touch
+        // made on the bracelet while the phone is locked).
+        let bg = UIApplication.shared.beginBackgroundTask(withName: "send-touch")
+        defer { UIApplication.shared.endBackgroundTask(bg) }
+        let touch = TouchMessage(bondID: bond.id, senderID: myUserID, pattern: pattern, generation: generation,
+                                 colorRGB: colorRGB, endColorRGB: endColorRGB)
+        let route = bond.legacy ? "original Bond API" : "iCloud"
+        NetLog.shared.log(.send, "Send touch → \(bond.partnerName) (\(route))",
+                          "gen \(generation), \(pattern.count) samples")
+        do {
+            if bond.legacy {
+                try await legacySendTouch(touch, bond: bond)
+            } else {
+                try await relay.sendTouch(touch, bond: bond)
+                NetLog.shared.log(.ok, "Touch → iCloud accepted", "\(bond.partnerName)")
+            }
+            recordTouch(touch)
+        } catch {
+            statusLine = "Send failed: \(error.localizedDescription)"
+            NetLog.shared.log(.fail, "Send touch failed (\(route))", error.localizedDescription)
+        }
+    }
+
+    // MARK: - Profile
+
+    /// Pushes the user's profile (name, colour, photo) to every partner: the original backend
+    /// and each iCloud bond.
+    func publishProfile() async {
+        let p = store.profile
+        guard p.isComplete else { return }
+        legacyPublishProfile(name: p.name, colorRGB: p.colorRGB)
+        for partner in cloudPartners {
+            try? await relay.sendProfile(name: p.name, colorRGB: p.colorRGB, photo: myPhotoFileURL,
+                                         bond: partner.bond, senderID: myUserID)
+        }
+    }
+
     // MARK: - Receiving
 
     func handleRemoteNotification() async { await refreshAll() }
