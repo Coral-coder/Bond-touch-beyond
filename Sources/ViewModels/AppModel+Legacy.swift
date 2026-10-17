@@ -357,6 +357,8 @@ extension AppModel {
     func migrateMeaningLibraries() {
         let key = "MeaningsPerBondMigrated"
         guard !UserDefaults.standard.bool(forKey: key) else { return }
+        // Not until the partners are actually known (a launch with iCloud unreachable lists none).
+        guard !store.meanings.isEmpty, !(cloudPartners.isEmpty && cloudPending.isEmpty) else { return }
         for id in (cloudPartners.map(\.id) + cloudPending.map(\.id)) where store.cloudMeanings[id] == nil {
             store.cloudMeanings[id] = store.meanings.map { var m = $0; m.updatedAt = m.updatedAt ?? Date(); return m }
         }
