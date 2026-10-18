@@ -27,6 +27,7 @@ struct SettingsView: View {
 
                 VStack(spacing: 12) {
                     ThemePickerCard()
+                    LayoutPickerCard()
                     row("Personal details", "") { PersonalDetailsView() }
                     row("My Bond Touch Bracelet", "") { BraceletSettingsView() }
                     row("Bracelet firmware (recovery)", "") { FirmwareSettingsView() }
@@ -592,6 +593,62 @@ struct MyPhotoPicker: View {
 }
 
 /// The neon touch lines' thickness and glow, with a live example of a slide and a tap rhythm.
+/// Settings → Layout: how Home is arranged, folded away until tapped.
+private struct LayoutPickerCard: View {
+    @AppStorage("homeLayout") private var layout = HomeLayout.classic.rawValue
+    @AppStorage("layoutPickerOpen") private var open = false
+
+    private var current: HomeLayout { HomeLayout(rawValue: layout) ?? .classic }
+
+    var body: some View {
+        GlassCard(padding: 20) {
+            VStack(alignment: .leading, spacing: 12) {
+                Button {
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { open.toggle() }
+                } label: {
+                    HStack(spacing: 10) {
+                        Text("Layout").foregroundStyle(Theme.title)
+                        Spacer()
+                        Text(current.title).font(.subheadline).foregroundStyle(Theme.subtitle)
+                        Image(systemName: "chevron.right").font(.footnote.weight(.semibold)).foregroundStyle(Theme.subtitle)
+                            .rotationEffect(.degrees(open ? 90 : 0))
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Layout, \(current.title)")
+                .accessibilityHint(open ? "Hides the layouts" : "Shows the layouts")
+                if open {
+                    ForEach(HomeLayout.allCases) { l in
+                        let on = l == current
+                        Button {
+                            UISelectionFeedbackGenerator().selectionChanged()
+                            layout = l.rawValue
+                        } label: {
+                            HStack(spacing: 12) {
+                                Image(systemName: l.icon).font(.system(size: 18, weight: .semibold))
+                                    .foregroundStyle(on ? Theme.onAccent : Theme.title)
+                                    .frame(width: 40, height: 40)
+                                    .background(RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                        .fill(on ? Theme.accent : Theme.ink.opacity(0.1)))
+                                VStack(alignment: .leading, spacing: 1) {
+                                    Text(l.title).font(Theme.font(15, .bold)).foregroundStyle(on ? Theme.accent : Theme.title)
+                                    Text(l.blurb).font(.caption).foregroundStyle(Theme.subtitle)
+                                }
+                                Spacer()
+                                if on { Image(systemName: "checkmark.circle.fill").foregroundStyle(Theme.accent) }
+                            }
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityAddTraits(on ? .isSelected : [])
+                    }
+                }
+            }
+        }
+    }
+}
+
 /// Settings → Theme: every look as a small live preview, and for Paper & Ink, the ink colour.
 private struct ThemePickerCard: View {
     @AppStorage("appStyle") private var appStyle = AppStyle.aero.rawValue

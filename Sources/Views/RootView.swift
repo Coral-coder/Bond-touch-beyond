@@ -56,7 +56,7 @@ struct RootView: View {
             ZStack(alignment: .bottom) {
                 Group {
                     switch tab {
-                    case .home: HomeView()
+                    case .home: HomeRouter()
                     case .touches: MeaningsView()
                     case .map: MapTabView()
                     // Chat lives inside Private Space, behind its lock, as the original.

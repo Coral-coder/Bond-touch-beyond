@@ -317,7 +317,7 @@ struct HomeView: View {
             .frame(maxWidth: .infinity)
             .background(
                 RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .fill(LinearGradient(colors: [Color(rgbInt: 0x74D3CB), Theme.accentDeep],
+                    .fill(LinearGradient(colors: [Theme.p.accentTop, Theme.accentDeep],
                                          startPoint: .top, endPoint: .bottom))
                     .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).stroke(Theme.ink.opacity(0.45), lineWidth: 1))
                     .shadow(color: Theme.accent.opacity(0.25), radius: 10, y: 5)
