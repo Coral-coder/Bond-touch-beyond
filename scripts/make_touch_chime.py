@@ -4,6 +4,7 @@ samples. Three variants:
   warm    — two soft bell notes an octave lower (C5, G5), slow attack, mostly fundamental
   marimba — two rounded wooden-bar notes (E5, B5), very short and soft
   glow    — a soft three-note major chord swelling in and out, like a warm pad
+  mallet  — between bell and marimba: soft mallet notes (E5, B5) with a smooth reverb tail
 Writes 16-bit mono WAVs: make_touch_chime.py <out.wav> [variant] [--kiss-only]"""
 import sys
 import wave
@@ -64,6 +65,28 @@ def marimba(t, start, freq, amp):
     return tone * amp
 
 
+def soft_mallet(t, start, freq, amp, decay=0.5):
+    """Between a bell and a marimba: a rounded mallet strike that blooms into a smooth tone —
+    mostly fundamental, a gentle octave, and only a faint, fast woody overtone."""
+    tt = np.clip(t - start, 0, None)
+    tone = (1.0 * np.sin(2 * np.pi * freq * tt) * env(t, start, 0.008, decay)
+            + 0.12 * np.sin(2 * np.pi * freq * 2 * tt) * env(t, start, 0.006, decay * 0.45)
+            + 0.06 * np.sin(2 * np.pi * freq * 4 * tt) * env(t, start, 0.003, 0.035))
+    return tone * amp
+
+
+def reverb(x, seconds=1.1, wet=0.32):
+    """A smooth, warm reverb: the sound convolved with a soft, exponentially decaying,
+    low-passed noise tail (no metallic ringing)."""
+    n = int(seconds * RATE)
+    tt = np.arange(n) / RATE
+    ir = lowpass(rng.standard_normal(n), 10) * np.exp(-tt / (seconds / 4.5))
+    ir[: int(0.012 * RATE)] *= np.linspace(0, 1, int(0.012 * RATE))      # a short pre-delay swell
+    ir /= np.sqrt(np.sum(ir ** 2))
+    tail = np.convolve(x, ir)[: len(x)]
+    return (1 - wet) * x + wet * tail * (np.max(np.abs(x)) / max(np.max(np.abs(tail)), 1e-9))
+
+
 def glow(t, start, freqs, amp, length=1.1):
     tt = np.clip(t - start, 0, None)
     swell = np.where(tt < length, np.sin(np.pi * np.clip(tt / length, 0, 1)) ** 1.5, 0) * (t >= start)
@@ -71,9 +94,26 @@ def glow(t, start, freqs, amp, length=1.1):
     return tone * swell * amp
 
 
+def kiss_alone():
+    """The kiss on its own (the kiss button's sound) — always the same noise."""
+    global rng
+    rng = np.random.default_rng(7)
+    t = timeline(0.18)
+    return kiss(t) * np.minimum(1, (0.18 - t) / 0.04)
+
+
 def make(variant):
     t = timeline(1.5)
     out = kiss(t)
+    if variant == "mallet":
+        t = timeline(2.2)
+        out = soft_mallet(t, 0.17, 659.3, 0.34, 0.55) + soft_mallet(t, 0.34, 987.8, 0.27, 0.65)
+        out = reverb(lowpass(out, 4))
+        out *= np.minimum(1, (2.2 - t) / 0.2)
+        # the approved kiss (exactly the --kiss-only one), a little under the chime, in front
+        k = kiss_alone()
+        out[: len(k)] += k * (np.max(np.abs(out)) / np.max(np.abs(k))) * 0.55
+        return out
     if variant == "marimba":
         out += marimba(t, 0.16, 659.3, 0.35) + marimba(t, 0.30, 987.8, 0.28)
     elif variant == "glow":
@@ -89,8 +129,7 @@ if __name__ == "__main__":
     path = sys.argv[1]
     variant = sys.argv[2] if len(sys.argv) > 2 and not sys.argv[2].startswith("--") else "warm"
     if "--kiss-only" in sys.argv:
-        t = timeline(0.18)
-        write(path, kiss(t) * np.minimum(1, (0.18 - t) / 0.04))
+        write(path, kiss_alone())
     else:
         write(path, make(variant))
     print("wrote", path, variant)
