@@ -54,7 +54,7 @@ struct MapTabView: View {
                     sharingCard
                     Button { focused = nil; fitEveryone(animated: true) } label: {
                         Image(systemName: "arrow.up.left.and.arrow.down.right")
-                            .font(.system(size: 16, weight: .bold)).foregroundStyle(.white)
+                            .font(.system(size: 16, weight: .bold)).foregroundStyle(Theme.title)
                             .frame(width: 50, height: 50).glass(Circle())
                     }
                     .buttonStyle(.plain)
@@ -63,7 +63,7 @@ struct MapTabView: View {
                 HStack {
                     Button { showPlaces = true } label: {
                         Label("Places", systemImage: "mappin.and.ellipse")
-                            .font(Theme.font(13, .bold)).foregroundStyle(.white)
+                            .font(Theme.font(13, .bold)).foregroundStyle(Theme.title)
                             .padding(.horizontal, 14).frame(height: 44).glass(Capsule())
                     }
                     .buttonStyle(.plain)
@@ -71,7 +71,7 @@ struct MapTabView: View {
                     if let me = model.location.coordinate {
                         Button { focused = nil; zoom(to: Pin(id: "me", partner: nil, coordinate: me)) } label: {
                             Image(systemName: "location.fill")
-                                .font(.system(size: 15, weight: .bold)).foregroundStyle(.white)
+                                .font(.system(size: 15, weight: .bold)).foregroundStyle(Theme.title)
                                 .frame(width: 44, height: 44).glass(Circle())
                         }
                         .buttonStyle(.plain)
@@ -84,7 +84,7 @@ struct MapTabView: View {
                 } else if pins.isEmpty {
                     Text(model.partners.isEmpty ? "Add a partner to see each other on the map"
                                                 : "No one is sharing a location yet")
-                        .font(Theme.font(13, .semibold)).foregroundStyle(.white)
+                        .font(Theme.font(13, .semibold)).foregroundStyle(Theme.title)
                         .padding(.horizontal, 16).padding(.vertical, 10).glass(Capsule())
                         .padding(.bottom, 92)
                 }
@@ -98,7 +98,7 @@ struct MapTabView: View {
         if let place = pin.place {
             VStack(spacing: 2) {
                 Image(systemName: "mappin.circle.fill").font(.system(size: 22)).foregroundStyle(Theme.accent)
-                Text(place.name).font(Theme.font(10, .bold)).foregroundStyle(.white)
+                Text(place.name).font(Theme.font(10, .bold)).foregroundStyle(Theme.title)
                     .padding(.horizontal, 6).padding(.vertical, 2).background(Capsule().fill(.black.opacity(0.5)))
             }
             .accessibilityLabel("Saved place \(place.name)")
@@ -121,7 +121,7 @@ struct MapTabView: View {
             Image(systemName: model.sharingLocation ? "location.fill" : "location.slash")
                 .foregroundStyle(model.sharingLocation ? Theme.accent : Theme.subtitle)
             VStack(alignment: .leading, spacing: 2) {
-                Text("Share my location").foregroundStyle(.white).font(Theme.font(15, .bold))
+                Text("Share my location").foregroundStyle(Theme.title).font(Theme.font(15, .bold))
                 Text(model.sharingLocation ? "Your partners can see you" : "Off")
                     .font(Theme.font(12)).foregroundStyle(Theme.subtitle)
             }
@@ -139,7 +139,7 @@ struct MapTabView: View {
             AvatarRing(name: p.displayName, ringColor: Color(rgbInt: p.colorRGB), size: 44,
                        photo: model.photo(forBond: p.id), ringWidth: 0)
             VStack(alignment: .leading, spacing: 2) {
-                Text(p.displayName).font(Theme.font(16, .heavy)).foregroundStyle(.white)
+                Text(p.displayName).font(Theme.font(16, .heavy)).foregroundStyle(Theme.title)
                 Text(detail(p)).font(Theme.font(13)).foregroundStyle(Theme.subtitle)
                 // Where they are and their time there, and how fresh the location is.
                 TimelineView(.periodic(from: .now, by: 30)) { ctx in
@@ -150,7 +150,7 @@ struct MapTabView: View {
             if lookAround != nil {
                 Button { showLookAround = true } label: {
                     Image(systemName: "binoculars.fill")
-                        .font(.system(size: 16, weight: .bold)).foregroundStyle(.white)
+                        .font(.system(size: 16, weight: .bold)).foregroundStyle(Theme.title)
                         .frame(width: 42, height: 42).glass(Circle())
                 }
                 .buttonStyle(.plain)
@@ -274,7 +274,7 @@ private struct PlacesSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
         }
-        .preferredColorScheme(.dark)
+        .preferredColorScheme(Theme.colorScheme)
     }
 
     private func add() {

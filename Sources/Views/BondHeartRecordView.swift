@@ -52,7 +52,7 @@ struct RecordHeartbeatView: View {
             HeartGlyph(colorRGB: EKG.colorRGB, size: 90, bpm: 64).padding(.top, 10)
             GlassCard {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Capturing your heartbeat").font(Theme.font(18, .heavy)).foregroundStyle(.white)
+                    Text("Capturing your heartbeat").font(Theme.font(18, .heavy)).foregroundStyle(Theme.title)
                     Text("We do so by detecting your blood flow using your phone’s flashlight. Just place your finger over it and over your camera at the same time, and stay still for 15 seconds.")
                         .font(.footnote).foregroundStyle(Theme.subtitle)
                 }
@@ -73,7 +73,7 @@ struct RecordHeartbeatView: View {
             Button {
                 Task { await fromWatch() }
             } label: {
-                if watchBusy { ProgressView().tint(.white) } else { Label("Use Apple Watch instead", systemImage: "applewatch") }
+                if watchBusy { ProgressView().tint(Theme.title) } else { Label("Use Apple Watch instead", systemImage: "applewatch") }
             }
             .buttonStyle(GlassButtonStyle())
             .disabled(watchBusy)
@@ -88,20 +88,20 @@ struct RecordHeartbeatView: View {
     private var live: some View {
         VStack(spacing: 18) {
             ZStack {
-                Circle().stroke(Color.white.opacity(0.15), lineWidth: 8)
+                Circle().stroke(Theme.ink.opacity(0.15), lineWidth: 8)
                 Circle().trim(from: 0, to: recorder.progress)
                     .stroke(Theme.pink, style: StrokeStyle(lineWidth: 8, lineCap: .round))
                     .rotationEffect(.degrees(-90))
                     .animation(.linear(duration: 0.2), value: recorder.progress)
                 VStack(spacing: 4) {
                     HeartGlyph(colorRGB: EKG.colorRGB, size: 64, bpm: recorder.liveBPM)
-                    Text("\(Int(recorder.progress * 100)) %").font(Theme.font(15, .bold)).foregroundStyle(.white)
+                    Text("\(Int(recorder.progress * 100)) %").font(Theme.font(15, .bold)).foregroundStyle(Theme.title)
                 }
             }
             .frame(width: 200, height: 200)
 
             Text(recorder.phase == .recording ? "Recording…" : "Place your finger")
-                .font(Theme.font(20, .heavy)).foregroundStyle(.white)
+                .font(Theme.font(20, .heavy)).foregroundStyle(Theme.title)
             Text(recorder.phase == .recording
                  ? "Keep covering your camera with your finger, keep it still and press lightly."
                  : "Cover the camera and the flash on the back of your phone with your fingertip.")
@@ -112,7 +112,7 @@ struct RecordHeartbeatView: View {
                     VStack(alignment: .leading, spacing: 10) {
                         HStack {
                             Text(recorder.liveBPM.map { "\($0)" } ?? "--")
-                                .font(Theme.font(30, .heavy)).foregroundStyle(.white).monospacedDigit()
+                                .font(Theme.font(30, .heavy)).foregroundStyle(Theme.title).monospacedDigit()
                             Text("BPM").font(Theme.font(12, .bold)).foregroundStyle(Theme.subtitle)
                             Spacer()
                             Text("\(recorder.beats) beats").font(.caption).foregroundStyle(Theme.subtitle)
@@ -184,12 +184,12 @@ struct CustomizeHeartbeatView: View {
     var body: some View {
         VStack(spacing: 16) {
             Text(saved == nil ? "Heartbeat recorded!" : "Heartbeat created")
-                .font(Theme.font(22, .heavy)).foregroundStyle(.white)
+                .font(Theme.font(22, .heavy)).foregroundStyle(Theme.title)
             GlassCard {
                 VStack(alignment: .leading, spacing: 10) {
                     HStack {
                         HeartGlyph(colorRGB: colorRGB, size: 30, bpm: draft.bpm)
-                        Text("\(draft.bpm) BPM").font(Theme.font(20, .heavy)).foregroundStyle(.white)
+                        Text("\(draft.bpm) BPM").font(Theme.font(20, .heavy)).foregroundStyle(Theme.title)
                         Spacer()
                         Text("\(recorded.intervals.count) beats · \(Int(draft.seconds.rounded())) s")
                             .font(.caption).foregroundStyle(Theme.subtitle)
@@ -209,13 +209,13 @@ struct CustomizeHeartbeatView: View {
             } else {
                 GlassCard {
                     VStack(alignment: .leading, spacing: 12) {
-                        Text("Who's in your heart?").font(Theme.font(16, .bold)).foregroundStyle(.white)
+                        Text("Who's in your heart?").font(Theme.font(16, .bold)).foregroundStyle(Theme.title)
                         TextField("Name", text: $name)
                             .textFieldStyle(.roundedBorder)
                         Text("Choose a color for your heartbeat. Don't worry, you can change it later!")
                             .font(.caption).foregroundStyle(Theme.subtitle)
                         HeartColorRow(colorRGB: $colorRGB)
-                        Text("Make it personal").font(Theme.font(16, .bold)).foregroundStyle(.white)
+                        Text("Make it personal").font(Theme.font(16, .bold)).foregroundStyle(Theme.title)
                         TextField("A memory (optional)", text: $memory, axis: .vertical)
                             .lineLimit(2...5)
                             .textFieldStyle(.roundedBorder)
@@ -234,7 +234,7 @@ struct CustomizeHeartbeatView: View {
 
     @ViewBuilder private func savedActions(_ hb: SavedHeartbeat) -> some View {
         VStack(spacing: 12) {
-            if let message { Text(message).font(.footnote).foregroundStyle(.white).multilineTextAlignment(.center) }
+            if let message { Text(message).font(.footnote).foregroundStyle(Theme.title).multilineTextAlignment(.center) }
             Button {
                 busy = true
                 Task {

@@ -9,7 +9,7 @@ struct SettingsView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 16) {
-                Text("Settings").font(.title3.bold()).foregroundStyle(.white).padding(.top, 10)
+                Text("Settings").font(.title3.bold()).foregroundStyle(Theme.title).padding(.top, 10)
 
                 MyPhotoPicker(size: 110)
                 if model.myPhoto == nil, model.legacySignedIn, FirebaseStorage.appCheckBlocked {
@@ -18,7 +18,7 @@ struct SettingsView: View {
                         .multilineTextAlignment(.center).padding(.horizontal, 20)
                 }
                 Text(store.profile.name.isEmpty ? "Me" : store.profile.name)
-                    .font(.title2.bold()).foregroundStyle(.white)
+                    .font(.title2.bold()).foregroundStyle(Theme.title)
                 HStack(spacing: 6) {
                     Image(systemName: "dot.radiowaves.left.and.right")
                     Text(connectionText)
@@ -26,6 +26,7 @@ struct SettingsView: View {
                 .font(.subheadline).foregroundStyle(Theme.subtitle)
 
                 VStack(spacing: 12) {
+                    ThemePickerCard()
                     row("Personal details", "") { PersonalDetailsView() }
                     row("My Bond Touch Bracelet", "") { BraceletSettingsView() }
                     row("Bracelet firmware (recovery)", "") { FirmwareSettingsView() }
@@ -43,7 +44,7 @@ struct SettingsView: View {
                         Toggle(isOn: Binding(get: { store.keepAliveInBackground },
                                              set: { store.keepAliveInBackground = $0; model.updateKeepAlive() })) {
                             VStack(alignment: .leading, spacing: 2) {
-                                Text("Stay connected in background").foregroundStyle(.white)
+                                Text("Stay connected in background").foregroundStyle(Theme.title)
                                 Text("Keeps the app running with the phone locked or the app closed, so every touch reaches your bracelet right away. Shows the location indicator.")
                                     .font(.caption).foregroundStyle(Theme.subtitle)
                             }
@@ -54,7 +55,7 @@ struct SettingsView: View {
                     GlassCard(padding: 20) {
                         Toggle(isOn: $store.watchStandsIn) {
                             VStack(alignment: .leading, spacing: 2) {
-                                Text("Apple Watch stands in for the bracelet").foregroundStyle(.white)
+                                Text("Apple Watch stands in for the bracelet").foregroundStyle(Theme.title)
                                 Text("When your bracelet disconnects, your watch wakes up and plays every touch on your wrist. Stops when the bracelet is back. Uses watch battery while it stands in.")
                                     .font(.caption).foregroundStyle(Theme.subtitle)
                             }
@@ -64,7 +65,7 @@ struct SettingsView: View {
                     GlassCard(padding: 20) {
                         Stepper(value: $store.touchWindowSeconds, in: 5...10, step: 1) {
                             VStack(alignment: .leading, spacing: 2) {
-                                Text("Touch window: \(Int(store.touchWindowSeconds)) s").foregroundStyle(.white)
+                                Text("Touch window: \(Int(store.touchWindowSeconds)) s").foregroundStyle(Theme.title)
                                 Text("Time to tap and slide on the touch bar before it sends")
                                     .font(.caption).foregroundStyle(Theme.subtitle)
                             }
@@ -85,7 +86,7 @@ struct SettingsView: View {
         } label: {
             GlassCard(padding: 20) {
                 HStack(spacing: 14) {
-                    Text(title).foregroundStyle(.white)
+                    Text(title).foregroundStyle(Theme.title)
                     Spacer()
                     Image(systemName: "chevron.right").foregroundStyle(Theme.subtitle).font(.footnote)
                 }
@@ -99,7 +100,7 @@ struct SettingsView: View {
         Link(destination: URL(string: UIApplication.openSettingsURLString)!) {
             GlassCard(padding: 20) {
                 HStack(spacing: 14) {
-                    Text("Language").foregroundStyle(.white)
+                    Text("Language").foregroundStyle(Theme.title)
                     Spacer()
                     Image(systemName: "chevron.right").foregroundStyle(Theme.subtitle).font(.footnote)
                 }
@@ -213,7 +214,7 @@ private struct BraceletSettingsContent: View {
     private var deviceCard: some View {
         GlassCard {
             VStack(alignment: .leading, spacing: 10) {
-                Text("Device").font(Theme.font(15, .heavy)).foregroundStyle(.white)
+                Text("Device").font(Theme.font(15, .heavy)).foregroundStyle(Theme.title)
                 row("Model", bracelet.modelNumber ?? (bracelet.isThirdGeneration ? "Bond Touch More" : "Bond Touch"))
                 row("Battery", batteryText)
                 row("Firmware", bracelet.firmwareVersion ?? "—")
@@ -223,9 +224,9 @@ private struct BraceletSettingsContent: View {
                         Text("Battery lights").foregroundStyle(Theme.subtitle)
                         Spacer()
                         Circle().fill(Color(rgbInt: alert.lowRGB)).frame(width: 10, height: 10)
-                        Text("low \(alert.lowPercent)%").foregroundStyle(.white)
+                        Text("low \(alert.lowPercent)%").foregroundStyle(Theme.title)
                         Circle().fill(Color(rgbInt: alert.criticalRGB)).frame(width: 10, height: 10)
-                        Text("critical \(alert.criticalPercent)%").foregroundStyle(.white)
+                        Text("critical \(alert.criticalPercent)%").foregroundStyle(Theme.title)
                     }
                     .font(Theme.font(13))
                 }
@@ -273,7 +274,7 @@ private struct BraceletSettingsContent: View {
     private var updateStatusCard: some View {
         GlassCard {
             VStack(alignment: .leading, spacing: 10) {
-                Text("Firmware update").font(Theme.font(15, .heavy)).foregroundStyle(.white)
+                Text("Firmware update").font(Theme.font(15, .heavy)).foregroundStyle(Theme.title)
                 switch recovery.phase {
                 case .restarting:
                     Text("Restarting in update mode…").font(Theme.font(14)).foregroundStyle(Theme.subtitle)
@@ -307,7 +308,7 @@ private struct BraceletSettingsContent: View {
         HStack {
             Text(title).foregroundStyle(Theme.subtitle)
             Spacer()
-            Text(value).foregroundStyle(.white).monospacedDigit()
+            Text(value).foregroundStyle(Theme.title).monospacedDigit()
         }
         .font(Theme.font(14))
     }
@@ -317,7 +318,7 @@ private struct BraceletSettingsContent: View {
     private var vibrationCard: some View {
         GlassCard {
             VStack(alignment: .leading, spacing: 12) {
-                Text("Vibration").font(Theme.font(15, .heavy)).foregroundStyle(.white)
+                Text("Vibration").font(Theme.font(15, .heavy)).foregroundStyle(Theme.title)
                 Picker("Strength", selection: Binding(get: { nearestPreset }, set: { apply(level: $0) })) {
                     ForEach(Self.presets) { Text($0.name).tag($0.level) }
                 }
@@ -334,7 +335,7 @@ private struct BraceletSettingsContent: View {
                 .accessibilityLabel("Fine-tune strength")
                 if bracelet.isThirdGeneration {
                     // The Bond Touch More's two motors: which side vibrates more.
-                    Text("Balance").font(Theme.font(13, .semibold)).foregroundStyle(.white)
+                    Text("Balance").font(Theme.font(13, .semibold)).foregroundStyle(Theme.title)
                     HStack {
                         Text("Left").font(Theme.font(12)).foregroundStyle(Theme.subtitle)
                         Slider(value: Binding(get: { Double(balance) }, set: { apply(balance: Int($0.rounded())) }),
@@ -369,7 +370,7 @@ private struct BraceletSettingsContent: View {
         GlassCard {
             VStack(alignment: .leading, spacing: 10) {
                 ColorPicker("Your colour", selection: $color, supportsOpacity: false)
-                    .foregroundStyle(.white).font(Theme.font(15, .heavy))
+                    .foregroundStyle(Theme.title).font(Theme.font(15, .heavy))
                 Text(bracelet.isReady ? "Your bracelet lights up in it while you choose. Your partner sees your touches in this colour."
                                       : "Your partner sees your touches in this colour.")
                     .font(.caption).foregroundStyle(Theme.subtitle)
@@ -440,10 +441,10 @@ private struct HelpView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
-                Text("Pairing").font(.headline).foregroundStyle(.white)
+                Text("Pairing").font(.headline).foregroundStyle(Theme.title)
                 Text("Open My Bond Touch Bracelet and tap Connect with the bracelet awake and nearby. The app pairs with BOND, Bond More, BOND 4 and BOND MINI bracelets.")
                     .foregroundStyle(Theme.subtitle)
-                Text("Sending a touch").font(.headline).foregroundStyle(.white)
+                Text("Sending a touch").font(.headline).foregroundStyle(Theme.title)
                 Text("Tap the rhythm on your bracelet, or send a saved Touch Language meaning. Your partner feels it on theirs.")
                     .foregroundStyle(Theme.subtitle)
             }
@@ -458,16 +459,16 @@ private struct DoNotDisturbView: View {
     var body: some View {
         VStack(spacing: 16) {
             GlassCard {
-                Toggle("Do not disturb", isOn: $store.doNotDisturb).foregroundStyle(.white).tint(Theme.accent)
+                Toggle("Do not disturb", isOn: $store.doNotDisturb).foregroundStyle(Theme.title).tint(Theme.accent)
             }
             GlassCard {
                 VStack(spacing: 12) {
-                    Toggle("Every day", isOn: $store.dndScheduled).foregroundStyle(.white).tint(Theme.accent)
+                    Toggle("Every day", isOn: $store.dndScheduled).foregroundStyle(Theme.title).tint(Theme.accent)
                     if store.dndScheduled {
                         DatePicker("From", selection: time($store.dndFrom), displayedComponents: .hourAndMinute)
-                            .foregroundStyle(.white)
+                            .foregroundStyle(Theme.title)
                         DatePicker("To", selection: time($store.dndTo), displayedComponents: .hourAndMinute)
-                            .foregroundStyle(.white)
+                            .foregroundStyle(Theme.title)
                     }
                 }
             }
@@ -496,7 +497,7 @@ private struct ComingSoonView: View {
     var body: some View {
         VStack(spacing: 12) {
             Image(systemName: "hourglass").font(.largeTitle).foregroundStyle(Theme.subtitle)
-            Text("\(title) is coming soon.").foregroundStyle(.white)
+            Text("\(title) is coming soon.").foregroundStyle(Theme.title)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity).navigationTitle(title)
     }
@@ -514,7 +515,7 @@ struct AppIconPicker: View {
     var body: some View {
         GlassCard(padding: 20) {
             VStack(alignment: .leading, spacing: 12) {
-                Text("App icon").foregroundStyle(.white)
+                Text("App icon").foregroundStyle(Theme.title)
                 HStack(spacing: 20) {
                     ForEach(options, id: \.label) { option in
                         Button { choose(option.name) } label: {
@@ -591,6 +592,95 @@ struct MyPhotoPicker: View {
 }
 
 /// The neon touch lines' thickness and glow, with a live example of a slide and a tap rhythm.
+/// Settings → Theme: every look as a small live preview, and for Paper & Ink, the ink colour.
+private struct ThemePickerCard: View {
+    @AppStorage("appStyle") private var appStyle = AppStyle.aero.rawValue
+    @AppStorage("paperInk") private var paperInk = PaperInk.aqua.rawValue
+
+    private let columns = [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)]
+
+    var body: some View {
+        GlassCard(padding: 20) {
+            VStack(alignment: .leading, spacing: 14) {
+                Text("Theme").foregroundStyle(Theme.title)
+                LazyVGrid(columns: columns, spacing: 12) {
+                    ForEach(AppStyle.allCases) { style in
+                        Button {
+                            UISelectionFeedbackGenerator().selectionChanged()
+                            appStyle = style.rawValue
+                        } label: { tile(style) }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("\(style.title) theme")
+                        .accessibilityHint(style.blurb)
+                        .accessibilityAddTraits(appStyle == style.rawValue ? .isSelected : [])
+                    }
+                }
+                if appStyle == AppStyle.paper.rawValue {
+                    Text("Ink").font(.caption).foregroundStyle(Theme.subtitle)
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 12) {
+                            ForEach(PaperInk.allCases) { ink in
+                                Button {
+                                    UISelectionFeedbackGenerator().selectionChanged()
+                                    paperInk = ink.rawValue
+                                } label: {
+                                    VStack(spacing: 4) {
+                                        Circle().fill(Color(rgbInt: ink.colors.ink))
+                                            .frame(width: 34, height: 34)
+                                            .overlay(Circle().stroke(Color(rgbInt: ink.colors.paper), lineWidth: 3).padding(2))
+                                            .overlay(Circle().stroke(paperInk == ink.rawValue ? Theme.title : .clear, lineWidth: 2))
+                                        Text(ink.title).font(.caption2)
+                                            .foregroundStyle(paperInk == ink.rawValue ? Theme.title : Theme.subtitle)
+                                    }
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityLabel("\(ink.title) ink")
+                                .accessibilityAddTraits(paperInk == ink.rawValue ? .isSelected : [])
+                            }
+                        }
+                        .padding(.vertical, 2)
+                    }
+                }
+            }
+        }
+    }
+
+    /// A small window onto the theme: its backdrop, one of its panels with a touch drawn on
+    /// it, and its name in its own type.
+    private func tile(_ style: AppStyle) -> some View {
+        let p = Palette.make(style, ink: PaperInk(rawValue: paperInk) ?? .aqua)
+        let selected = appStyle == style.rawValue
+        let shape = RoundedRectangle(cornerRadius: 16, style: .continuous)
+        return VStack(alignment: .leading, spacing: 6) {
+            ZStack {
+                ThemeBackdrop(style: style)
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 6) {
+                        Circle().fill(p.accent).frame(width: 10, height: 10)
+                        Text("Aa").font(Theme.font(15, .bold, style: style)).foregroundStyle(p.title)
+                        Spacer()
+                    }
+                    Capsule().fill(LinearGradient(colors: [p.accent, p.magenta], startPoint: .leading, endPoint: .trailing))
+                        .frame(height: 5)
+                        .shadow(color: style == .neon ? p.accent.opacity(0.8) : .clear, radius: 4)
+                }
+                .padding(10)
+                .background(GlassBackground(shape: RoundedRectangle(cornerRadius: 12, style: .continuous), style: style))
+                .padding(12)
+            }
+            .frame(height: 96)
+            .clipShape(shape)
+            .overlay(shape.stroke(selected ? Theme.accent : Theme.ink.opacity(0.15), lineWidth: selected ? 3 : 1))
+            .environment(\.colorScheme, style.isLight ? .light : .dark)
+            HStack(spacing: 4) {
+                Text(style.title).font(.caption.weight(.semibold))
+                    .foregroundStyle(selected ? Theme.accent : Theme.title).lineLimit(1)
+                if selected { Image(systemName: "checkmark.circle.fill").font(.caption).foregroundStyle(Theme.accent) }
+            }
+        }
+    }
+}
+
 private struct NeonStyleCard: View {
     @AppStorage("neonWidth") private var width = 1.0
     @AppStorage("neonGlow") private var glow = 1.0
@@ -607,7 +697,7 @@ private struct NeonStyleCard: View {
     var body: some View {
         GlassCard(padding: 20) {
             VStack(alignment: .leading, spacing: 12) {
-                Text("Touch style").foregroundStyle(.white)
+                Text("Touch style").foregroundStyle(Theme.title)
                 TouchViz(pattern: Self.slide, generation: 3, colorRGB: 0x57C3BB, endColorRGB: 0xB173DF, height: 64)
                 TouchViz(pattern: [160, 140, 160, 140, 500], generation: 2, colorRGB: 0xEC5A89, endColorRGB: 0xB173DF, height: 40)
                 HStack(spacing: 10) {

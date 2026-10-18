@@ -38,9 +38,9 @@ struct FloatingTabBar: View {
                         Image(systemName: tab.icon).font(.system(size: 19, weight: .semibold))
                         Text(tab.title).font(Theme.font(10, .bold))
                     }
-                    .foregroundStyle(selection == tab ? .white : Theme.subtitle.opacity(0.8))
+                    .foregroundStyle(selection == tab ? Theme.title : Theme.subtitle.opacity(0.8))
                     .frame(maxWidth: .infinity).frame(height: 52)
-                    .background(Capsule().fill(selection == tab ? Color.white.opacity(0.16) : .clear))
+                    .background(Capsule().fill(selection == tab ? Theme.ink.opacity(0.16) : .clear))
                 }
                 .buttonStyle(.plain)
                 .accessibilityAddTraits(selection == tab ? .isSelected : [])

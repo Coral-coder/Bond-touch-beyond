@@ -29,7 +29,7 @@ struct MeaningsView: View {
                     HStack {
                         Text("Touch Language")
                             .font(Theme.font(32, .heavy))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(Theme.title)
                         Spacer()
                         Button { showAdd = true } label: {
                             Image(systemName: "plus")
@@ -99,7 +99,7 @@ struct MeaningsView: View {
                 .accessibilityLabel("Play \(meaning.label) on your bracelet")
                 VStack(alignment: .leading, spacing: 8) {
                     HStack(spacing: 8) {
-                        Text(meaning.label).font(.headline).foregroundStyle(.white)
+                        Text(meaning.label).font(.headline).foregroundStyle(Theme.title)
                         if meaning.isNew { newBadge }
                         Button { toggleFavourite(meaning) } label: {
                             Image(systemName: meaning.favourite == true ? "star.fill" : "star")
@@ -129,7 +129,7 @@ struct MeaningsView: View {
     private var newBadge: some View {
         Text("New")
             .font(.caption2.weight(.semibold))
-            .foregroundStyle(Theme.bgBottom)
+            .foregroundStyle(Color(rgbInt: 0x0B2440))
             .padding(.horizontal, 8).padding(.vertical, 3)
             .background(Capsule().fill(Color.white.opacity(0.85)))
     }
@@ -196,6 +196,6 @@ private struct EditMeaningSheet: View {
             label = meaning.label; emoji = meaning.emoji
             start = Color(rgbInt: meaning.colorRGB); end = Color(rgbInt: meaning.endColorRGB)
         }
-        .preferredColorScheme(.dark)
+        .preferredColorScheme(Theme.colorScheme)
     }
 }

@@ -59,8 +59,8 @@ struct PairingView: View {
     /// The created invite: the code in big type, plus Share / Copy of the link.
     @ViewBuilder private func inviteBlock(code: String, url: URL) -> some View {
         VStack(spacing: 10) {
-            Divider().overlay(Color.white.opacity(0.1))
-            Text("Your invite code").font(.headline).foregroundStyle(.white)
+            Divider().overlay(Theme.ink.opacity(0.1))
+            Text("Your invite code").font(.headline).foregroundStyle(Theme.title)
             Text(code).font(.system(.largeTitle, design: .monospaced).weight(.heavy))
                 .foregroundStyle(Theme.accent).textSelection(.enabled)
             Text("Send your partner this code, or the link below. One tap connects you — no accepting, no waiting.")
@@ -85,14 +85,14 @@ struct PairingView: View {
     /// Join a partner's bond by typing their code.
     private var joinBlock: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Divider().overlay(Color.white.opacity(0.1))
-            Text("Have a code from your partner?").font(.headline).foregroundStyle(.white)
+            Divider().overlay(Theme.ink.opacity(0.1))
+            Text("Have a code from your partner?").font(.headline).foregroundStyle(Theme.title)
             HStack(spacing: 10) {
                 TextField("CODE", text: $joinCode)
                     .textInputAutocapitalization(.characters).autocorrectionDisabled()
                     .font(.system(.body, design: .monospaced))
-                    .padding(12).background(Color.white.opacity(0.08))
-                    .clipShape(RoundedRectangle(cornerRadius: Metric.cornerMedium)).foregroundStyle(.white)
+                    .padding(12).background(Theme.ink.opacity(0.08))
+                    .clipShape(RoundedRectangle(cornerRadius: Metric.cornerMedium)).foregroundStyle(Theme.title)
                 Button {
                     Task {
                         joining = true; joinError = nil
@@ -104,7 +104,7 @@ struct PairingView: View {
                     if joining { ProgressView().tint(Theme.onAccent) } else { Text("Join").font(.headline) }
                 }
                 .frame(height: Metric.buttonHeight).padding(.horizontal, 18)
-                .background(joinCode.count >= 4 ? Theme.accent : Color.white.opacity(0.2))
+                .background(joinCode.count >= 4 ? Theme.accent : Theme.ink.opacity(0.2))
                 .foregroundStyle(Theme.onAccent).clipShape(RoundedRectangle(cornerRadius: Metric.cornerMedium))
                 .disabled(joinCode.count < 4 || joining)
             }
@@ -117,7 +117,7 @@ struct PairingView: View {
     @ViewBuilder private func iCloudBanner(_ message: String) -> some View {
         VStack(spacing: 10) {
             Label("iCloud needed to pair", systemImage: "exclamationmark.icloud")
-                .font(.headline).foregroundStyle(.white)
+                .font(.headline).foregroundStyle(Theme.title)
             Text(message).font(.footnote).foregroundStyle(Theme.subtitle)
                 .multilineTextAlignment(.center)
             Button {
@@ -135,16 +135,16 @@ struct PairingView: View {
     /// (`POST bond/api/v4/bonds`). They accept it in their app.
     private var emailInvite: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Divider().overlay(Color.white.opacity(0.1))
+            Divider().overlay(Theme.ink.opacity(0.1))
             Text("Partner on the original Bond Touch app?")
-                .font(.headline).foregroundStyle(.white)
+                .font(.headline).foregroundStyle(Theme.title)
             Text("Invite them with the email on their Bond Touch account.")
                 .font(.footnote).foregroundStyle(Theme.subtitle)
             TextField("name@email.com", text: $inviteEmail)
                 .textContentType(.emailAddress).keyboardType(.emailAddress)
                 .autocorrectionDisabled().textInputAutocapitalization(.never)
-                .padding(12).background(Color.white.opacity(0.08))
-                .clipShape(RoundedRectangle(cornerRadius: Metric.cornerMedium)).foregroundStyle(.white)
+                .padding(12).background(Theme.ink.opacity(0.08))
+                .clipShape(RoundedRectangle(cornerRadius: Metric.cornerMedium)).foregroundStyle(Theme.title)
             Button {
                 Task {
                     inviting = true; inviteResult = nil
@@ -159,12 +159,12 @@ struct PairingView: View {
                 }
             } label: {
                 HStack {
-                    if inviting { ProgressView().tint(Theme.bgBottom) }
+                    if inviting { ProgressView().tint(Theme.onAccent) }
                     Text("Send invite").font(.headline)
                 }
                 .frame(maxWidth: .infinity).frame(height: Metric.buttonHeight)
-                .background(inviteEmail.contains("@") ? Theme.accent : Color.white.opacity(0.2))
-                .foregroundStyle(Theme.bgBottom)
+                .background(inviteEmail.contains("@") ? Theme.accent : Theme.ink.opacity(0.2))
+                .foregroundStyle(Theme.onAccent)
                 .clipShape(RoundedRectangle(cornerRadius: Metric.cornerMedium))
             }
             .buttonStyle(.plain)

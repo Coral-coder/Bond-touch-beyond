@@ -36,13 +36,13 @@ struct PartnerStatusCard: View {
 
     // MARK: - Rows
 
-    private var divider: some View { Divider().overlay(.white.opacity(0.12)) }
+    private var divider: some View { Divider().overlay(Theme.ink.opacity(0.12)) }
 
     private func row(icon: String, tint: Color, title: String, value: String) -> some View {
         HStack(spacing: 12) {
             Image(systemName: icon).font(.system(size: 16, weight: .semibold)).foregroundStyle(tint)
                 .frame(width: 26)
-            Text(title).font(Theme.font(15, .bold)).foregroundStyle(.white)
+            Text(title).font(Theme.font(15, .bold)).foregroundStyle(Theme.title)
             Spacer(minLength: 8)
             Text(value).font(Theme.font(14, .semibold)).foregroundStyle(Theme.subtitle)
                 .multilineTextAlignment(.trailing).monospacedDigit()
@@ -67,7 +67,7 @@ struct PartnerStatusCard: View {
     private var phoneTint: Color {
         guard let level = p?.phoneBattery else { return Theme.subtitle }
         if p?.phoneCharging == true { return Theme.lime }
-        return level <= 0.2 ? Theme.danger : .white
+        return level <= 0.2 ? Theme.danger : Theme.title
     }
 
     // MARK: - Bracelet

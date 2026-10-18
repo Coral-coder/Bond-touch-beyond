@@ -5,12 +5,18 @@ struct RootView: View {
     @EnvironmentObject var store: LocalStore
     @EnvironmentObject var recovery: FirmwareRecovery
     @State private var tab: AppTab = .home
+    /// The theme (Settings → Theme). Every screen reads its colours from `Theme`, so a change
+    /// rebuilds the whole tree.
+    @AppStorage("appStyle") private var appStyle = AppStyle.aero.rawValue
+    @AppStorage("paperInk") private var paperInk = PaperInk.aqua.rawValue
 
     var body: some View {
         ZStack {
             AppBackground()
             content
         }
+        .modifier(ThemeFonts())
+        .id(appStyle + paperInk)
         .overlay(alignment: .top) { RecoveryBanner().padding(.top, 60) }
         .overlay(alignment: .top) { BraceletPromptBanner().padding(.top, 60) }
         // A heartbeat arriving (or replayed): the live EKG, over whatever screen is open.
@@ -36,7 +42,7 @@ struct RootView: View {
                 }
             }
         }
-        .preferredColorScheme(.dark)
+        .preferredColorScheme(Theme.colorScheme)
         .tint(Theme.accent)
     }
 

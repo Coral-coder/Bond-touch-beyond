@@ -37,7 +37,7 @@ struct PartnerDetailView: View {
 
     var body: some View {
         ZStack {
-            AeroSky().ignoresSafeArea()
+            ThemeBackdrop().ignoresSafeArea()
             if let photo {
                 GeometryReader { geo in
                     Image(uiImage: photo).resizable().scaledToFill()
@@ -55,7 +55,7 @@ struct PartnerDetailView: View {
                     VStack(spacing: 14) {
                         HStack {
                             Button("Done") { dismiss() }
-                                .font(Theme.font(16, .bold)).foregroundStyle(.white)
+                                .font(Theme.font(16, .bold)).foregroundStyle(Theme.title)
                                 .padding(.horizontal, 16).frame(height: 40).glass(Capsule())
                             Spacer()
                         }
@@ -63,7 +63,7 @@ struct PartnerDetailView: View {
                         AvatarRing(name: partner.displayName, ringColor: Color(rgbInt: partner.colorRGB),
                                    size: 132, photo: photo)
                             .padding(.top, 16)
-                        Text(partner.displayName).font(Theme.font(30, .heavy)).foregroundStyle(.white)
+                        Text(partner.displayName).font(Theme.font(30, .heavy)).foregroundStyle(Theme.title)
                         HStack(spacing: 6) {
                             Circle().fill(partner.online ? Theme.lime : Theme.subtitle.opacity(0.5))
                                 .frame(width: 8, height: 8)
@@ -73,9 +73,9 @@ struct PartnerDetailView: View {
                         PartnerStatusCard(partner: partner)
 
                         HStack(spacing: 12) {
-                            Image(systemName: "location.fill").foregroundStyle(.white)
+                            Image(systemName: "location.fill").foregroundStyle(Theme.title)
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(distance ?? "—").font(Theme.font(24, .heavy)).foregroundStyle(.white)
+                                Text(distance ?? "—").font(Theme.font(24, .heavy)).foregroundStyle(Theme.title)
                                 Text(distance == nil
                                      ? "Share locations on the Map tab to see the distance"
                                      : "between you").font(Theme.font(12)).foregroundStyle(Theme.subtitle)
@@ -88,19 +88,19 @@ struct PartnerDetailView: View {
 
                         VStack(spacing: 0) {
                             Toggle(isOn: useBackground) {
-                                Text("Use photo as background").font(Theme.font(16, .bold)).foregroundStyle(.white)
+                                Text("Use photo as background").font(Theme.font(16, .bold)).foregroundStyle(Theme.title)
                             }
                             .tint(Theme.accent).disabled(photo == nil)
                             .padding(.vertical, 12)
-                            Divider().overlay(.white.opacity(0.15))
+                            Divider().overlay(Theme.ink.opacity(0.15))
                             HStack(spacing: 12) {
-                                Text("Softness").font(Theme.font(16, .bold)).foregroundStyle(.white)
+                                Text("Softness").font(Theme.font(16, .bold)).foregroundStyle(Theme.title)
                                 Slider(value: $store.backgroundSoftness, in: 0...40).tint(Theme.accent)
                             }
                             .padding(.vertical, 12)
                             // The glass panels everywhere: how see-through, and how deep a shadow.
                             HStack(spacing: 12) {
-                                Text("Glass").font(Theme.font(14, .bold)).foregroundStyle(.white).frame(width: 64, alignment: .leading)
+                                Text("Glass").font(Theme.font(14, .bold)).foregroundStyle(Theme.title).frame(width: 64, alignment: .leading)
                                 Image(systemName: "square.fill").font(.system(size: 11)).foregroundStyle(Theme.subtitle)
                                 Slider(value: $glassClarity, in: 0...1).tint(Theme.accent)
                                     .accessibilityLabel("Glass transparency")
@@ -108,7 +108,7 @@ struct PartnerDetailView: View {
                             }
                             .padding(.bottom, 10)
                             HStack(spacing: 12) {
-                                Text("Shadow").font(Theme.font(14, .bold)).foregroundStyle(.white).frame(width: 64, alignment: .leading)
+                                Text("Shadow").font(Theme.font(14, .bold)).foregroundStyle(Theme.title).frame(width: 64, alignment: .leading)
                                 Image(systemName: "circle").font(.system(size: 11)).foregroundStyle(Theme.subtitle)
                                 Slider(value: $glassShadow, in: 0...1).tint(Theme.accent)
                                     .accessibilityLabel("Glass shadow")
@@ -125,11 +125,11 @@ struct PartnerDetailView: View {
 
                         HStack(spacing: 10) {
                             ColorPicker(selection: $color, supportsOpacity: false) {
-                                Text("Colour").font(Theme.font(14, .bold)).foregroundStyle(.white)
+                                Text("Colour").font(Theme.font(14, .bold)).foregroundStyle(Theme.title)
                             }
                             .padding(.horizontal, 14).frame(height: 56).glass(cornerRadius: 20)
                             Button { showEncounters = true } label: {
-                                Text("Encounters").font(Theme.font(14, .bold)).foregroundStyle(.white)
+                                Text("Encounters").font(Theme.font(14, .bold)).foregroundStyle(Theme.title)
                                     .frame(maxWidth: .infinity).frame(height: 56).glass(cornerRadius: 20)
                             }
                             .buttonStyle(.plain)
@@ -171,7 +171,7 @@ struct PartnerDetailView: View {
                     .foregroundStyle(p.bond.legacy ? Theme.amber : Theme.accent)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(p.bond.legacy ? "Original Bond Touch app" : "On iCloud")
-                        .font(Theme.font(16, .bold)).foregroundStyle(.white)
+                        .font(Theme.font(16, .bold)).foregroundStyle(Theme.title)
                     Text(p.bond.legacy
                          ? (model.store.chatLinks[p.id] != nil
                             ? "Invite sent — everything moves to iCloud when they accept"

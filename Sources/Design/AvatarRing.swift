@@ -43,7 +43,7 @@ struct AppBackground: View {
 
     var body: some View {
         ZStack {
-            AeroSky()
+            ThemeBackdrop()
             if let photo = model.backgroundPhoto {
                 GeometryReader { geo in
                     Image(uiImage: photo).resizable().scaledToFill()

@@ -17,7 +17,7 @@ struct BraceletPromptBanner: View {
                 HStack(spacing: 12) {
                     Image(systemName: "hand.tap.fill").font(.system(size: 22)).foregroundStyle(Theme.accent)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("Double-tap the flashing bracelet").font(Theme.font(15, .heavy)).foregroundStyle(.white)
+                        Text("Double-tap the flashing bracelet").font(Theme.font(15, .heavy)).foregroundStyle(Theme.title)
                         Text("That pairs it with this phone.").font(Theme.font(12)).foregroundStyle(Theme.subtitle)
                     }
                     Spacer()

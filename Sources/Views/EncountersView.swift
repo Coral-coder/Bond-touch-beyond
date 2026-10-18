@@ -32,7 +32,7 @@ struct EncountersView: View {
                         .padding(.top, 10)
                     } else {
                         Text("When are your next encounters?")
-                            .font(.title3.weight(.semibold)).foregroundStyle(.white)
+                            .font(.title3.weight(.semibold)).foregroundStyle(Theme.title)
                             .multilineTextAlignment(.center).padding(.top, 10)
                     }
 
@@ -41,7 +41,7 @@ struct EncountersView: View {
                                    displayedComponents: .date)
                             .datePickerStyle(.graphical)
                             .tint(Theme.accent)
-                            .colorScheme(.dark)
+                            .colorScheme(Theme.colorScheme)
                     }
 
                     Button {
@@ -49,7 +49,7 @@ struct EncountersView: View {
                     } label: {
                         Text(daysLeft == nil ? "Set next encounter" : "Update date")
                             .font(.headline).frame(maxWidth: .infinity).frame(height: Metric.buttonHeight)
-                            .background(Theme.accent).foregroundStyle(Theme.bgBottom)
+                            .background(Theme.accent).foregroundStyle(Theme.onAccent)
                             .clipShape(RoundedRectangle(cornerRadius: Metric.cornerMedium))
                     }
                     .buttonStyle(.plain)

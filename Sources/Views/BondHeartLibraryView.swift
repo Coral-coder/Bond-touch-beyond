@@ -19,7 +19,7 @@ private struct HeartLibraryList: View {
                 if library.items.isEmpty {
                     GlassCard {
                         VStack(alignment: .leading, spacing: 6) {
-                            Text("All heartbeats in one place").font(Theme.font(17, .heavy)).foregroundStyle(.white)
+                            Text("All heartbeats in one place").font(Theme.font(17, .heavy)).foregroundStyle(Theme.title)
                             Text("Add heartbeats by recording or request one from your loved ones.")
                                 .font(.footnote).foregroundStyle(Theme.subtitle)
                         }
@@ -37,7 +37,7 @@ private struct HeartLibraryList: View {
                                     HeartGlyph(colorRGB: hb.colorRGB, size: 28)
                                 }
                                 VStack(alignment: .leading, spacing: 2) {
-                                    Text(hb.title).font(Theme.font(16, .bold)).foregroundStyle(.white)
+                                    Text(hb.title).font(Theme.font(16, .bold)).foregroundStyle(Theme.title)
                                     Text("\(hb.bpm) BPM · \(hb.createdAt.formatted(date: .abbreviated, time: .omitted))\(hb.isSelf ? "" : " · received")")
                                         .font(.caption).foregroundStyle(Theme.subtitle)
                                 }
@@ -138,14 +138,14 @@ private struct HeartbeatDetail: View {
             } else {
                 HeartGlyph(colorRGB: colorRGB, size: 80, bpm: playStart == nil ? nil : hb.bpm)
             }
-            Text(hb.title).font(Theme.font(22, .heavy)).foregroundStyle(.white)
+            Text(hb.title).font(Theme.font(22, .heavy)).foregroundStyle(Theme.title)
             Text("Recorded on \(hb.createdAt.formatted(date: .long, time: .shortened))")
                 .font(.caption).foregroundStyle(Theme.subtitle)
             if !hb.isSelf, let by = hb.createdBy, !by.isEmpty {
                 Text("Received from: \(by)").font(.caption).foregroundStyle(Theme.subtitle)
             }
             if !hb.memory.isEmpty {
-                Text(hb.memory).font(.footnote).foregroundStyle(.white).multilineTextAlignment(.center)
+                Text(hb.memory).font(.footnote).foregroundStyle(Theme.title).multilineTextAlignment(.center)
             }
         }
     }
@@ -154,7 +154,7 @@ private struct HeartbeatDetail: View {
         GlassCard {
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
-                    Text("\(hb.bpm)").font(Theme.font(28, .heavy)).foregroundStyle(.white).monospacedDigit()
+                    Text("\(hb.bpm)").font(Theme.font(28, .heavy)).foregroundStyle(Theme.title).monospacedDigit()
                     Text("BPM").font(Theme.font(12, .bold)).foregroundStyle(Theme.subtitle)
                     Spacer()
                     Text("\(hb.intervals.count) beats · \(Int(hb.seconds.rounded())) s").font(.caption).foregroundStyle(Theme.subtitle)
@@ -169,7 +169,7 @@ private struct HeartbeatDetail: View {
     private func actions(_ hb: SavedHeartbeat) -> some View {
         VStack(spacing: 10) {
             if let message {
-                Text(message).font(.footnote).foregroundStyle(.white).multilineTextAlignment(.center)
+                Text(message).font(.footnote).foregroundStyle(Theme.title).multilineTextAlignment(.center)
             }
             Button {
                 commit()
@@ -197,7 +197,7 @@ private struct HeartbeatDetail: View {
                     }
                 } label: {
                     Label("Send to a partner's bracelet", systemImage: "paperplane")
-                        .font(Theme.font(16, .bold)).foregroundStyle(.white)
+                        .font(Theme.font(16, .bold)).foregroundStyle(Theme.title)
                         .frame(maxWidth: .infinity).frame(height: 46)
                         .glass(Capsule())
                 }
@@ -215,23 +215,23 @@ private struct HeartbeatDetail: View {
     private func editCard(_ hb: SavedHeartbeat) -> some View {
         GlassCard {
             VStack(alignment: .leading, spacing: 12) {
-                Text("Name").font(Theme.font(15, .bold)).foregroundStyle(.white)
+                Text("Name").font(Theme.font(15, .bold)).foregroundStyle(Theme.title)
                 TextField("Name", text: $name).textFieldStyle(.roundedBorder).onSubmit { commit() }
-                Text("Color").font(Theme.font(15, .bold)).foregroundStyle(.white)
+                Text("Color").font(Theme.font(15, .bold)).foregroundStyle(Theme.title)
                 Text("This color will light up on the Heart when the heartbeat is felt.")
                     .font(.caption).foregroundStyle(Theme.subtitle)
                 HeartColorRow(colorRGB: $colorRGB)
-                Text("Memory").font(Theme.font(15, .bold)).foregroundStyle(.white)
+                Text("Memory").font(Theme.font(15, .bold)).foregroundStyle(Theme.title)
                 TextField("A memory (optional)", text: $memory, axis: .vertical)
                     .lineLimit(2...5).textFieldStyle(.roundedBorder)
                 HeartPhotoPicker(item: $photoItem, image: $photo)
                 if model.legacySignedIn {
-                    Text("Heartbeat count").font(Theme.font(15, .bold)).foregroundStyle(.white)
+                    Text("Heartbeat count").font(Theme.font(15, .bold)).foregroundStyle(Theme.title)
                     Text("Choose who can see this heartbeat count (up to 3).")
                         .font(.caption).foregroundStyle(Theme.subtitle)
                     ForEach(emails, id: \.self) { e in
                         HStack {
-                            Text(e).font(.footnote).foregroundStyle(.white)
+                            Text(e).font(.footnote).foregroundStyle(Theme.title)
                             Spacer()
                             Button { emails.removeAll { $0 == e }; commit() } label: { Image(systemName: "xmark.circle.fill") }
                                 .foregroundStyle(Theme.subtitle)
@@ -327,18 +327,18 @@ struct HeartShareSheet: View {
                 VStack(spacing: 16) {
                     HeartGlyph(colorRGB: heartbeat.colorRGB, size: 60, bpm: heartbeat.bpm)
                     if sent {
-                        Text("Heartbeat sent!").font(Theme.font(22, .heavy)).foregroundStyle(.white)
+                        Text("Heartbeat sent!").font(Theme.font(22, .heavy)).foregroundStyle(Theme.title)
                         Text("Once received, your loved one will be able to save it within their library!")
                             .font(.footnote).foregroundStyle(Theme.subtitle).multilineTextAlignment(.center)
                         Button("Got it!") { dismiss() }.buttonStyle(AccentButtonStyle())
                     } else {
                         GlassCard {
                             VStack(alignment: .leading, spacing: 10) {
-                                Text("Who do you want to send it to?").font(Theme.font(16, .bold)).foregroundStyle(.white)
+                                Text("Who do you want to send it to?").font(Theme.font(16, .bold)).foregroundStyle(Theme.title)
                                 TextField("name@email.com", text: $email)
                                     .textFieldStyle(.roundedBorder)
                                     .keyboardType(.emailAddress).textInputAutocapitalization(.never).autocorrectionDisabled()
-                                Text("Make it personal").font(Theme.font(16, .bold)).foregroundStyle(.white)
+                                Text("Make it personal").font(Theme.font(16, .bold)).foregroundStyle(Theme.title)
                                 Text("Add a lovely message if you want, it’s totally optional.")
                                     .font(.caption).foregroundStyle(Theme.subtitle)
                                 TextField("Message", text: $note, axis: .vertical)
@@ -402,7 +402,7 @@ private struct HeartShared: View {
                 if !model.legacySignedIn {
                     GlassCard {
                         VStack(alignment: .leading, spacing: 8) {
-                            Text("Send & ask for a heartbeat").font(Theme.font(17, .heavy)).foregroundStyle(.white)
+                            Text("Send & ask for a heartbeat").font(Theme.font(17, .heavy)).foregroundStyle(Theme.title)
                             Text("Heartbeats are shared by email through the original Bond Touch servers. Sign in with your Bond Touch account in Settings → Bond Touch account to use it. You can still send a heartbeat to a partner's bracelet from the library.")
                                 .font(.footnote).foregroundStyle(Theme.subtitle)
                             NavigationLink("Sign in") {
@@ -412,14 +412,14 @@ private struct HeartShared: View {
                         }
                     }
                 } else {
-                    if let message { Text(message).font(.footnote).foregroundStyle(.white).multilineTextAlignment(.center) }
+                    if let message { Text(message).font(.footnote).foregroundStyle(Theme.title).multilineTextAlignment(.center) }
                     askCard
                     pendingSection
                     requestsSection
                     if library.pending.isEmpty && library.requests.isEmpty {
                         GlassCard {
                             VStack(alignment: .leading, spacing: 4) {
-                                Text("All good").font(Theme.font(17, .heavy)).foregroundStyle(.white)
+                                Text("All good").font(Theme.font(17, .heavy)).foregroundStyle(Theme.title)
                                 Text("No requests to manage.").font(.footnote).foregroundStyle(Theme.subtitle)
                             }
                         }
@@ -457,7 +457,7 @@ private struct HeartShared: View {
     private var askCard: some View {
         GlassCard {
             VStack(alignment: .leading, spacing: 10) {
-                Text("Ask for a heartbeat").font(Theme.font(17, .heavy)).foregroundStyle(.white)
+                Text("Ask for a heartbeat").font(Theme.font(17, .heavy)).foregroundStyle(Theme.title)
                 Text("Whose heartbeat are you asking for? They’ll receive a request to record their heartbeat.")
                     .font(.caption).foregroundStyle(Theme.subtitle)
                 HStack {
@@ -487,11 +487,11 @@ private struct HeartShared: View {
                         HStack(spacing: 10) {
                             HeartGlyph(colorRGB: p.colorRGB, size: 28)
                             VStack(alignment: .leading, spacing: 2) {
-                                Text("\(p.name)’s heartbeat").font(Theme.font(16, .bold)).foregroundStyle(.white)
+                                Text("\(p.name)’s heartbeat").font(Theme.font(16, .bold)).foregroundStyle(Theme.title)
                                 Text("Received from: \(p.createdBy)").font(.caption).foregroundStyle(Theme.subtitle)
                             }
                         }
-                        if !p.message.isEmpty { Text(p.message).font(.footnote).foregroundStyle(.white) }
+                        if !p.message.isEmpty { Text(p.message).font(.footnote).foregroundStyle(Theme.title) }
                         if p.intervals.count > 1 {
                             EKGView(bpm: SavedHeartbeat(name: p.name, colorRGB: p.colorRGB, intervals: p.intervals).bpm,
                                     colorRGB: p.colorRGB).frame(height: 40)
@@ -516,7 +516,7 @@ private struct HeartShared: View {
                 GlassCard {
                     VStack(alignment: .leading, spacing: 10) {
                         Text("\(r.fromUserName.isEmpty ? r.fromUser : r.fromUserName) is asking for your heartbeat")
-                            .font(Theme.font(16, .bold)).foregroundStyle(.white)
+                            .font(Theme.font(16, .bold)).foregroundStyle(Theme.title)
                         Text("Record a heartbeat or choose one from the library to send.")
                             .font(.caption).foregroundStyle(Theme.subtitle)
                         HStack(spacing: 10) {
@@ -525,7 +525,7 @@ private struct HeartShared: View {
                                     Button(hb.title) { run { message = await model.answerRequest(r, with: hb) ?? "Heartbeat sent!" } }
                                 }
                             } label: {
-                                Text("Choose a heartbeat").font(Theme.font(15, .bold)).foregroundStyle(.white)
+                                Text("Choose a heartbeat").font(Theme.font(15, .bold)).foregroundStyle(Theme.title)
                                     .frame(maxWidth: .infinity).frame(height: 40).glass(Capsule())
                             }
                             .disabled(library.items.isEmpty || busy)
@@ -543,7 +543,7 @@ private struct HeartShared: View {
                     HStack {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Pending request to:").font(.caption).foregroundStyle(Theme.subtitle)
-                            Text(r.toUser).font(Theme.font(15, .bold)).foregroundStyle(.white)
+                            Text(r.toUser).font(Theme.font(15, .bold)).foregroundStyle(Theme.title)
                         }
                         Spacer()
                         Button { removing = r } label: { Image(systemName: "trash") }

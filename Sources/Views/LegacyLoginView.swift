@@ -37,14 +37,14 @@ struct LegacyLoginView: View {
     private var emailStep: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text("Hi there! 👋\nLet's get you connected.")
-                .font(.title2.bold()).foregroundStyle(.white)
+                .font(.title2.bold()).foregroundStyle(Theme.title)
             Text("Sign in with the email on your original Bond Touch account.")
                 .font(.subheadline).foregroundStyle(Theme.subtitle)
             TextField("name@email.com", text: $email)
                 .textContentType(.emailAddress).keyboardType(.emailAddress)
                 .autocorrectionDisabled().textInputAutocapitalization(.never)
-                .padding(14).background(Color.white.opacity(0.08))
-                .clipShape(RoundedRectangle(cornerRadius: Metric.cornerMedium)).foregroundStyle(.white)
+                .padding(14).background(Theme.ink.opacity(0.08))
+                .clipShape(RoundedRectangle(cornerRadius: Metric.cornerMedium)).foregroundStyle(Theme.title)
             primaryButton("Continue with email", enabled: email.contains("@") && !busy) {
                 Task { await beginLogin() }
             }
@@ -53,13 +53,13 @@ struct LegacyLoginView: View {
 
     private var linkStep: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("Check your email").font(.title2.bold()).foregroundStyle(.white)
+            Text("Check your email").font(.title2.bold()).foregroundStyle(Theme.title)
             Text("We emailed a sign-in link to\n\(email).\nOpen that email, copy the sign-in link, and paste it here.")
                 .font(.subheadline).foregroundStyle(Theme.subtitle)
             TextField("Paste the sign-in link", text: $linkText, axis: .vertical)
                 .lineLimit(2...4).textInputAutocapitalization(.never).autocorrectionDisabled()
-                .font(.footnote.monospaced()).foregroundStyle(.white)
-                .padding(14).background(Color.white.opacity(0.08))
+                .font(.footnote.monospaced()).foregroundStyle(Theme.title)
+                .padding(14).background(Theme.ink.opacity(0.08))
                 .clipShape(RoundedRectangle(cornerRadius: Metric.cornerMedium))
             primaryButton("Sign in", enabled: linkText.contains("oobCode") && !busy) {
                 Task { await completeLogin() }
@@ -73,7 +73,7 @@ struct LegacyLoginView: View {
         VStack(alignment: .leading, spacing: 16) {
             Label("Signed in", systemImage: "checkmark.seal.fill")
                 .font(.title2.bold()).foregroundStyle(Theme.accent)
-            Text("Logged in as \(store.legacyEmail).").foregroundStyle(.white)
+            Text("Logged in as \(store.legacyEmail).").foregroundStyle(Theme.title)
             Text("Your original account is connected. Partners, invites, touches, Touch Language, greeting, encounters and presence sync with it alongside iCloud.")
                 .font(.footnote).foregroundStyle(Theme.subtitle)
             Text("Status: \(model.legacyStatus)").font(.footnote.monospaced()).foregroundStyle(Theme.subtitle)
@@ -89,12 +89,12 @@ struct LegacyLoginView: View {
     @ViewBuilder private func primaryButton(_ title: String, enabled: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack {
-                if busy { ProgressView().tint(Theme.bgBottom) }
+                if busy { ProgressView().tint(Theme.onAccent) }
                 Text(title).font(.headline)
             }
             .frame(maxWidth: .infinity).frame(height: Metric.buttonHeight)
-            .background(enabled ? Theme.accent : Color.white.opacity(0.2))
-            .foregroundStyle(Theme.bgBottom)
+            .background(enabled ? Theme.accent : Theme.ink.opacity(0.2))
+            .foregroundStyle(Theme.onAccent)
             .clipShape(RoundedRectangle(cornerRadius: Metric.cornerMedium))
         }
         .disabled(!enabled)

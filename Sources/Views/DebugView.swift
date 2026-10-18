@@ -84,7 +84,7 @@ struct DebugView: View {
                                 VStack(alignment: .leading, spacing: 2) {
                                     HStack(spacing: 6) {
                                         Text(logIcon(e.kind))
-                                        Text(e.title).font(.caption.bold()).foregroundStyle(.white)
+                                        Text(e.title).font(.caption.bold()).foregroundStyle(Theme.title)
                                         Spacer()
                                         Text(e.at.formatted(date: .omitted, time: .standard))
                                             .font(.caption2).foregroundStyle(Theme.subtitle)
@@ -97,7 +97,7 @@ struct DebugView: View {
                             }
                         }
                         .padding(14).frame(maxWidth: .infinity, alignment: .leading)
-                        .background(Color.white.opacity(0.06))
+                        .background(Theme.ink.opacity(0.06))
                         .clipShape(RoundedRectangle(cornerRadius: Metric.cornerMedium))
                     }
 
@@ -111,7 +111,7 @@ struct DebugView: View {
                             } label: {
                                 Text("Load everything in my database")
                                     .font(.headline).frame(maxWidth: .infinity).frame(height: Metric.buttonHeight)
-                                    .background(Theme.accent).foregroundStyle(Theme.bgBottom)
+                                    .background(Theme.accent).foregroundStyle(Theme.onAccent)
                                     .clipShape(RoundedRectangle(cornerRadius: Metric.cornerMedium))
                             }
                             .buttonStyle(.plain)
@@ -134,7 +134,7 @@ struct DebugView: View {
             Text(title.uppercased()).font(.caption.bold()).foregroundStyle(Theme.accent)
             VStack(alignment: .leading, spacing: 6) { content() }
                 .padding(14).frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color.white.opacity(0.06))
+                .background(Theme.ink.opacity(0.06))
                 .clipShape(RoundedRectangle(cornerRadius: Metric.cornerMedium))
         }
     }
@@ -151,7 +151,7 @@ struct DebugView: View {
     private func row(_ label: String, _ value: String) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(label).font(.caption).foregroundStyle(Theme.subtitle)
-            Text(value).font(.footnote.monospaced()).foregroundStyle(.white)
+            Text(value).font(.footnote.monospaced()).foregroundStyle(Theme.title)
                 .textSelection(.enabled)
         }
     }
@@ -176,12 +176,12 @@ private struct DataDumpView: View {
                 Section {
                     if let json = item.json {
                         JSONNode(key: nil, value: json)
-                            .listRowBackground(Color.white.opacity(0.04))
+                            .listRowBackground(Theme.ink.opacity(0.04))
                     } else {
                         Text(item.pretty)
-                            .font(.system(size: 11, design: .monospaced)).foregroundStyle(.white)
+                            .font(.system(size: 11, design: .monospaced)).foregroundStyle(Theme.title)
                             .textSelection(.enabled)
-                            .listRowBackground(Color.white.opacity(0.04))
+                            .listRowBackground(Theme.ink.opacity(0.04))
                     }
                     if item.editable {
                         NavigationLink {
@@ -189,7 +189,7 @@ private struct DataDumpView: View {
                         } label: {
                             Label("Edit (PUT)", systemImage: "pencil").foregroundStyle(Theme.accent)
                         }
-                        .listRowBackground(Color.white.opacity(0.04))
+                        .listRowBackground(Theme.ink.opacity(0.04))
                     }
                 } header: {
                     Text("/\(item.path)  ·  HTTP \(item.status)")
@@ -262,20 +262,20 @@ private struct EndpointEditorView: View {
     var body: some View {
         VStack(spacing: 12) {
             TextEditor(text: $text)
-                .font(.system(size: 12, design: .monospaced)).foregroundStyle(.white)
+                .font(.system(size: 12, design: .monospaced)).foregroundStyle(Theme.title)
                 .scrollContentBackground(.hidden)
-                .padding(8).background(Color.white.opacity(0.06))
+                .padding(8).background(Theme.ink.opacity(0.06))
                 .clipShape(RoundedRectangle(cornerRadius: Metric.cornerMedium))
             Button { Task { await save() } } label: {
-                HStack { if busy { ProgressView().tint(Theme.bgBottom) }; Text("Save (PUT)").font(.headline) }
+                HStack { if busy { ProgressView().tint(Theme.onAccent) }; Text("Save (PUT)").font(.headline) }
                     .frame(maxWidth: .infinity).frame(height: Metric.buttonHeight)
-                    .background(Theme.accent).foregroundStyle(Theme.bgBottom)
+                    .background(Theme.accent).foregroundStyle(Theme.onAccent)
                     .clipShape(RoundedRectangle(cornerRadius: Metric.cornerMedium))
             }
             .buttonStyle(.plain).disabled(busy)
             if !result.isEmpty {
                 ScrollView {
-                    Text(result).font(.system(size: 11, design: .monospaced)).foregroundStyle(.white)
+                    Text(result).font(.system(size: 11, design: .monospaced)).foregroundStyle(Theme.title)
                         .textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .frame(maxHeight: 180)

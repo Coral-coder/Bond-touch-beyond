@@ -37,7 +37,7 @@ struct PeopleView: View {
                             ForEach(Array(model.partners.enumerated()), id: \.element.id) { index, partner in
                                 partnerRow(partner)
                                 if index < model.partners.count - 1 {
-                                    Divider().overlay(Color.white.opacity(0.08)).padding(.leading, 60)
+                                    Divider().overlay(Theme.ink.opacity(0.08)).padding(.leading, 60)
                                 }
                             }
                         }
@@ -54,7 +54,7 @@ struct PeopleView: View {
                     GlassCard {
                         HStack(spacing: 12) {
                             Image(systemName: "person.badge.plus").foregroundStyle(Theme.accent)
-                            Text("Add a partner").foregroundStyle(.white)
+                            Text("Add a partner").foregroundStyle(Theme.title)
                             Spacer()
                             Image(systemName: "chevron.right").foregroundStyle(Theme.subtitle).font(.footnote)
                         }
@@ -78,7 +78,7 @@ struct PeopleView: View {
                 }
             }
             VStack(alignment: .leading, spacing: 2) {
-                Text(partner.displayName).foregroundStyle(.white)
+                Text(partner.displayName).foregroundStyle(Theme.title)
                 Text(presenceText(partner)).font(.caption).foregroundStyle(Theme.subtitle)
             }
             Spacer()
@@ -99,10 +99,10 @@ struct PeopleView: View {
     private func pendingRow(_ bond: Bond) -> some View {
         GlassCard {
             HStack(spacing: 14) {
-                Circle().fill(Color.white.opacity(0.12)).frame(width: 40, height: 40)
+                Circle().fill(Theme.ink.opacity(0.12)).frame(width: 40, height: 40)
                     .overlay(Image(systemName: "hourglass").foregroundStyle(Theme.subtitle))
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(bond.legacy ? bond.partnerName : "Pending invite").foregroundStyle(.white)
+                    Text(bond.legacy ? bond.partnerName : "Pending invite").foregroundStyle(Theme.title)
                     Text(bond.legacy ? "Invite sent · waiting for them to accept" : "Waiting for your partner to accept")
                         .font(.caption).foregroundStyle(Theme.subtitle)
                 }
@@ -123,7 +123,7 @@ struct PeopleView: View {
                     Circle().fill(Theme.accent.opacity(0.25)).frame(width: 40, height: 40)
                         .overlay(Image(systemName: "envelope.fill").foregroundStyle(Theme.accent))
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(bond.partnerName).foregroundStyle(.white)
+                        Text(bond.partnerName).foregroundStyle(Theme.title)
                         Text("wants to bond with you").font(.caption).foregroundStyle(Theme.subtitle)
                     }
                     Spacer()
@@ -131,12 +131,12 @@ struct PeopleView: View {
                 HStack(spacing: 12) {
                     Button { Task { await model.legacyAccept(bond) } } label: {
                         Text("Accept").font(.headline).frame(maxWidth: .infinity).frame(height: 40)
-                            .background(Theme.accent).foregroundStyle(Theme.bgBottom)
+                            .background(Theme.accent).foregroundStyle(Theme.onAccent)
                             .clipShape(RoundedRectangle(cornerRadius: Metric.cornerMedium))
                     }
                     Button { Task { await model.removeBond(bond) } } label: {
                         Text("Decline").font(.headline).frame(maxWidth: .infinity).frame(height: 40)
-                            .background(Color.white.opacity(0.08)).foregroundStyle(.white)
+                            .background(Theme.ink.opacity(0.08)).foregroundStyle(Theme.title)
                             .clipShape(RoundedRectangle(cornerRadius: Metric.cornerMedium))
                     }
                 }
@@ -188,6 +188,6 @@ private struct ReorderPartnersSheet: View {
             }
         }
         .onAppear { order = model.partners }
-        .preferredColorScheme(.dark)
+        .preferredColorScheme(Theme.colorScheme)
     }
 }

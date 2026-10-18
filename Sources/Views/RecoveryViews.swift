@@ -75,7 +75,7 @@ struct RecoveryBanner: View {
             HStack(alignment: .top, spacing: 10) {
                 Image(systemName: icon).foregroundStyle(tint).font(.system(size: 18, weight: .bold))
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(title).font(Theme.font(15, .heavy)).foregroundStyle(.white)
+                    Text(title).font(Theme.font(15, .heavy)).foregroundStyle(Theme.title)
                     Text(detail).font(Theme.font(12)).foregroundStyle(Theme.subtitle)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -102,7 +102,7 @@ struct FirmwareSettingsView: View {
                 ForEach(BraceletModel.allCases) { m in
                     HStack(spacing: 12) {
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(m.title).font(Theme.font(16, .bold)).foregroundStyle(.white)
+                            Text(m.title).font(Theme.font(16, .bold)).foregroundStyle(Theme.title)
                             Text(recovery.installed[m] ?? (recovery.hasBuiltIn(m) ? "Built in — repairs automatically" : "No firmware"))
                                 .font(Theme.font(12)).foregroundStyle(Theme.subtitle).lineLimit(1)
                         }

@@ -84,17 +84,17 @@ private struct BondHeartHome: View {
                         HeartGlyph(colorRGB: hb.colorRGB, size: 34, bpm: hb.bpm)
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Wearing").font(.caption).foregroundStyle(Theme.subtitle)
-                            Text(hb.title).font(Theme.font(17, .heavy)).foregroundStyle(.white)
+                            Text(hb.title).font(Theme.font(17, .heavy)).foregroundStyle(Theme.title)
                         }
                         Spacer()
-                        Text("\(hb.bpm)").font(Theme.font(24, .heavy)).foregroundStyle(.white).monospacedDigit()
+                        Text("\(hb.bpm)").font(Theme.font(24, .heavy)).foregroundStyle(Theme.title).monospacedDigit()
                         Text("BPM").font(Theme.font(11, .bold)).foregroundStyle(Theme.subtitle)
                     }
                     EKGView(bpm: hb.bpm, colorRGB: hb.colorRGB).frame(height: 44)
                     Text("Grab the heart by touching the front light area. You’ll feel it beating after a few seconds.")
                         .font(.caption).foregroundStyle(Theme.subtitle)
                     if let countText {
-                        Text(countText).font(.footnote).foregroundStyle(.white)
+                        Text(countText).font(.footnote).foregroundStyle(Theme.title)
                     }
                     HStack(spacing: 10) {
                         Button("Heartbeat count") {
@@ -140,7 +140,7 @@ private struct BondHeartHome: View {
                 HStack(spacing: 14) {
                     Image(systemName: icon).font(.title3).foregroundStyle(Theme.pink).frame(width: 30)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(title).foregroundStyle(.white).font(Theme.font(16, .bold))
+                        Text(title).foregroundStyle(Theme.title).font(Theme.font(16, .bold))
                         Text(subtitle).font(.caption).foregroundStyle(Theme.subtitle)
                     }
                     Spacer()
@@ -164,13 +164,13 @@ struct PendantCard: View {
                     HeartGlyph(colorRGB: pendant.state.isUsable ? 0xEC5A89 : 0x8FA7BA, size: 36,
                                bpm: pendant.state.isUsable ? 64 : nil)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("My Bond Heart").font(Theme.font(17, .heavy)).foregroundStyle(.white)
+                        Text("My Bond Heart").font(Theme.font(17, .heavy)).foregroundStyle(Theme.title)
                         Text(pendant.state.text).font(.caption).foregroundStyle(Theme.subtitle)
                     }
                     Spacer()
                     if let b = pendant.battery {
                         Label("\(b)%", systemImage: b > 60 ? "battery.100" : b > 25 ? "battery.50" : "battery.25")
-                            .font(Theme.font(14, .bold)).foregroundStyle(b > 25 ? Color.white : Theme.amber)
+                            .font(Theme.font(14, .bold)).foregroundStyle(b > 25 ? Theme.title : Theme.amber)
                     }
                 }
                 if let hint {
@@ -261,7 +261,7 @@ struct HeartTutorialsView: View {
                 ForEach(lessons) { lesson in
                     GlassCard {
                         VStack(alignment: .leading, spacing: 8) {
-                            Label(lesson.title, systemImage: lesson.icon).font(Theme.font(17, .heavy)).foregroundStyle(.white)
+                            Label(lesson.title, systemImage: lesson.icon).font(Theme.font(17, .heavy)).foregroundStyle(Theme.title)
                             ForEach(lesson.lines, id: \.self) { line in
                                 Text(line).font(.footnote).foregroundStyle(Theme.subtitle)
                             }

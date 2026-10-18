@@ -207,14 +207,14 @@ struct TouchBarSurface: View {
             let short = vertical ? geo.size.width : geo.size.height
             ZStack {
                 Capsule()
-                    .fill(LinearGradient(colors: [.white.opacity(0.12), .black.opacity(0.28)],
+                    .fill(LinearGradient(colors: [Theme.ink.opacity(0.12), .black.opacity(0.28)],
                                          startPoint: vertical ? .leading : .top,
                                          endPoint: vertical ? .trailing : .bottom))
-                    .overlay(Capsule().stroke(.white.opacity(0.35), lineWidth: 1))
+                    .overlay(Capsule().stroke(Theme.ink.opacity(0.35), lineWidth: 1))
                     .shadow(color: .black.opacity(0.35), radius: 6, y: 2)
                 // The bar's 9 position marks.
                 ForEach(0..<TouchPattern.positions, id: \.self) { i in
-                    Circle().fill(.white.opacity(0.18)).frame(width: 4, height: 4)
+                    Circle().fill(Theme.ink.opacity(0.18)).frame(width: 4, height: 4)
                         .position(point(CGFloat(i) / CGFloat(TouchPattern.positions - 1), long, short))
                 }
                 FingerGlow(fingers: recorder.fingers, vertical: vertical,
@@ -281,12 +281,12 @@ struct CountdownRing: View {
 
     var body: some View {
         ZStack {
-            Circle().stroke(.white.opacity(0.18), lineWidth: size * 0.1)
+            Circle().stroke(Theme.ink.opacity(0.18), lineWidth: size * 0.1)
             Circle().trim(from: 0, to: max(0, 1 - progress))
                 .stroke(Theme.accent, style: StrokeStyle(lineWidth: size * 0.1, lineCap: .round))
                 .rotationEffect(.degrees(-90))
             Text(String(format: "%.1f", remaining))
-                .font(Theme.font(size * 0.28, .heavy)).foregroundStyle(.white)
+                .font(Theme.font(size * 0.28, .heavy)).foregroundStyle(Theme.title)
                 .monospacedDigit()
         }
         .frame(width: size, height: size)
@@ -319,11 +319,11 @@ struct ComposeTouchView: View {
         VStack(spacing: 16) {
             HStack {
                 Button("Close") { recorder.cancel(); dismiss() }
-                    .font(Theme.font(16, .bold)).foregroundStyle(.white)
+                    .font(Theme.font(16, .bold)).foregroundStyle(Theme.title)
                     .padding(.horizontal, 16).frame(height: 40).glass(Capsule())
                 Spacer()
                 Text(mode == .send ? "To \(model.selectedPartner?.displayName ?? "partner")" : "New touch")
-                    .font(Theme.font(17, .heavy)).foregroundStyle(.white)
+                    .font(Theme.font(17, .heavy)).foregroundStyle(Theme.title)
                 Spacer()
                 Color.clear.frame(width: 80, height: 40)
             }
@@ -354,10 +354,10 @@ struct ComposeTouchView: View {
             .frame(maxHeight: .infinity)
 
             HStack(spacing: 12) {
-                Text("Colour").font(Theme.font(15, .bold)).foregroundStyle(.white)
+                Text("Colour").font(Theme.font(15, .bold)).foregroundStyle(Theme.title)
                 LinearGradient(colors: [startColor, endColor], startPoint: .leading, endPoint: .trailing)
                     .frame(height: 22).clipShape(Capsule())
-                    .overlay(Capsule().stroke(.white.opacity(0.6), lineWidth: 2))
+                    .overlay(Capsule().stroke(Theme.ink.opacity(0.6), lineWidth: 2))
                 // The custom setter marks the colour customized only on a real picker edit,
                 // not when onAppear sets the default (which assigns the @State directly).
                 ColorPicker("Start colour", selection: Binding(

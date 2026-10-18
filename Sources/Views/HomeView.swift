@@ -37,7 +37,7 @@ struct HomeView: View {
                 .overlay(alignment: .bottom) {
                     if let heartNote {
                         Text(heartNote)
-                            .font(Theme.font(12, .semibold)).foregroundStyle(.white)
+                            .font(Theme.font(12, .semibold)).foregroundStyle(Theme.title)
                             .multilineTextAlignment(.center)
                             .padding(.horizontal, 14).padding(.vertical, 8)
                             .glass(cornerRadius: 16)
@@ -117,7 +117,7 @@ struct HomeView: View {
         TimelineView(.animation(paused: !model.sendingHeartbeat)) { ctx in
             Image(systemName: "heart.fill")
                 .font(.system(size: 17, weight: .semibold))
-                .foregroundStyle(model.sendingHeartbeat ? Theme.pink : .white)
+                .foregroundStyle(model.sendingHeartbeat ? Theme.pink : Theme.title)
                 .scaleEffect(model.sendingHeartbeat ? heartScale(ctx.date) : 1)
                 .frame(width: 46, height: 46)
                 .glass(Circle())
@@ -158,7 +158,7 @@ struct HomeView: View {
         } label: {
             Text(kissSent ? "✓" : "💋")
                 .font(.system(size: 19))
-                .foregroundStyle(.white)
+                .foregroundStyle(Theme.title)
                 .frame(width: 46, height: 46)
                 .glass(Circle())
                 .scaleEffect(kissSent ? 1.12 : 1)
@@ -180,7 +180,7 @@ struct HomeView: View {
         Button(action: action) {
             Image(systemName: icon)
                 .font(.system(size: 17, weight: .semibold))
-                .foregroundStyle(.white)
+                .foregroundStyle(Theme.title)
                 .frame(width: 46, height: 46)
                 .glass(Circle())
         }
@@ -215,7 +215,7 @@ struct HomeView: View {
                             editingGreeting = true
                         } label: {
                             Text(store.greeting(for: model.selectedPartnerID))
-                                .font(Theme.font(22, .heavy)).foregroundStyle(.white)
+                                .font(Theme.font(22, .heavy)).foregroundStyle(Theme.title)
                                 .multilineTextAlignment(.leading).lineLimit(2)
                                 .shadow(color: .black.opacity(0.5), radius: 6)
                         }
@@ -240,7 +240,7 @@ struct HomeView: View {
         .overlay(alignment: .topTrailing) {
             if partner != nil {
                 Button { showPartner = true } label: {
-                    Image(systemName: "info").font(.system(size: 14, weight: .heavy)).foregroundStyle(.white)
+                    Image(systemName: "info").font(.system(size: 14, weight: .heavy)).foregroundStyle(Theme.title)
                         .frame(width: 34, height: 34).glass(Circle())
                 }
                 .buttonStyle(.plain).padding(12)
@@ -273,7 +273,7 @@ struct HomeView: View {
                         ZStack {
                             Circle().strokeBorder(style: StrokeStyle(lineWidth: 2, dash: [6]))
                                 .foregroundStyle(Theme.subtitle)
-                            Image(systemName: "plus").font(.system(size: 26, weight: .semibold)).foregroundStyle(.white)
+                            Image(systemName: "plus").font(.system(size: 26, weight: .semibold)).foregroundStyle(Theme.title)
                         }
                         .frame(width: 76, height: 76)
                     }
@@ -319,7 +319,7 @@ struct HomeView: View {
                 RoundedRectangle(cornerRadius: 24, style: .continuous)
                     .fill(LinearGradient(colors: [Color(rgbInt: 0x74D3CB), Theme.accentDeep],
                                          startPoint: .top, endPoint: .bottom))
-                    .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).stroke(.white.opacity(0.45), lineWidth: 1))
+                    .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).stroke(Theme.ink.opacity(0.45), lineWidth: 1))
                     .shadow(color: Theme.accent.opacity(0.25), radius: 10, y: 5)
             )
         }
@@ -345,7 +345,7 @@ struct HomeView: View {
                                 Circle().fill(LinearGradient(colors: [Color(rgbInt: m.colorRGB), Color(rgbInt: m.endColorRGB)],
                                                              startPoint: .leading, endPoint: .trailing))
                                     .frame(width: 12, height: 12)
-                                Text(m.label).font(Theme.font(14, .bold)).foregroundStyle(.white).lineLimit(1)
+                                Text(m.label).font(Theme.font(14, .bold)).foregroundStyle(Theme.title).lineLimit(1)
                             }
                             .padding(.horizontal, 14).frame(height: 38)
                             .glass(Capsule())
@@ -521,7 +521,7 @@ struct HomeView: View {
                 if let bpm = touch.heartbeatBPM {
                     // A heartbeat is listed as its EKG, with the BPM.
                     Label("\(bpm) BPM", systemImage: "heart.fill")
-                        .font(Theme.font(12, .heavy)).foregroundStyle(.white)
+                        .font(Theme.font(12, .heavy)).foregroundStyle(Theme.title)
                         .padding(.horizontal, 9).padding(.vertical, 4)
                         .background(Capsule().fill(.black.opacity(0.45)))
                         .padding(10)
@@ -535,7 +535,7 @@ struct HomeView: View {
                         if !meaning.emoji.isEmpty { Text(meaning.emoji).font(.system(size: 17)) }
                         Text(meaning.label).font(Theme.font(16, .heavy)).lineLimit(1).minimumScaleFactor(0.7)
                     }
-                    .foregroundStyle(.white)
+                    .foregroundStyle(Theme.title)
                     .padding(.horizontal, 14).padding(.vertical, 7)
                     .background(Capsule().fill(.black.opacity(0.5)))
                     .overlay(Capsule().stroke(Color(rgbInt: touch.colorRGB).opacity(0.9), lineWidth: 1.5))
@@ -549,13 +549,13 @@ struct HomeView: View {
             HStack(spacing: 10) {
                 VStack(alignment: .trailing, spacing: 1) {
                     Text(mine ? "You" : (partner?.displayName ?? "Partner"))
-                        .font(Theme.font(12, .bold)).foregroundStyle(.white)
+                        .font(Theme.font(12, .bold)).foregroundStyle(Theme.title)
                     Text(touch.sentAt.formatted(date: .omitted, time: .shortened))
                         .font(Theme.font(11)).foregroundStyle(Theme.subtitle)
                 }
                 Button { model.feel(touch) } label: {
-                    Image(systemName: "play.fill").font(.system(size: 12, weight: .bold)).foregroundStyle(.white)
-                        .frame(width: 32, height: 32).background(Circle().fill(.white.opacity(0.16)))
+                    Image(systemName: "play.fill").font(.system(size: 12, weight: .bold)).foregroundStyle(Theme.title)
+                        .frame(width: 32, height: 32).background(Circle().fill(Theme.ink.opacity(0.16)))
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Play on bracelet")
@@ -605,7 +605,7 @@ private struct PairMap: View {
                 pin.id == 0 ? meView : partnerView
             }
         }
-        .colorScheme(.dark)
+        .colorScheme(Theme.colorScheme)
         .allowsHitTesting(false)
     }
 }

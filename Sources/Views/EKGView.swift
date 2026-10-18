@@ -92,9 +92,9 @@ struct HeartbeatOverlay: View {
         VStack(spacing: 12) {
             HStack(spacing: 8) {
                 Image(systemName: "waveform.path.ecg").foregroundStyle(Color(rgbInt: show.colorRGB))
-                Text("\(show.name)'s heartbeat").font(Theme.font(16, .heavy)).foregroundStyle(.white)
+                Text("\(show.name)'s heartbeat").font(Theme.font(16, .heavy)).foregroundStyle(Theme.title)
                 Spacer()
-                Text("\(show.bpm)").font(Theme.font(28, .heavy)).foregroundStyle(.white).monospacedDigit()
+                Text("\(show.bpm)").font(Theme.font(28, .heavy)).foregroundStyle(Theme.title).monospacedDigit()
                 Text("BPM").font(Theme.font(12, .bold)).foregroundStyle(Theme.subtitle)
             }
             EKGView(bpm: show.bpm, colorRGB: show.colorRGB, start: show.start)
