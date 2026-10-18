@@ -10,6 +10,9 @@ enum TouchNotification {
     static let touchBackAction = "touch-back"
     static let heartbeatAction = "heartbeat"
     static let feelAgainAction = "feel-again"
+    /// A short sound of pure silence, bundled in the phone and watch apps: notifications only
+    /// vibrate when they have a sound, so touch notifications use this — vibration, no beep.
+    static let silentSound = "touch-silent.wav"
 
     /// The touch, in the notification's userInfo, under these keys.
     enum Key {
