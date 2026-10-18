@@ -595,9 +595,14 @@ private struct NeonStyleCard: View {
     @AppStorage("neonWidth") private var width = 1.0
     @AppStorage("neonGlow") private var glow = 1.0
 
-    private static let slide: [Int] = (0..<14).map { TouchPattern.sample([Int((Double($0) * 8 / 13).rounded())]) }
-        + Array(repeating: TouchPattern.sample([8]), count: 5)
-        + (0..<16).map { TouchPattern.sample([8 - Int((Double($0) * 8 / 15).rounded())]) }
+    /// A slide up the bar, a hold, and back down — for the example.
+    private static let slide: [Int] = {
+        var positions: [Int] = []
+        for i in 0..<14 { positions.append(Int((Double(i) * 8.0 / 13.0).rounded())) }
+        for _ in 0..<5 { positions.append(8) }
+        for i in 0..<16 { positions.append(8 - Int((Double(i) * 8.0 / 15.0).rounded())) }
+        return positions.map { TouchPattern.sample([$0]) }
+    }()
 
     var body: some View {
         GlassCard(padding: 20) {
