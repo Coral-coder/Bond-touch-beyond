@@ -87,11 +87,11 @@ enum WatchHaptics {
         WatchVibration.play(t)   // silent vibration first; Apple's taps only as a last resort
     }
 
-    /// A touch notification on the wrist: one firm silent buzz, not the rhythm (the
-    /// notification's own sound is the chime). Nothing if the touch already played here.
+    /// A touch notification on the wrist: the touch itself, in its exact rhythm and
+    /// strength (not a generic buzz). Nothing if the touch already played here.
     static func alert(_ t: WatchTouch) {
         guard firstTime(t) else { return }
-        WatchVibration.pulse()
+        WatchVibration.play(t)
     }
 
     /// Marks the touch played; false if it already was in the last minute.
@@ -257,7 +257,11 @@ final class PhoneLink: NSObject, ObservableObject, WCSessionDelegate {
             guard !list.contains(where: { $0.id == touch.id }) else { return }
             list.append(touch)
             self.history[touch.bondID] = Array(list.suffix(30))
-            if StandIn.shared.on, Date().timeIntervalSince(touch.sentAt) < 120 { WatchHaptics.play(touch) }
+            // Felt straight away when the watch is standing in, or the app is open on the wrist.
+            if !touch.mine, Date().timeIntervalSince(touch.sentAt) < 120,
+               StandIn.shared.on || WKApplication.shared().applicationState == .active {
+                WatchHaptics.play(touch)
+            }
         }
     }
 }

@@ -280,7 +280,8 @@ struct WatchMeaningsView: View {
     }
 }
 
-/// Recent touches with the selected partner; tap one to feel it again.
+/// Recent touches with the selected partner, each drawn as it was (trace, taps or EKG) in a
+/// slim row with who, the meaning and when. Tap one to feel it again.
 struct WatchHistoryView: View {
     @EnvironmentObject var link: PhoneLink
 
@@ -292,24 +293,32 @@ struct WatchHistoryView: View {
                     if list.isEmpty { Text("No touches yet").foregroundStyle(.secondary) }
                     ForEach(Array(list)) { t in
                         Button { WatchHaptics.play(t, again: true) } label: {
-                            HStack(spacing: 8) {
-                                Image(systemName: t.bpm != nil ? "heart.fill" : (t.mine ? "arrow.up.right" : "arrow.down.left"))
-                                    .foregroundStyle(Color(rgb: t.startRGB))
-                                VStack(alignment: .leading, spacing: 1) {
-                                    Text(t.bpm.map { "\($0) BPM" } ?? t.label ?? (t.mine ? "You" : link.selected?.name ?? "Partner"))
-                                        .font(.system(.footnote, design: .rounded).weight(.bold))
+                            VStack(alignment: .leading, spacing: 2) {
+                                HStack(spacing: 4) {
+                                    Image(systemName: t.mine ? "arrow.up.right" : "arrow.down.left")
+                                        .font(.system(size: 9, weight: .heavy)).foregroundStyle(.secondary)
+                                    Text(caption(t)).font(.system(size: 12, weight: .bold, design: .rounded)).lineLimit(1)
+                                    Spacer(minLength: 2)
                                     Text(t.sentAt.formatted(date: .omitted, time: .shortened))
-                                        .font(.caption2).foregroundStyle(.secondary)
+                                        .font(.system(size: 10, design: .rounded)).foregroundStyle(.secondary)
                                 }
-                                Spacer()
-                                Image(systemName: "play.fill").font(.caption2).foregroundStyle(accent)
+                                WatchTouchDrawing(touch: t, compact: true).frame(height: 18)
                             }
                         }
-                        .accessibilityLabel("Feel it again")
+                        .listRowInsets(EdgeInsets(top: 4, leading: 8, bottom: 4, trailing: 8))
+                        .accessibilityLabel("\(caption(t)) at \(t.sentAt.formatted(date: .omitted, time: .shortened)). Feel it again")
                     }
                 }
             }
         }
+    }
+
+    /// Who, and the meaning or heartbeat if it was one: "Alex · Love you", "You · 72 BPM".
+    private func caption(_ t: WatchTouch) -> String {
+        let who = t.mine ? "You" : (link.selected?.name ?? "Partner")
+        if let bpm = t.bpm { return "\(who) · ♥ \(bpm)" }
+        if let label = t.label { return "\(who) · \(label)" }
+        return who
     }
 }
 

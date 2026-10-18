@@ -70,6 +70,53 @@ enum WatchVibration {
         return .appleTap
     }
 
+    /// The touch as vibration: when each part starts (s), how long it lasts (ms) and how
+    /// strong it is (0…1). It follows the touch exactly, at the bar's own 50 ms steps:
+    ///  • a tap or press vibrates for exactly as long as the finger was down, at full strength;
+    ///  • a slide vibrates the whole time the finger moves, stronger the higher it is on the
+    ///    bar (and a touch more with two fingers), so you feel it rise and fall;
+    ///  • a heartbeat beats lub-dub at its BPM.
+    /// Capped at 10 s.
+    static func segments(_ t: WatchTouch) -> [(at: Double, ms: Int, intensity: Double)] {
+        var out: [(at: Double, ms: Int, intensity: Double)] = []
+        if let bpm = t.bpm {
+            let period = 60.0 / Double(min(max(bpm, 30), 220))
+            var at = 0.0
+            while at < 5 {
+                out.append((at, 120, 1.0))
+                out.append((at + min(0.22, period * 0.3), 80, 0.55))
+                at += period
+            }
+            return out
+        }
+        if t.generation == 3 {
+            let samples = TouchPattern.trimmed(t.pattern)
+            let step = Double(TouchPattern.sampleMs) / 1000
+            func level(_ s: Int) -> Double? {
+                let f = TouchPattern.fingers(in: s)
+                guard let top = f.max() else { return nil }
+                let base = 0.35 + 0.65 * Double(top) / Double(TouchPattern.positions - 1)
+                return min(1, base + (f.count > 1 ? 0.1 : 0))
+            }
+            var i = 0
+            while i < samples.count, Double(i) * step < 10 {
+                guard let l = level(samples[i]) else { i += 1; continue }
+                var j = i + 1
+                while j < samples.count, level(samples[j]) == l { j += 1 }
+                out.append((Double(i) * step, (j - i) * TouchPattern.sampleMs, l))
+                i = j
+            }
+            return out
+        }
+        var at = 0.0
+        for (i, ms) in t.pattern.enumerated() {
+            if i % 2 == 0 { out.append((at, max(ms, 40), 1.0)) }
+            at += Double(max(ms, 0)) / 1000
+            if at > 10 { break }
+        }
+        return out.isEmpty ? [(0, 200, 1.0)] : out
+    }
+
     /// The touch as on/off milliseconds (presses and gaps), capped at 10 s.
     static func onOff(_ t: WatchTouch) -> [Int] {
         if let bpm = t.bpm {
@@ -91,23 +138,31 @@ enum WatchVibration {
     @discardableResult
     static func play(_ t: WatchTouch, method: Method? = nil) -> Bool {
         let m = method.map { $0 == .auto ? effective : (available($0) ? $0 : .appleTap) } ?? effective
-        let pattern = onOff(t)
+        let parts = segments(t)
+        playing += 1
+        let run = playing
         switch m {
         case .exact:
-            // [on?, ms, on?, ms, …] — presses at least 60 ms so each is felt firmly.
-            var vibe: [Any] = []
-            for (i, ms) in pattern.enumerated() { vibe.append(i % 2 == 0); vibe.append(i % 2 == 0 ? max(ms, 60) : ms) }
-            stopSound?(vibrateID)
-            playWithVibration?(vibrateID, nil, ["VibePattern": vibe, "Intensity": 1.0] as NSDictionary)
+            // Each part on its own, at its moment and strength, so a slide's strength follows
+            // the finger. A newer touch cuts off what's left of this one.
+            for part in parts {
+                DispatchQueue.main.asyncAfter(deadline: .now() + part.at) {
+                    guard run == playing else { return }
+                    stopSound?(vibrateID)
+                    playWithVibration?(vibrateID, nil, ["VibePattern": [true, part.ms] as [Any],
+                                                        "Intensity": part.intensity] as NSDictionary)
+                }
+            }
             return true
         case .buzz:
-            var at = 0.0, last = -1.0
-            for (i, ms) in pattern.enumerated() {
-                if i % 2 == 0, at - last >= 0.45 {
-                    last = at
-                    DispatchQueue.main.asyncAfter(deadline: .now() + at) { playSound?(vibrateID) }
+            // The system vibration is a fixed ~0.4 s buzz, so only the start of each press.
+            var last = -1.0
+            for part in parts where part.at - last >= 0.42 {
+                last = part.at
+                DispatchQueue.main.asyncAfter(deadline: .now() + part.at) {
+                    guard run == playing else { return }
+                    playSound?(vibrateID)
                 }
-                at += Double(ms) / 1000
             }
             return true
         case .appleTap, .auto:
@@ -116,6 +171,8 @@ enum WatchVibration {
         }
     }
 
+    /// Bumped by every play, so an older touch's remaining parts stop.
+    private static var playing = 0
     private static var lastTick: TimeInterval = 0
 
     /// A tiny silent tick (30 ms, soft) while drawing a touch on the bar: when the finger lands

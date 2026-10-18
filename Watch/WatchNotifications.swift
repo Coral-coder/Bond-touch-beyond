@@ -18,8 +18,8 @@ extension WatchTouch {
 }
 
 /// The watch's look at a touch notification: who, the meaning, the touch drawn. When it
-/// opens the wrist buzzes once (silent; the notification's own sound is the chime) — not the
-/// touch's rhythm. "Feel it again" plays the full rhythm.
+/// opens, the wrist feels the touch itself — its exact rhythm, and a slide's rise and fall.
+/// "Feel it again" plays it once more.
 final class TouchNotificationController: WKUserNotificationHostingController<TouchNotificationView> {
     private var title = ""
     private var touch: WatchTouch?
@@ -48,36 +48,59 @@ struct TouchNotificationView: View {
     }
 }
 
-/// A touch drawn small: the bar trace, or the tap rhythm as pills.
+/// A touch drawn small: the bar trace, the tap rhythm as pills, or a heartbeat's EKG.
+/// `compact` (the history list) draws thinner on no panel of its own.
 struct WatchTouchDrawing: View {
     let touch: WatchTouch
+    var compact = false
 
     var body: some View {
         Canvas { ctx, size in
             let color = Color(rgb: touch.startRGB)
-            if touch.generation == 3 {
+            let line = compact ? max(2.5, size.height * 0.16) : 5
+            let pill = compact ? max(6, size.height * 0.42) : 14
+            if let bpm = touch.bpm {
+                // Two seconds of EKG at its BPM.
+                let period = 60.0 / Double(min(max(bpm, 30), 220)), w = size.width, mid = size.height * 0.6
+                var path = Path()
+                path.move(to: CGPoint(x: 0, y: mid))
+                var t = 0.0
+                while t < 2.4 {
+                    let x = CGFloat(t / 2.4) * w, beat = CGFloat(period / 2.4) * w
+                    path.addLine(to: CGPoint(x: x + beat * 0.30, y: mid))
+                    path.addLine(to: CGPoint(x: x + beat * 0.36, y: mid - size.height * 0.5))
+                    path.addLine(to: CGPoint(x: x + beat * 0.42, y: mid + size.height * 0.3))
+                    path.addLine(to: CGPoint(x: x + beat * 0.48, y: mid))
+                    t += period
+                }
+                path.addLine(to: CGPoint(x: w, y: mid))
+                ctx.stroke(path, with: .color(color), style: StrokeStyle(lineWidth: max(1.5, line * 0.6), lineCap: .round, lineJoin: .round))
+            } else if touch.generation == 3 {
                 let s = TouchPattern.trimmed(touch.pattern), n = max(s.count, 2)
                 var path = Path(), started = false
                 for (i, sample) in s.enumerated() {
                     guard let f = TouchPattern.fingers(in: sample).first else { started = false; continue }
-                    let p = CGPoint(x: 6 + (size.width - 12) * CGFloat(i) / CGFloat(n - 1),
-                                    y: size.height - 6 - (size.height - 12) * CGFloat(f) / CGFloat(TouchPattern.positions - 1))
+                    let inset = line / 2 + 1
+                    let p = CGPoint(x: inset + (size.width - inset * 2) * CGFloat(i) / CGFloat(n - 1),
+                                    y: size.height - inset - (size.height - inset * 2) * CGFloat(f) / CGFloat(TouchPattern.positions - 1))
                     if started { path.addLine(to: p) } else { path.move(to: p); started = true }
                 }
-                ctx.stroke(path, with: .color(color), style: StrokeStyle(lineWidth: 5, lineCap: .round, lineJoin: .round))
+                ctx.stroke(path, with: .shading(.linearGradient(Gradient(colors: [color, Color(rgb: touch.endRGB)]),
+                                                                startPoint: .zero, endPoint: CGPoint(x: size.width, y: 0))),
+                           style: StrokeStyle(lineWidth: line, lineCap: .round, lineJoin: .round))
             } else {
                 var at = 0.0, presses: [(Double, Double)] = []
                 for (i, ms) in touch.pattern.enumerated() { if i % 2 == 0 { presses.append((at, Double(max(ms, 1)))) }; at += Double(max(ms, 1)) }
                 let total = max(presses.last.map { $0.0 + $0.1 } ?? 1, 1)
                 for p in presses {
                     let x = 4 + (size.width - 8) * CGFloat(p.0 / total)
-                    let w = max((size.width - 8) * CGFloat(p.1 / total), 14)
-                    ctx.fill(Path(roundedRect: CGRect(x: x, y: size.height / 2 - 7, width: w, height: 14), cornerRadius: 7),
+                    let w = max((size.width - 8) * CGFloat(p.1 / total), pill)
+                    ctx.fill(Path(roundedRect: CGRect(x: x, y: size.height / 2 - pill / 2, width: w, height: pill), cornerRadius: pill / 2),
                              with: .color(color))
                 }
             }
         }
-        .background(RoundedRectangle(cornerRadius: 12).fill(Color(rgb: 0x0B2440)))
+        .background(RoundedRectangle(cornerRadius: 12).fill(Color(rgb: 0x0B2440)).opacity(compact ? 0 : 1))
     }
 }
 
