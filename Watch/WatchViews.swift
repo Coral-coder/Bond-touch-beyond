@@ -51,7 +51,6 @@ final class WatchRecorder: ObservableObject {
     private var window: Double { min(windowSeconds, Double(TouchPattern.maxSamples * TouchPattern.sampleMs) / 1000) }
 
     func touch(_ f: CGFloat?) {
-        if position == nil, f != nil { WKInterfaceDevice.current().play(.click) }
         position = f
         if f != nil, !recording { start() }
         guard recording else { return }
@@ -213,7 +212,7 @@ struct WatchHistoryView: View {
             Section("Recent touches") {
                 if list.isEmpty { Text("No touches yet").foregroundStyle(.secondary) }
                 ForEach(Array(list)) { t in
-                    Button { WatchHaptics.play(t) } label: {
+                    Button { WatchHaptics.play(t, again: true) } label: {
                         HStack(spacing: 8) {
                             Image(systemName: t.bpm != nil ? "heart.fill" : (t.mine ? "arrow.up.right" : "arrow.down.left"))
                                 .foregroundStyle(Color(rgb: t.startRGB))

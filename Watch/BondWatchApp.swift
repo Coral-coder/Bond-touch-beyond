@@ -68,25 +68,35 @@ struct WatchTouch: Identifiable, Equatable {
     }
 }
 
-/// Plays a touch on the watch's Taptic Engine, in its rhythm: a tap per press (and every
-/// 150 ms through a long one); on a bar touch, the tap rises or falls with the slide; a
-/// heartbeat taps on every beat.
+/// Plays a touch on the watch's Taptic Engine, in its rhythm: one firm tap per press (a long
+/// press taps through its length; a slide taps along it; a heartbeat taps every beat).
+///
+/// Apple only lets watch apps use its preset haptics, and each comes with a short system
+/// tone unless the watch is on Silent. So every tap uses the same firm, single-tap type
+/// (`.start`) — no rising/falling "direction" tones, which turned a slide into a run of
+/// bleep-boops — and taps are spaced so they stay distinct and strong.
 enum WatchHaptics {
-    static func play(_ t: WatchTouch) {
-        var times: [(Double, WKHapticType)] = []
+    private static let tap: WKHapticType = .start
+    private static let minGap = 0.28
+
+    /// Touches already played (partner + send time), so a touch relayed to the app and then
+    /// opened as a notification doesn't play twice. `again` (replay buttons) always plays.
+    private static var played: [String: Date] = [:]
+
+    static func play(_ t: WatchTouch, again: Bool = false) {
+        let key = "\(t.bondID)|\(Int(t.sentAt.timeIntervalSince1970))"
+        played = played.filter { Date().timeIntervalSince($0.value) < 60 }
+        if !again, played[key] != nil { return }
+        played[key] = Date()
+        var times: [Double] = []
         if let bpm = t.bpm {
             let period = 60.0 / Double(min(max(bpm, 30), 220))
             var at = 0.0
-            while at < 5 { times.append((at, .click)); times.append((at + 0.18, .directionUp)); at += period }
+            while at < 5 { times.append(at); at += period }
         } else if t.generation == 3 {
-            var last: Int?
-            var lastAt = -1.0
-            for (i, sample) in t.pattern.prefix(TouchPattern.maxSamples).enumerated() {
-                guard let f = TouchPattern.fingers(in: sample).first else { last = nil; continue }
-                let at = Double(i) * Double(TouchPattern.sampleMs) / 1000
-                guard at - lastAt >= 0.15 else { continue }
-                let type: WKHapticType = last.map { f > $0 ? .directionUp : (f < $0 ? .directionDown : .click) } ?? .click
-                times.append((at, type)); last = f; lastAt = at
+            for (i, sample) in t.pattern.prefix(TouchPattern.maxSamples).enumerated()
+            where !TouchPattern.fingers(in: sample).isEmpty {
+                times.append(Double(i) * Double(TouchPattern.sampleMs) / 1000)
             }
         } else {
             var at = 0.0
@@ -94,14 +104,16 @@ enum WatchHaptics {
                 let d = Double(max(ms, 0)) / 1000
                 if i % 2 == 0 {
                     var x = 0.0
-                    repeat { times.append((at + x, .click)); x += 0.15 } while x < d
+                    repeat { times.append(at + x); x += minGap } while x < d
                 }
                 at += d
                 if at > 10 { break }
             }
         }
-        for (at, type) in times {
-            DispatchQueue.main.asyncAfter(deadline: .now() + at) { WKInterfaceDevice.current().play(type) }
+        var last = -1.0
+        for at in times where at - last >= minGap {
+            last = at
+            DispatchQueue.main.asyncAfter(deadline: .now() + at) { WKInterfaceDevice.current().play(tap) }
         }
     }
 }

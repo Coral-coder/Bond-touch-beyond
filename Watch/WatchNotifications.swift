@@ -89,7 +89,7 @@ final class WatchAppDelegate: NSObject, WKApplicationDelegate, UNUserNotificatio
                                 withCompletionHandler completionHandler: @escaping () -> Void) {
         if let touch = WatchTouch(notification: response.notification.request.content.userInfo) {
             // Give the app a moment to come forward, so the haptics play.
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { WatchHaptics.play(touch) }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { WatchHaptics.play(touch, again: true) }
         }
         completionHandler()
     }
