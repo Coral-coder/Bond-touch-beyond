@@ -8,15 +8,14 @@ import WatchKit
 @main
 struct BondWatchApp: App {
     @WKApplicationDelegateAdaptor private var delegate: WatchAppDelegate
-    @StateObject private var link = PhoneLink()
-    @StateObject private var standIn = StandIn()
+    @StateObject private var link = PhoneLink.shared
+    @StateObject private var standIn = StandIn.shared
 
     var body: some Scene {
         WindowGroup {
             WatchRootView()
                 .environmentObject(link)
                 .environmentObject(standIn)
-                .onAppear { standIn.onChange = { [weak link] on in link?.reportStandIn(on) } }
         }
         // A partner's touch notification: drawn, and played on the wrist when it opens.
         WKNotificationScene(controller: TouchNotificationController.self, category: "TOUCH")
@@ -122,6 +121,9 @@ enum WatchHaptics {
 /// the application context, and sends touches back (live when the phone is reachable,
 /// otherwise queued and delivered when it is).
 final class PhoneLink: NSObject, ObservableObject, WCSessionDelegate {
+    /// One for the app, so a background launch (Stand-in started by the phone) has it too.
+    static let shared = PhoneLink()
+
     @Published var partners: [WatchPartner] = []
     @Published var selectedID: String?
     @Published var meanings: [String: [WatchMeaning]] = [:]
@@ -223,8 +225,13 @@ final class PhoneLink: NSObject, ObservableObject, WCSessionDelegate {
     func session(_ session: WCSession, didReceiveMessage message: [String: Any]) { received(message) }
     func session(_ session: WCSession, didReceiveUserInfo userInfo: [String: Any] = [:]) { received(userInfo) }
 
-    /// A touch the phone just played: play it here too (if it's fresh) and list it.
+    /// A touch the phone just played: play it here too (if it's fresh) and list it. Also the
+    /// phone switching Stand-in off once the bracelet is back.
     private func received(_ message: [String: Any]) {
+        if message["type"] as? String == "standInSet", (message["on"] as? Bool) == false {
+            DispatchQueue.main.async { StandIn.shared.stop() }
+            return
+        }
         guard message["type"] as? String == "received", let touch = WatchTouch(message) else { return }
         DispatchQueue.main.async {
             var list = self.history[touch.bondID] ?? []

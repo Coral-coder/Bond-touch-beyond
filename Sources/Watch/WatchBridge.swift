@@ -1,5 +1,6 @@
 import Combine
 import Foundation
+import HealthKit
 import WatchConnectivity
 
 /// The phone's side of the Apple Watch link: publishes partners, the selected partner, each
@@ -52,6 +53,38 @@ final class WatchBridge: NSObject, WCSessionDelegate {
                                       "window": model.store.touchWindowSeconds]
         if let s = model.selectedPartnerID { context["selected"] = s }
         try? WCSession.default.updateApplicationContext(context)
+    }
+
+    /// Whether there's a watch with the app to stand in for the bracelet.
+    var watchAvailable: Bool {
+        WCSession.isSupported() && WCSession.default.activationState == .activated
+            && WCSession.default.isPaired && WCSession.default.isWatchAppInstalled
+    }
+
+    private let health = HKHealthStore()
+
+    /// Wakes the watch app into Stand-in mode (it plays touches on the wrist), even with the
+    /// watch app closed: HealthKit starts its workout session from the phone.
+    func startWatchStandIn() {
+        guard watchAvailable, HKHealthStore.isHealthDataAvailable() else { return }
+        let config = HKWorkoutConfiguration()
+        config.activityType = .mindAndBody
+        config.locationType = .unknown
+        health.startWatchApp(with: config) { ok, error in
+            NetLog.shared.record(ok ? .ok : .fail, ok ? "Woke the watch to stand in for the bracelet"
+                                                      : "Couldn't wake the watch", error?.localizedDescription ?? "")
+        }
+    }
+
+    /// Tells the watch to stop standing in (the bracelet is back).
+    func stopWatchStandIn() {
+        guard watchAvailable else { return }
+        let message: [String: Any] = ["type": "standInSet", "on": false]
+        if WCSession.default.isReachable {
+            WCSession.default.sendMessage(message, replyHandler: nil) { _ in WCSession.default.transferUserInfo(message) }
+        } else {
+            WCSession.default.transferUserInfo(message)
+        }
     }
 
     /// A touch the phone just played: the watch plays it too (haptics) and lists it.

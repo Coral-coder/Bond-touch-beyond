@@ -51,6 +51,16 @@ struct SettingsView: View {
                         .tint(Theme.accent)
                     }
                     GlassCard(padding: 20) {
+                        Toggle(isOn: $store.watchStandsIn) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Apple Watch stands in for the bracelet").foregroundStyle(.white)
+                                Text("When your bracelet disconnects, your watch wakes up and plays every touch on your wrist. Stops when the bracelet is back. Uses watch battery while it stands in.")
+                                    .font(.caption).foregroundStyle(Theme.subtitle)
+                            }
+                        }
+                        .tint(Theme.accent)
+                    }
+                    GlassCard(padding: 20) {
                         Stepper(value: $store.touchWindowSeconds, in: 5...10, step: 1) {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text("Touch window: \(Int(store.touchWindowSeconds)) s").foregroundStyle(.white)

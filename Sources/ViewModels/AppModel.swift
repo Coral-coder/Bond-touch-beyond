@@ -287,6 +287,12 @@ final class AppModel: ObservableObject {
                 Task { @MainActor in self?.checkBraceletBattery(pct, charging: charging == true) }
             }
             .store(in: &statusWatch)
+        // The watch stands in for the bracelet: woken when the bracelet has been gone 20 s,
+        // stopped when it's back.
+        bracelet.$state.removeDuplicates()
+            .debounce(for: .seconds(20), scheduler: DispatchQueue.main)
+            .sink { [weak self] state in Task { @MainActor in self?.updateWatchStandIn(braceletConnected: state == .connected) } }
+            .store(in: &statusWatch)
         // The notification extension decrypts partners' touch pushes with the bond codes.
         store.$cloudBondCodes
             .sink { codes in SharedBonds.save(Array(codes.keys)) }
@@ -353,6 +359,20 @@ final class AppModel: ObservableObject {
         guard sharingLocation else { return }
         await legacyPushLocation(fix.coordinate)
         await publishPresence(force: false)   // throttled — fixes can arrive every few seconds
+    }
+
+    // MARK: - Watch standing in for the bracelet
+
+    private static var lastWatchWake = Date.distantPast
+
+    func updateWatchStandIn(braceletConnected: Bool) {
+        guard store.watchStandsIn, !partners.isEmpty else { return }
+        if braceletConnected {
+            if watchStandIn { watch.stopWatchStandIn() }
+        } else if !watchStandIn, Date().timeIntervalSince(Self.lastWatchWake) > 300 {
+            Self.lastWatchWake = Date()
+            watch.startWatchStandIn()
+        }
     }
 
     // MARK: - Notification buttons

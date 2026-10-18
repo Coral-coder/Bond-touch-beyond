@@ -1,3 +1,4 @@
+import HealthKit
 import SwiftUI
 import UserNotifications
 import WatchKit
@@ -83,6 +84,13 @@ struct WatchTouchDrawing: View {
 final class WatchAppDelegate: NSObject, WKApplicationDelegate, UNUserNotificationCenterDelegate {
     func applicationDidFinishLaunching() {
         UNUserNotificationCenter.current().delegate = self
+        _ = PhoneLink.shared   // start the phone link even on a background launch
+    }
+
+    /// The phone woke the watch app to stand in for the bracelet (its bracelet disconnected):
+    /// start Stand-in mode, with no screen needed.
+    func handle(_ workoutConfiguration: HKWorkoutConfiguration) {
+        StandIn.shared.start()
     }
 
     func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse,

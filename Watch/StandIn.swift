@@ -8,9 +8,12 @@ import WatchKit
 /// own rhythm. The phone and the partner's phone are told, so pushes stay quiet and the
 /// watch doesn't buzz twice. Costs watch battery while on.
 final class StandIn: NSObject, ObservableObject, HKWorkoutSessionDelegate {
+    /// One for the app: the phone can start it with no screen showing (it wakes the watch app
+    /// when the bracelet disconnects) and stop it when the bracelet is back.
+    static let shared = StandIn()
+
     @Published private(set) var on = false
     @Published var problem: String?
-    var onChange: ((Bool) -> Void)?
 
     private let store = HKHealthStore()
     private var session: HKWorkoutSession?
@@ -18,6 +21,7 @@ final class StandIn: NSObject, ObservableObject, HKWorkoutSessionDelegate {
     func toggle() { on ? stop() : start() }
 
     func start() {
+        guard !on else { return }
         guard HKHealthStore.isHealthDataAvailable() else { problem = "Not available on this watch."; return }
         store.requestAuthorization(toShare: [HKObjectType.workoutType()], read: []) { [weak self] ok, _ in
             DispatchQueue.main.async {
@@ -32,7 +36,6 @@ final class StandIn: NSObject, ObservableObject, HKWorkoutSessionDelegate {
                     session.startActivity(with: Date())
                     self.session = session
                     self.set(true)
-                    WKInterfaceDevice.current().play(.start)
                 } catch {
                     self.problem = "Couldn't start: \(error.localizedDescription)"
                 }
@@ -41,16 +44,16 @@ final class StandIn: NSObject, ObservableObject, HKWorkoutSessionDelegate {
     }
 
     func stop() {
+        guard on || session != nil else { return }
         session?.end()
         session = nil
         set(false)
-        WKInterfaceDevice.current().play(.stop)
     }
 
     private func set(_ value: Bool) {
         problem = nil
         on = value
-        onChange?(value)
+        PhoneLink.shared.reportStandIn(value)
     }
 
     func workoutSession(_ workoutSession: HKWorkoutSession, didChangeTo toState: HKWorkoutSessionState,

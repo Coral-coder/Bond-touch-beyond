@@ -66,6 +66,11 @@ final class LocalStore: ObservableObject {
     @Published var partnerOrder: [String] = UserDefaults.standard.stringArray(forKey: "partnerOrder") ?? [] {
         didSet { UserDefaults.standard.set(partnerOrder, forKey: "partnerOrder") }
     }
+    /// When the bracelet disconnects, wake the Apple Watch to stand in for it (it plays touches
+    /// on the wrist); stop when the bracelet is back. On by default.
+    @Published var watchStandsIn: Bool = (UserDefaults.standard.object(forKey: "watchStandsIn") as? Bool) ?? true {
+        didSet { UserDefaults.standard.set(watchStandsIn, forKey: "watchStandsIn") }
+    }
     /// Saved places watched for arrival alerts.
     @Published var savedPlaces: [SavedPlace] {
         didSet { save(savedPlaces, for: .savedPlaces) }
