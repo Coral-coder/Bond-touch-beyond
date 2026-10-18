@@ -105,11 +105,18 @@ struct HUDGrid: Shape {
 /// drop shadow.
 struct GlassBackground<S: Shape>: View {
     let shape: S
+    /// How see-through the glass is (0 frosted … 1 nearly clear) and how deep its shadow is
+    /// (0 none … 1 deep) — the two sliders under Softness.
+    @AppStorage("glassClarity") private var clarity = 0.55
+    @AppStorage("glassShadow") private var shadowDepth = 0.6
+
     var body: some View {
         shape
             .fill(.ultraThinMaterial)
+            .opacity(1 - clarity * 0.75)
             .overlay(shape.fill(LinearGradient(colors: [Theme.glassTop, Theme.glassBottom],
-                                               startPoint: .top, endPoint: .bottom)))
+                                               startPoint: .top, endPoint: .bottom))
+                .opacity(1 - clarity * 0.6))
             // A faint teal rim-light: the panel edge catches the sky's accent, like holo glass.
             .overlay(shape.stroke(LinearGradient(colors: [Theme.accent.opacity(0.35), .clear, Theme.magenta.opacity(0.18)],
                                                  startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 1.5)
@@ -117,7 +124,10 @@ struct GlassBackground<S: Shape>: View {
             // The crisp bright top edge over it.
             .overlay(shape.stroke(LinearGradient(colors: [.white.opacity(0.6), .white.opacity(0.1)],
                                                  startPoint: .top, endPoint: .bottom), lineWidth: 1))
-            .shadow(color: Color.black.opacity(0.28), radius: 14, y: 8)
+            // A soft, wide ambient shadow plus a tight contact shadow — it reads as glass
+            // floating a little above the sky instead of a grey smudge.
+            .shadow(color: Color.black.opacity(0.22 * shadowDepth), radius: 4 + 22 * shadowDepth, y: 4 + 12 * shadowDepth)
+            .shadow(color: Color.black.opacity(0.18 * shadowDepth), radius: 2, y: 1 + shadowDepth)
     }
 }
 

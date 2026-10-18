@@ -7,6 +7,7 @@ struct DebugView: View {
     @EnvironmentObject var model: AppModel
     @EnvironmentObject var store: LocalStore
     @ObservedObject private var netLog = NetLog.shared
+    @AppStorage("showKissButton") private var showKissButton = false
     @Environment(\.dismiss) private var dismiss
 
     private var legacyActive: Bool { store.useLegacyFirebase && !store.firebaseAuthToken.isEmpty }
@@ -20,6 +21,11 @@ struct DebugView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
+                    section("Experimental") {
+                        Toggle("Kiss button (next to the heartbeat)", isOn: $showKissButton)
+                            .font(.footnote).tint(Theme.accent)
+                    }
+
                     section("Active data backend") {
                         row("Reads / writes", legacyActive ? "CloudKit (iCloud) + original Bond API, in parallel" : "CloudKit (iCloud)")
                         row("CloudKit container", AppConfig.cloudContainerID)

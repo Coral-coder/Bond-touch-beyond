@@ -31,6 +31,9 @@ final class TouchBarRecorder: ObservableObject {
     private var started: TimeInterval = 0
     private var link: CADisplayLink?
     private let haptic = UIImpactFeedbackGenerator(style: .light)
+    /// A crisp tick each time a finger crosses to another bar position, so a slide is felt
+    /// along the bar as it's drawn.
+    private let stepHaptic = UISelectionFeedbackGenerator()
 
     var progress: Double { recording ? 1 - remaining / windowSeconds : 0 }
     private var window: Double { min(windowSeconds, Double(TouchPattern.maxSamples * TouchPattern.sampleMs) / 1000) }
@@ -40,11 +43,12 @@ final class TouchBarRecorder: ObservableObject {
     func update(_ positions: [CGFloat], at time: TimeInterval) {
         let wasEmpty = fingers.positions.isEmpty
         fingers.positions = positions
-        if !positions.isEmpty, wasEmpty { haptic.impactOccurred(intensity: 0.6) }
+        if !positions.isEmpty, wasEmpty { haptic.impactOccurred(intensity: 0.6); stepHaptic.prepare() }
         if !positions.isEmpty, !recording { start(at: time) }
         guard recording else { return }
         let bar = positions.prefix(2).map { Int(($0 * CGFloat(TouchPattern.positions - 1)).rounded()) }
         guard bar != current else { return }
+        if !bar.isEmpty, !current.isEmpty { stepHaptic.selectionChanged(); stepHaptic.prepare() }
         current = bar
         events.append(.init(t: max(0, time - started), fingers: bar))
     }

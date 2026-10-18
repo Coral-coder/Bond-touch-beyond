@@ -83,11 +83,24 @@ enum WatchHaptics {
     private static var played: [String: Date] = [:]
 
     static func play(_ t: WatchTouch, again: Bool = false) {
+        guard firstTime(t) || again else { return }
+        WatchVibration.play(t)   // silent vibration first; Apple's taps only as a last resort
+    }
+
+    /// A touch notification on the wrist: one firm silent buzz, not the rhythm (the
+    /// notification's own sound is the chime). Nothing if the touch already played here.
+    static func alert(_ t: WatchTouch) {
+        guard firstTime(t) else { return }
+        WatchVibration.pulse()
+    }
+
+    /// Marks the touch played; false if it already was in the last minute.
+    private static func firstTime(_ t: WatchTouch) -> Bool {
         let key = "\(t.bondID)|\(Int(t.sentAt.timeIntervalSince1970))"
         played = played.filter { Date().timeIntervalSince($0.value) < 60 }
-        if !again, played[key] != nil { return }
+        let fresh = played[key] == nil
         played[key] = Date()
-        WatchVibration.play(t)   // silent vibration first; Apple's taps only as a last resort
+        return fresh
     }
 
     /// Apple's public firm taps (each with a system tone unless the watch is on Silent).
@@ -152,7 +165,7 @@ final class PhoneLink: NSObject, ObservableObject, WCSessionDelegate {
         send(["type": "touch", "bond": bond, "pattern": pattern, "gen": generation,
               "start": startRGB, "end": endRGB])
         lastSent = Date()
-        WKInterfaceDevice.current().play(.success)
+        WatchVibration.tick()   // silent confirmation (Apple's .success plays a tone)
     }
 
     /// Sends a saved meaning (by id when it has one, so the partner's bracelet lights up).
@@ -163,7 +176,7 @@ final class PhoneLink: NSObject, ObservableObject, WCSessionDelegate {
         if let sid = m.serverID { msg["meaningId"] = sid }
         send(msg)
         lastSent = Date()
-        WKInterfaceDevice.current().play(.success)
+        WatchVibration.tick()   // silent confirmation (Apple's .success plays a tone)
     }
 
     /// Tells the phone the watch is (or isn't) standing in for the bracelet.
@@ -230,8 +243,9 @@ final class PhoneLink: NSObject, ObservableObject, WCSessionDelegate {
     func session(_ session: WCSession, didReceiveMessage message: [String: Any]) { received(message) }
     func session(_ session: WCSession, didReceiveUserInfo userInfo: [String: Any] = [:]) { received(userInfo) }
 
-    /// A touch the phone just played: play it here too (if it's fresh) and list it. Also the
-    /// phone switching Stand-in off once the bracelet is back.
+    /// A touch the phone just played: list it, and in Stand-in play it here in its rhythm (if
+    /// it's fresh). Otherwise the touch notification buzzes once — no rhythm on top of it.
+    /// Also the phone switching Stand-in off once the bracelet is back.
     private func received(_ message: [String: Any]) {
         if message["type"] as? String == "standInSet", (message["on"] as? Bool) == false {
             DispatchQueue.main.async { StandIn.shared.stop() }
@@ -243,7 +257,7 @@ final class PhoneLink: NSObject, ObservableObject, WCSessionDelegate {
             guard !list.contains(where: { $0.id == touch.id }) else { return }
             list.append(touch)
             self.history[touch.bondID] = Array(list.suffix(30))
-            if Date().timeIntervalSince(touch.sentAt) < 120 { WatchHaptics.play(touch) }
+            if StandIn.shared.on, Date().timeIntervalSince(touch.sentAt) < 120 { WatchHaptics.play(touch) }
         }
     }
 }

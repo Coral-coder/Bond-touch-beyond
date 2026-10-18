@@ -17,8 +17,9 @@ extension WatchTouch {
     }
 }
 
-/// The watch's look at a touch notification: who, the meaning, the touch drawn — and when it
-/// opens, the touch plays on the wrist in its own rhythm. "Feel it again" replays it.
+/// The watch's look at a touch notification: who, the meaning, the touch drawn. When it
+/// opens the wrist buzzes once (silent; the notification's own sound is the chime) — not the
+/// touch's rhythm. "Feel it again" plays the full rhythm.
 final class TouchNotificationController: WKUserNotificationHostingController<TouchNotificationView> {
     private var title = ""
     private var touch: WatchTouch?
@@ -28,7 +29,7 @@ final class TouchNotificationController: WKUserNotificationHostingController<Tou
     override func didReceive(_ notification: UNNotification) {
         title = notification.request.content.title
         touch = WatchTouch(notification: notification.request.content.userInfo)
-        if let touch { WatchHaptics.play(touch) }
+        if let touch { WatchHaptics.alert(touch) }
         notificationActions = [UNNotificationAction(identifier: "feel-again", title: "Feel it again", options: [.foreground])]
     }
 }

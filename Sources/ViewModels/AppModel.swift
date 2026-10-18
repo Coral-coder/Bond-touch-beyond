@@ -106,6 +106,7 @@ final class AppModel: ObservableObject {
             added = true
         }
         guard added else { return }
+        history = TouchArchive.recent(history)   // 3 days
         history.sort { $0.sentAt < $1.sentAt }
         TouchArchive.save(history)
     }
@@ -148,10 +149,8 @@ final class AppModel: ObservableObject {
         if foreground {
             haptics.play(touch)
             NetLog.shared.log(.recv, "Bracelet not connected — played the touch on the phone")
-        } else {
-            // In the background (kept running): the touch's rhythm on the phone's vibration.
-            haptics.playRhythmInBackground(touch)
         }
+        // In the background the notification is the fallback: the chime once, one vibration.
     }
 
     /// A heartbeat on screen now (the live EKG card), and its monitor beep.
@@ -176,8 +175,6 @@ final class AppModel: ObservableObject {
             bracelet.playHeartbeat(bpm: bpm, seconds: seconds, colorRGB: touch.colorRGB)
         } else if foreground {
             haptics.playHeartbeat(bpm: bpm, seconds: seconds)
-        } else {
-            haptics.playRhythmInBackground(touch)
         }
         guard foreground else { return }
         let mine = touch.senderID == myUserID || touch.senderID == ChatMessage.legacySelf
@@ -361,6 +358,23 @@ final class AppModel: ObservableObject {
         await publishPresence(force: false)   // throttled — fixes can arrive every few seconds
     }
 
+    // MARK: - Kiss ("I'm thinking of you")
+
+    /// Plays a kiss on the selected partner's phone (and watch): just the sound and a little
+    /// "Thinking of you" — no touch, nothing on the bracelet.
+    @discardableResult
+    func sendKiss() async -> Bool {
+        guard let bond = activeBond else { statusLine = "Choose a partner first."; return false }
+        guard !bond.legacy else { statusLine = "Kisses go to partners on iCloud."; return false }
+        guard partnerPushTokens[bond.id]?.isEmpty == false else {
+            statusLine = "Can't reach \(bond.partnerName)'s phone yet."; return false
+        }
+        let me = store.profile.name.isEmpty ? "Someone" : store.profile.name
+        await pushPartner(bondID: bond.id, title: me, body: "💋 Thinking of you", group: "k", sound: TouchNotification.kissSound)
+        NetLog.shared.log(.send, "Kiss → \(bond.partnerName)")
+        return true
+    }
+
     // MARK: - Watch standing in for the bracelet
 
     private static var lastWatchWake = Date.distantPast
@@ -525,7 +539,9 @@ final class AppModel: ObservableObject {
             info.lat = fix.coordinate.latitude
             info.lng = fix.coordinate.longitude
             info.locationAt = fix.timestamp
-            info.speed = location.speed
+            // No new fix for a minute means we've stopped (the distance filter only reports
+            // movement) — say so, rather than leaving the last speed showing.
+            info.speed = Date().timeIntervalSince(fix.timestamp) < 60 ? location.speed : 0
         }
         let device = UIDevice.current
         if device.batteryLevel >= 0 { info.phoneBattery = Double(device.batteryLevel) }
@@ -543,7 +559,9 @@ final class AppModel: ObservableObject {
     /// is throttled to one every 15 s.
     func publishPresence(force: Bool) async {
         guard !cloudPartners.isEmpty else { return }
-        if !force, Date().timeIntervalSince(lastPresencePush) < 15 { return }
+        // Every 15 s while moving, every 2 min while still (unless something changed).
+        let moving = (location.speed ?? 0) > 0.5 && Date().timeIntervalSince(location.lastLocation?.timestamp ?? .distantPast) < 60
+        if !force, Date().timeIntervalSince(lastPresencePush) < (moving ? 15 : 120) { return }
         lastPresencePush = Date()
         let info = currentPresence()
         lastPublished = info
@@ -596,6 +614,7 @@ final class AppModel: ObservableObject {
                 try? await Task.sleep(nanoseconds: background ? 8_000_000_000 : 4_000_000_000)
                 if Task.isCancelled { break }
                 await self?.refreshAll()
+                await self?.publishPresence(force: false)   // keeps location / speed fresh (throttled)
             }
         }
     }
@@ -865,7 +884,7 @@ final class AppModel: ObservableObject {
     /// play it on their bracelet the moment it wakes — no iCloud fetch first (a background
     /// wake only gets a few seconds). The bond is named by its opaque locator, never its code.
     func pushPartner(bondID: String, title: String, body: String, touch: TouchMessage? = nil,
-                     group: String = "t") async {
+                     group: String = "t", sound: String = TouchNotification.sound) async {
         guard let token = partnerPushTokens[bondID], !token.isEmpty else { return }
         // Their bracelet is connected → it plays the touch; don't buzz their phone too.
         let silent = partnerBraceletConnected[bondID] == true
@@ -873,7 +892,7 @@ final class AppModel: ObservableObject {
         var extra: [String: Any] = ["bl": locator]
         if let touch, let sealed = BondCrypto.seal(touch, code: bondID) { extra["bt"] = sealed.base64EncodedString() }
         await APNsClient.shared.send(toDeviceToken: token, title: title, body: body, silent: silent,
-                                     collapseID: "\(group)-\(locator.prefix(16))", extra: extra)
+                                     sound: sound, collapseID: "\(group)-\(locator.prefix(16))", extra: extra)
     }
 
     /// The touch carried in a partner's push, decrypted with that bond's key.

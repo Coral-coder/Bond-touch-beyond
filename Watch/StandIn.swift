@@ -74,23 +74,24 @@ struct WatchStandInView: View {
     @EnvironmentObject var standIn: StandIn
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 10) {
-                WatchPartnerHeader()
-                Button { standIn.toggle() } label: {
-                    VStack(spacing: 4) {
-                        Image(systemName: standIn.on ? "applewatch.radiowaves.left.and.right" : "applewatch")
-                            .font(.title2)
-                        Text(standIn.on ? "Standing in" : "Stand-in mode").font(.system(.headline, design: .rounded))
+        WatchPage {
+            ScrollView {
+                VStack(spacing: 10) {
+                    Button { standIn.toggle() } label: {
+                        VStack(spacing: 4) {
+                            Image(systemName: standIn.on ? "applewatch.radiowaves.left.and.right" : "applewatch")
+                                .font(.title2)
+                            Text(standIn.on ? "Standing in" : "Stand-in mode").font(.system(.headline, design: .rounded))
+                        }
+                        .frame(maxWidth: .infinity).padding(.vertical, 10)
                     }
-                    .frame(maxWidth: .infinity).padding(.vertical, 10)
-                }
-                .tint(standIn.on ? Color(rgb: 0x57C3BB) : .gray)
-                Text(standIn.on ? "Touches play on your wrist the moment they arrive, like your bracelet."
-                                : "Not wearing your bracelet? Turn this on and your watch plays every touch in its rhythm. Uses more battery.")
-                    .font(.footnote).foregroundStyle(.secondary).multilineTextAlignment(.center)
-                if let problem = standIn.problem {
-                    Text(problem).font(.footnote).foregroundStyle(.orange).multilineTextAlignment(.center)
+                    .tint(standIn.on ? Color(rgb: 0x57C3BB) : .gray)
+                    Text(standIn.on ? "Touches play on your wrist the moment they arrive, like your bracelet."
+                                    : "Not wearing your bracelet? Turn this on and your watch plays every touch in its rhythm. Uses more battery.")
+                        .font(.footnote).foregroundStyle(.secondary).multilineTextAlignment(.center)
+                    if let problem = standIn.problem {
+                        Text(problem).font(.footnote).foregroundStyle(.orange).multilineTextAlignment(.center)
+                    }
                 }
             }
         }

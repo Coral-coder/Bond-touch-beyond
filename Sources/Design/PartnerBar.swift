@@ -12,6 +12,11 @@ struct PartnerBar: View {
     @State private var lastTap = Date.distantPast
     @State private var showDebug = false
 
+    /// Just wide enough for the partners' photos (it scrolls if they don't all fit).
+    private var contentWidth: CGFloat {
+        model.partners.isEmpty ? 150 : CGFloat(model.partners.count) * 42 + CGFloat(model.partners.count - 1) * 8 + 12
+    }
+
     var body: some View {
         GeometryReader { geo in
             ScrollView(.horizontal, showsIndicators: false) {
@@ -29,6 +34,7 @@ struct PartnerBar: View {
                 .frame(minWidth: geo.size.width, minHeight: geo.size.height)   // centred when they fit
             }
         }
+        .frame(maxWidth: contentWidth)
         .frame(height: 48)
         .glass(Capsule())
         .contentShape(Capsule())

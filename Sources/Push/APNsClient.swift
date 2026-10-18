@@ -21,6 +21,7 @@ actor APNsClient {
     /// touch itself) is kept for callers; every touch push vibrates silently either way.
     @discardableResult
     func send(toDeviceToken deviceToken: String, title: String, body: String, silent: Bool = false,
+              sound: String = TouchNotification.sound,
               topic: String = AppConfig.bundleID, collapseID: String? = nil,
               extra: [String: Any] = [:]) async -> Bool {
         guard APNsSecrets.isConfigured, !deviceToken.isEmpty else { return false }
@@ -49,7 +50,7 @@ actor APNsClient {
         ]
         // The app's own chime (a kiss and a soft bell), bundled in the phone and watch apps —
         // never the default beep. A sound is also what makes the phone vibrate and the watch tap.
-        aps["sound"] = TouchNotification.sound
+        aps["sound"] = sound
         // App data next to "aps" (e.g. the sealed touch) — under the 4 KB push limit.
         var payload: [String: Any] = extra
         payload["aps"] = aps

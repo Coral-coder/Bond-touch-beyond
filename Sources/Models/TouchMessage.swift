@@ -97,6 +97,13 @@ struct TouchMessage: Identifiable, Codable, Equatable {
 /// the most recent `perBond` touches for each partner (the backends re-add newer ones).
 enum TouchArchive {
     static let perBond = 40
+    /// Touches are kept for 3 days.
+    static let keepFor: TimeInterval = 3 * 24 * 3600
+
+    /// Drops touches older than `keepFor`.
+    static func recent(_ touches: [TouchMessage], now: Date = Date()) -> [TouchMessage] {
+        touches.filter { now.timeIntervalSince($0.sentAt) < keepFor }
+    }
 
     private static var file: URL {
         let d = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -107,13 +114,13 @@ enum TouchArchive {
 
     static func load() -> [TouchMessage] {
         guard let data = try? Data(contentsOf: file) else { return [] }
-        return (try? JSONDecoder().decode([TouchMessage].self, from: data)) ?? []
+        return recent((try? JSONDecoder().decode([TouchMessage].self, from: data)) ?? [])
     }
 
     /// Caps to the most recent `perBond` per partner, oldest-first overall, and saves.
     static func save(_ history: [TouchMessage]) {
         var byBond: [String: [TouchMessage]] = [:]
-        for t in history { byBond[t.bondID, default: []].append(t) }
+        for t in recent(history) { byBond[t.bondID, default: []].append(t) }
         var capped: [TouchMessage] = []
         for list in byBond.values { capped.append(contentsOf: list.suffix(perBond)) }
         capped.sort { $0.sentAt < $1.sentAt }

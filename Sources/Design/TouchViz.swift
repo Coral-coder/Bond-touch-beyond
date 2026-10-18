@@ -13,6 +13,9 @@ struct TouchViz: View {
     let startColorRGB: Int
     let endColorRGB: Int
     var height: CGFloat = 26
+    /// The neon's line thickness and glow, adjustable in Settings (1 = as designed).
+    @AppStorage("neonWidth") private var neonWidth = 1.0
+    @AppStorage("neonGlow") private var neonGlow = 1.0
 
     init(pattern: [Int], generation: Int = 2, colorRGB: Int, endColorRGB: Int? = nil, height: CGFloat = 26) {
         self.pattern = pattern
@@ -43,7 +46,7 @@ struct TouchViz: View {
         let samples = TouchPattern.trimmed(pattern)
         let n = max(samples.count, 1)
         return Canvas { ctx, size in
-            let r = max(min(size.height * 0.11, 5), 2.5)
+            let r = max(min(size.height * 0.11, 5), 2.5) * neonWidth
             // Leave room for the dot and its glow so the top (position 8) and bottom
             // (position 0) of a slide are never clipped at the canvas edge.
             let inset = r + 4
@@ -53,7 +56,7 @@ struct TouchViz: View {
                         y: inset + usableH * (1 - Double(pos) / Double(TouchPattern.positions - 1)))
             }
             var glow = ctx
-            glow.addFilter(.shadow(color: color(at: 0.5).opacity(0.8), radius: 6))
+            glow.addFilter(.shadow(color: color(at: 0.5).opacity(min(1, 0.8 * neonGlow)), radius: 6 * neonGlow))
             var previous: [Int] = []
             for (i, s) in samples.enumerated() {
                 let fingers = TouchPattern.fingers(in: s)
@@ -83,7 +86,7 @@ struct TouchViz: View {
         let items = presses
         let total = max(items.last.map { $0.start + $0.length } ?? 1, 1)
         Canvas { ctx, size in
-            let dot = height * 0.42
+            let dot = min(height * 0.42, 22) * neonWidth
             let pad = dot / 2 + 4
             let usable = max(size.width - pad * 2, 1)
             let mid = size.height / 2
@@ -94,7 +97,7 @@ struct TouchViz: View {
                 let w = max(usable * p.length / total, dot)
                 let rect = CGRect(x: x0 - dot / 2, y: mid - dot / 2, width: w, height: dot)
                 var layer = ctx
-                layer.addFilter(.shadow(color: tint.opacity(0.85), radius: 7))
+                layer.addFilter(.shadow(color: tint.opacity(min(1, 0.85 * neonGlow)), radius: 7 * neonGlow))
                 layer.fill(Path(roundedRect: rect, cornerRadius: dot / 2), with: .color(tint))
             }
         }

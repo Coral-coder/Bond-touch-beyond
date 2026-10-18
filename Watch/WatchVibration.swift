@@ -115,6 +115,31 @@ enum WatchVibration {
             return false
         }
     }
+
+    private static var lastTick: TimeInterval = 0
+
+    /// A tiny silent tick (30 ms, soft) while drawing a touch on the bar: when the finger lands
+    /// and each time it reaches another position. At most one every 60 ms. Only the exact
+    /// path is short enough; without it there's no tick at all (never an Apple tap and its tone).
+    static func tick() {
+        guard let playWithVibration else { return }
+        let now = ProcessInfo.processInfo.systemUptime
+        guard now - lastTick >= 0.06 else { return }
+        lastTick = now
+        playWithVibration(vibrateID, nil, ["VibePattern": [true, 30] as [Any], "Intensity": 0.6] as NSDictionary)
+    }
+
+    /// One firm silent buzz (a touch notification arriving): 180 ms at full intensity, or the
+    /// system vibration once if that's what this watch has (or was picked in the Tap lab).
+    /// Never Apple's taps.
+    static func pulse() {
+        if effective != .buzz, let playWithVibration {
+            stopSound?(vibrateID)
+            playWithVibration(vibrateID, nil, ["VibePattern": [true, 180] as [Any], "Intensity": 1.0] as NSDictionary)
+        } else {
+            playSound?(vibrateID)
+        }
+    }
 }
 
 /// The Tap lab: feel each way the watch can vibrate a touch, and pick the one that's strong
@@ -127,32 +152,34 @@ struct WatchTapLabView: View {
                                      "start": 0xEC5A89, "at": Date().timeIntervalSince1970, "mine": false])!
 
     var body: some View {
-        List {
-            Section {
-                ForEach(WatchVibration.Method.allCases) { m in
-                    Button {
-                        chosen = m
-                        WatchVibration.chosen = m
-                        WatchVibration.play(sample, method: m)
-                    } label: {
-                        HStack {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(m.title).font(.system(.footnote, design: .rounded).weight(.bold))
-                                if !WatchVibration.available(m) {
-                                    Text("Not on this watch").font(.caption2).foregroundStyle(.secondary)
-                                } else if m == .auto {
-                                    Text("Uses: \(WatchVibration.effective.title)").font(.caption2).foregroundStyle(.secondary)
+        WatchPage {
+            List {
+                Section {
+                    ForEach(WatchVibration.Method.allCases) { m in
+                        Button {
+                            chosen = m
+                            WatchVibration.chosen = m
+                            WatchVibration.play(sample, method: m)
+                        } label: {
+                            HStack {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(m.title).font(.system(.footnote, design: .rounded).weight(.bold))
+                                    if !WatchVibration.available(m) {
+                                        Text("Not on this watch").font(.caption2).foregroundStyle(.secondary)
+                                    } else if m == .auto {
+                                        Text("Uses: \(WatchVibration.effective.title)").font(.caption2).foregroundStyle(.secondary)
+                                    }
                                 }
+                                Spacer()
+                                if chosen == m { Image(systemName: "checkmark").foregroundStyle(Color(rgb: 0x57C3BB)) }
                             }
-                            Spacer()
-                            if chosen == m { Image(systemName: "checkmark").foregroundStyle(Color(rgb: 0x57C3BB)) }
                         }
                     }
+                } header: {
+                    Text("Tap lab")
+                } footer: {
+                    Text("Tap each to feel it. Pick the one that's strong and silent — touches use it.")
                 }
-            } header: {
-                Text("Tap lab")
-            } footer: {
-                Text("Tap each to feel it. Pick the one that's strong and silent — touches use it.")
             }
         }
     }

@@ -15,6 +15,8 @@ enum TouchNotification {
     /// It also makes the phone vibrate and the watch tap the wrist (they only vibrate for a
     /// notification with a sound).
     static let sound = "touch-chime.wav"
+    /// Just the kiss, for "Thinking of you" (the kiss button).
+    static let kissSound = "kiss.wav"
 
     /// The touch, in the notification's userInfo, under these keys.
     enum Key {

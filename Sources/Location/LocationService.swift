@@ -29,12 +29,19 @@ final class LocationService: NSObject, ObservableObject {
         guard !running else { return }
         running = true
         manager.requestWhenInUseAuthorization()
+        // Keep updating with the app in the background (it's kept running for the bracelet),
+        // so the partner's card shows live movement and speed, not where you were when you
+        // last opened the app.
+        manager.allowsBackgroundLocationUpdates = true
+        manager.pausesLocationUpdatesAutomatically = false
+        manager.showsBackgroundLocationIndicator = true
         manager.startUpdatingLocation()
     }
 
     func stop() {
         running = false
         manager.stopUpdatingLocation()
+        manager.allowsBackgroundLocationUpdates = false
     }
 
     /// Watches the saved places (iOS wakes the app on arrival, even when it's closed). Needs

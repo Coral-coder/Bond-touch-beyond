@@ -1,5 +1,5 @@
-"""Synthesizes the touch notification sound: a soft kiss ("mwah"), then a futuristic two-note
-FM bell with a shimmering echo. Pure synthesis, no samples. Writes a 16-bit mono WAV."""
+"""Synthesizes the touch notification sound: a soft kiss ("mwah"), then a soft two-note
+glass bell (pure sine partials) with a light echo. Pure synthesis, no samples. Writes a 16-bit mono WAV."""
 import sys
 import wave
 import numpy as np
@@ -35,24 +35,23 @@ def smooth(x, n):
 click = (smooth(noise, 4) - smooth(noise, 18)) * env(k0 + 0.058, 0.001, 0.012, 0.05) * 0.9
 out += hum + pop + click
 
-# --- Futuristic bell: FM synthesis (inharmonic metallic partials), two notes, a fifth apart.
-def fm_bell(start, freq, amp, decay=0.55):
+# --- Soft futuristic bell: pure sine partials (no FM — FM's dense overtones sounded like a
+# harsh saw wave), tuned like a glass bell / vibraphone: a warm fundamental, a gentle octave,
+# and two inharmonic partials that fade fast, so it shimmers for a moment and then rings pure.
+def soft_bell(start, freq, amp, decay=0.7):
     tt = np.clip(t - start, 0, None)
-    e = env(start, 0.003, decay)
-    index = 1.7 * np.exp(-tt / 0.14) + 0.3                       # bright strike, then a pure ring
-    mod = np.sin(2 * np.pi * freq * 1.4 * tt)
-    tone = np.sin(2 * np.pi * freq * tt + index * mod)
-    # a slightly detuned twin for a shimmering, chorused, "sci-fi" ring
-    twin = np.sin(2 * np.pi * freq * 1.002 * tt + index * 0.6 * mod)
-    return (tone + 0.35 * twin) * e * amp
+    tone = np.zeros_like(t)
+    for ratio, gain, dec in [(1.0, 1.0, decay), (2.0, 0.28, decay * 0.55),
+                             (2.76, 0.10, decay * 0.25), (5.40, 0.03, decay * 0.12)]:
+        tone += gain * np.sin(2 * np.pi * freq * ratio * tt) * env(start, 0.006, dec)
+    # a slow, slight vibrato on the fundamental for a "sci-fi" float
+    tone += 0.12 * np.sin(2 * np.pi * freq * tt * (1 + 0.003 * np.sin(2 * np.pi * 5 * tt))) * env(start, 0.02, decay)
+    return tone * amp
 
-bell = fm_bell(0.16, 1318.5, 0.28) + fm_bell(0.31, 1975.5, 0.22, 0.65)   # E6 then B6
-# a soft high sparkle on top
-bell += np.sin(2 * np.pi * 3951 * np.clip(t - 0.31, 0, None)) * env(0.31, 0.004, 0.18) * 0.015
-
+bell = soft_bell(0.16, 1046.5, 0.30) + soft_bell(0.32, 1568.0, 0.22, 0.85)   # C6 then G6
 # echo taps: the bell repeating quietly, like it's ringing in a large glass room
 echoed = bell.copy()
-for delay, gain in [(0.12, 0.22), (0.25, 0.09)]:
+for delay, gain in [(0.13, 0.16), (0.27, 0.06)]:
     d = int(delay * RATE)
     echoed[d:] += bell[:-d] * gain
 out += echoed

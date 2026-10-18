@@ -50,6 +50,7 @@ struct SettingsView: View {
                         }
                         .tint(Theme.accent)
                     }
+                    NeonStyleCard()
                     GlassCard(padding: 20) {
                         Toggle(isOn: $store.watchStandsIn) {
                             VStack(alignment: .leading, spacing: 2) {
@@ -584,6 +585,36 @@ struct MyPhotoPicker: View {
                     model.setMyPhoto(image)
                 }
                 item = nil
+            }
+        }
+    }
+}
+
+/// The neon touch lines' thickness and glow, with a live example of a slide and a tap rhythm.
+private struct NeonStyleCard: View {
+    @AppStorage("neonWidth") private var width = 1.0
+    @AppStorage("neonGlow") private var glow = 1.0
+
+    private static let slide: [Int] = (0..<14).map { TouchPattern.sample([Int((Double($0) * 8 / 13).rounded())]) }
+        + Array(repeating: TouchPattern.sample([8]), count: 5)
+        + (0..<16).map { TouchPattern.sample([8 - Int((Double($0) * 8 / 15).rounded())]) }
+
+    var body: some View {
+        GlassCard(padding: 20) {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Touch style").foregroundStyle(.white)
+                TouchViz(pattern: Self.slide, generation: 3, colorRGB: 0x57C3BB, endColorRGB: 0xB173DF, height: 64)
+                TouchViz(pattern: [160, 140, 160, 140, 500], generation: 2, colorRGB: 0xEC5A89, endColorRGB: 0xB173DF, height: 40)
+                HStack(spacing: 10) {
+                    Text("Line").font(.caption).foregroundStyle(Theme.subtitle).frame(width: 40, alignment: .leading)
+                    Slider(value: $width, in: 0.4...2.2).tint(Theme.accent).accessibilityLabel("Line thickness")
+                }
+                HStack(spacing: 10) {
+                    Text("Glow").font(.caption).foregroundStyle(Theme.subtitle).frame(width: 40, alignment: .leading)
+                    Slider(value: $glow, in: 0...2.5).tint(Theme.accent).accessibilityLabel("Glow")
+                }
+                Button("Reset") { width = 1; glow = 1 }
+                    .font(.caption.weight(.semibold)).foregroundStyle(Theme.accent)
             }
         }
     }

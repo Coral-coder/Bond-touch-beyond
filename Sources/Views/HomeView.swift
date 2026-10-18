@@ -8,6 +8,9 @@ struct HomeView: View {
     @EnvironmentObject var model: AppModel
     @EnvironmentObject var store: LocalStore
     @State private var showHeart = false
+    /// The kiss button ("Thinking of you") — off unless enabled in the debug panel.
+    @AppStorage("showKissButton") private var showKissButton = false
+    @State private var kissSent = false
     /// A heartbeat send's problem (no heart rate, no partner…), shown briefly under the top bar.
     @State private var heartNote: String?
     @State private var showPeople = false
@@ -98,7 +101,10 @@ struct HomeView: View {
     private var topBar: some View {
         HStack(spacing: 10) {
             heartButton
+            if showKissButton { kissButton }
+            Spacer(minLength: 8)
             PartnerBar()
+            Spacer(minLength: 8)
             iconButton("person.2.fill", label: "People") { showPeople = true }
         }
         .padding(.horizontal, 18)
@@ -132,6 +138,34 @@ struct HomeView: View {
         .accessibilityLabel("Send my heartbeat")
         .accessibilityHint("Long press for heartbeat options")
         .accessibilityAddTraits(.isButton)
+    }
+
+    /// Sends a kiss: the partner's phone (and watch) plays just the kiss sound, "Thinking of you".
+    private var kissButton: some View {
+        Button {
+            UIImpactFeedbackGenerator(style: .soft).impactOccurred()
+            Task {
+                if await model.sendKiss() {
+                    kissSent = true
+                    try? await Task.sleep(nanoseconds: 1_200_000_000)
+                    kissSent = false
+                } else {
+                    heartNote = model.statusLine
+                    try? await Task.sleep(nanoseconds: 3_000_000_000)
+                    heartNote = nil
+                }
+            }
+        } label: {
+            Text(kissSent ? "✓" : "💋")
+                .font(.system(size: 19))
+                .foregroundStyle(.white)
+                .frame(width: 46, height: 46)
+                .glass(Circle())
+                .scaleEffect(kissSent ? 1.12 : 1)
+                .animation(.spring(response: 0.3), value: kissSent)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Send a kiss")
     }
 
     /// Lub-dub size while sending.
@@ -413,6 +447,37 @@ struct HomeView: View {
             .padding(.horizontal, 22)
     }
 
+    /// The compact status in a card's corner: a clock while sending, one tick when sent, two
+    /// when seen, a red retry when it failed; for a partner's touch, a bell if it was missed.
+    @ViewBuilder private func statusMark(_ touch: TouchMessage, mine: Bool) -> some View {
+        if mine, let delivery = touch.delivery {
+            switch delivery {
+            case .sending:
+                Image(systemName: "clock").font(.system(size: 10, weight: .bold)).foregroundStyle(Theme.subtitle)
+                    .accessibilityLabel("Sending")
+            case .sent:
+                Image(systemName: "checkmark").font(.system(size: 10, weight: .heavy)).foregroundStyle(Theme.subtitle)
+                    .accessibilityLabel("Sent")
+            case .seen:
+                HStack(spacing: -4) {
+                    Image(systemName: "checkmark"); Image(systemName: "checkmark")
+                }
+                .font(.system(size: 10, weight: .heavy)).foregroundStyle(Theme.accent)
+                .accessibilityElement(children: .ignore).accessibilityLabel("Seen")
+            case .failed:
+                Button { Task { await model.resend(touch) } } label: {
+                    Label("Retry", systemImage: "exclamationmark.circle.fill")
+                        .font(Theme.font(10, .bold)).foregroundStyle(Theme.danger)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Failed to send. Tap to retry.")
+            }
+        } else if !mine, touch.missed == true {
+            Image(systemName: "bell.slash.fill").font(.system(size: 10, weight: .bold)).foregroundStyle(Theme.amber)
+                .accessibilityLabel("Missed: this touch arrived but didn't play")
+        }
+    }
+
     /// Sending… / Sent / Seen / Failed (tap to send again), as the original.
     @ViewBuilder private func deliveryLabel(_ touch: TouchMessage, _ delivery: TouchMessage.Delivery) -> some View {
         switch delivery {
@@ -433,7 +498,7 @@ struct HomeView: View {
     }
 
     /// Height of a history card; the touch is drawn across all of it.
-    private static let rowHeight: CGFloat = 100
+    private static let rowHeight: CGFloat = 84
 
     private func touchRow(_ touch: TouchMessage) -> some View {
         let mine = touch.senderID == model.myUserID || touch.senderID == ChatMessage.legacySelf
@@ -475,35 +540,36 @@ struct HomeView: View {
                     .background(Capsule().fill(.black.opacity(0.5)))
                     .overlay(Capsule().stroke(Color(rgbInt: touch.colorRGB).opacity(0.9), lineWidth: 1.5))
                     .shadow(color: Color(rgbInt: touch.colorRGB).opacity(0.6), radius: 8)
-                    .padding(.trailing, 70)   // centred on the part of the card not under the details
+                    .padding(.trailing, 120)   // centred on the part of the card not under the details
                     .accessibilityLabel("Meaning: \(meaning.label)")
                 }
             }
 
-            // Who, when, status and replay, floating over the right edge on a soft scrim.
-            VStack(alignment: .trailing, spacing: 2) {
-                Text(mine ? "You" : (partner?.displayName ?? "Partner"))
-                    .font(Theme.font(12, .bold)).foregroundStyle(.white)
-                Text(touch.sentAt.formatted(date: .omitted, time: .shortened))
-                    .font(Theme.font(11)).foregroundStyle(Theme.subtitle)
-                if mine, let delivery = touch.delivery { deliveryLabel(touch, delivery) }
-                if !mine, touch.missed == true {
-                    Label("Missed", systemImage: "bell.slash.fill")
-                        .font(Theme.font(10, .bold)).foregroundStyle(Theme.amber)
-                        .accessibilityLabel("Missed: this touch arrived but didn't play")
+            // Who and when, and replay centred on the right, over a soft scrim.
+            HStack(spacing: 10) {
+                VStack(alignment: .trailing, spacing: 1) {
+                    Text(mine ? "You" : (partner?.displayName ?? "Partner"))
+                        .font(Theme.font(12, .bold)).foregroundStyle(.white)
+                    Text(touch.sentAt.formatted(date: .omitted, time: .shortened))
+                        .font(Theme.font(11)).foregroundStyle(Theme.subtitle)
                 }
                 Button { model.feel(touch) } label: {
                     Image(systemName: "play.fill").font(.system(size: 12, weight: .bold)).foregroundStyle(.white)
-                        .frame(width: 30, height: 30).background(Circle().fill(.white.opacity(0.14)))
+                        .frame(width: 32, height: 32).background(Circle().fill(.white.opacity(0.16)))
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Play on bracelet")
-                .padding(.top, 2)
             }
             .fixedSize()
-            .padding(.leading, 28).padding(.trailing, 14)
+            .padding(.leading, 28).padding(.trailing, 12)
             .frame(maxHeight: .infinity)
             .background(LinearGradient(colors: [.clear, .black.opacity(0.45)], startPoint: .leading, endPoint: .trailing))
+        }
+        // Delivered / seen (or missed) in the card's bottom-right corner, clear of the
+        // meaning bubble and the play button.
+        .overlay(alignment: .bottomTrailing) {
+            statusMark(touch, mine: mine)
+                .padding(.trailing, 10).padding(.bottom, 5)
         }
         .frame(height: h)
         .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))

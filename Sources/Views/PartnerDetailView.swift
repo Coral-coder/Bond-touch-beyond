@@ -8,6 +8,8 @@ import SwiftUI
 struct PartnerDetailView: View {
     @EnvironmentObject var model: AppModel
     @EnvironmentObject var store: LocalStore
+    @AppStorage("glassClarity") private var glassClarity = 0.55
+    @AppStorage("glassShadow") private var glassShadow = 0.6
     @Environment(\.dismiss) private var dismiss
     let partnerID: String
 
@@ -96,6 +98,23 @@ struct PartnerDetailView: View {
                                 Slider(value: $store.backgroundSoftness, in: 0...40).tint(Theme.accent)
                             }
                             .padding(.vertical, 12)
+                            // The glass panels everywhere: how see-through, and how deep a shadow.
+                            HStack(spacing: 12) {
+                                Text("Glass").font(Theme.font(14, .bold)).foregroundStyle(.white).frame(width: 64, alignment: .leading)
+                                Image(systemName: "square.fill").font(.system(size: 11)).foregroundStyle(Theme.subtitle)
+                                Slider(value: $glassClarity, in: 0...1).tint(Theme.accent)
+                                    .accessibilityLabel("Glass transparency")
+                                Image(systemName: "square").font(.system(size: 11)).foregroundStyle(Theme.subtitle)
+                            }
+                            .padding(.bottom, 10)
+                            HStack(spacing: 12) {
+                                Text("Shadow").font(Theme.font(14, .bold)).foregroundStyle(.white).frame(width: 64, alignment: .leading)
+                                Image(systemName: "circle").font(.system(size: 11)).foregroundStyle(Theme.subtitle)
+                                Slider(value: $glassShadow, in: 0...1).tint(Theme.accent)
+                                    .accessibilityLabel("Glass shadow")
+                                Image(systemName: "circle.fill").font(.system(size: 11)).foregroundStyle(Theme.subtitle)
+                            }
+                            .padding(.bottom, 12)
                             if photo == nil {
                                 Text("\(partner.displayName) has no profile photo yet.")
                                     .font(Theme.font(12)).foregroundStyle(Theme.subtitle)

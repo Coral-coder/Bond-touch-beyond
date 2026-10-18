@@ -14,6 +14,19 @@ struct ChatView: View {
     @State private var shareError: String?
 
     private var messages: [ChatMessage] { model.chatMessages(for: model.selectedPartnerID) }
+
+    /// Messages and touches together, in time order — touches show inline in the chat.
+    private enum Item: Identifiable {
+        case message(ChatMessage)
+        case touch(TouchMessage)
+        var id: UUID { switch self { case .message(let m): return m.id; case .touch(let t): return t.id } }
+        var date: Date { switch self { case .message(let m): return m.sentAt; case .touch(let t): return t.sentAt } }
+    }
+
+    private var items: [Item] {
+        let touches = model.history.filter { $0.bondID == model.selectedPartnerID }.map(Item.touch)
+        return (messages.map(Item.message) + touches).sorted { $0.date < $1.date }
+    }
     private var lastSeenID: UUID? { model.lastSeenMessageID(for: model.selectedPartnerID) }
     private var chatBondID: String? { model.chatBondID(for: model.selectedPartnerID) }
     private var needsLink: Bool { model.selectedPartner != nil && chatBondID == nil }
@@ -29,12 +42,17 @@ struct ChatView: View {
                 ScrollViewReader { proxy in
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: 14) {
-                            ForEach(messages) { msg in bubble(msg).id(msg.id) }
+                            ForEach(items) { item in
+                                switch item {
+                                case .message(let msg): bubble(msg).id(msg.id)
+                                case .touch(let t): touchBubble(t).id(t.id)
+                                }
+                            }
                             Color.clear.frame(height: 8).id("bottom")
                         }
                         .padding(.horizontal, 16).padding(.top, 8)
                     }
-                    .onChange(of: messages.count) { _ in
+                    .onChange(of: items.count) { _ in
                         withAnimation { proxy.scrollTo("bottom", anchor: .bottom) }
                     }
                 }
@@ -108,6 +126,43 @@ struct ChatView: View {
         .padding(18)
         .glass(cornerRadius: 28)
         .padding(16)
+    }
+
+    /// A touch in the chat: the touch drawn in a small glass card (a heartbeat as its EKG),
+    /// on the sender's side, with its meaning and a replay button.
+    private func touchBubble(_ t: TouchMessage) -> some View {
+        let mine = t.senderID == model.myUserID || t.senderID == ChatMessage.legacySelf
+        return VStack(alignment: mine ? .trailing : .leading, spacing: 4) {
+            HStack {
+                if mine { Spacer(minLength: 60) }
+                HStack(spacing: 8) {
+                    Group {
+                        if let bpm = t.heartbeatBPM {
+                            EKGView(bpm: bpm, colorRGB: t.colorRGB, lineWidth: 2).frame(height: 40)
+                        } else {
+                            TouchViz(pattern: t.pattern, generation: t.generation, colorRGB: t.colorRGB,
+                                     endColorRGB: t.endColorRGB, height: 40)
+                        }
+                    }
+                    .frame(width: 150)
+                    Button { model.feel(t) } label: {
+                        Image(systemName: "play.fill").font(.system(size: 11, weight: .bold)).foregroundStyle(.white)
+                            .frame(width: 28, height: 28).background(Circle().fill(.white.opacity(0.16)))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Play this touch")
+                }
+                .padding(.horizontal, 10).padding(.vertical, 6)
+                .glass(cornerRadius: 18)
+                if !mine { Spacer(minLength: 60) }
+            }
+            let label = t.heartbeatBPM.map { "💓 \($0) BPM" } ?? t.meaningLabel.map { [t.meaningEmoji, $0].compactMap { $0 }.joined(separator: " ") }
+            Text([label, t.sentAt.formatted(date: .omitted, time: .shortened)].compactMap { $0 }.joined(separator: " · "))
+                .font(.caption2).foregroundStyle(Theme.subtitle)
+                .frame(maxWidth: .infinity, alignment: mine ? .trailing : .leading)
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(mine ? "Your touch" : "Touch from \(model.selectedPartner?.displayName ?? "partner")")
     }
 
     @ViewBuilder private func bubble(_ msg: ChatMessage) -> some View {
