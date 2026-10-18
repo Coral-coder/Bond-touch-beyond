@@ -331,24 +331,37 @@ jobs:
       - name: Archive
         run: |
           mkdir -p build
-          xcodebuild -project "$PROJECT" -scheme "$SCHEME" -configuration Release \
-            -destination 'generic/platform=iOS' -archivePath "build/$SCHEME.xcarchive" \
-            -allowProvisioningUpdates \
-            -authenticationKeyPath "$ASC_KEY_PATH" \
-            -authenticationKeyID "$ASC_KEY_ID" \
-            -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
-            DEVELOPMENT_TEAM="$TEAM_ID" CODE_SIGN_STYLE=Automatic \
-            APP_BUNDLE_ID="$BUNDLE_ID" \
-            ENABLE_DEBUG_DYLIB=NO ENABLE_PREVIEWS=NO \
-            MARKETING_VERSION="$VERSION" CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
-            archive > build/xcodebuild.log 2>&1 || {
-              # Surface compiler errors as annotations (readable without downloading the log).
-              grep -E ': error: ' build/xcodebuild.log | sort -u | head -30 | while IFS= read -r line; do
-                echo "::error::$(echo "$line" | sed -E "s#^$GITHUB_WORKSPACE/##")"
-              done
-              tail -80 build/xcodebuild.log
-              exit 1
-            }
+          archive() {
+            xcodebuild -project "$PROJECT" -scheme "$SCHEME" -configuration Release \
+              -destination 'generic/platform=iOS' -archivePath "build/$SCHEME.xcarchive" \
+              -allowProvisioningUpdates \
+              -authenticationKeyPath "$ASC_KEY_PATH" \
+              -authenticationKeyID "$ASC_KEY_ID" \
+              -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
+              DEVELOPMENT_TEAM="$TEAM_ID" CODE_SIGN_STYLE=Automatic \
+              APP_BUNDLE_ID="$BUNDLE_ID" \
+              ENABLE_DEBUG_DYLIB=NO ENABLE_PREVIEWS=NO \
+              MARKETING_VERSION="$VERSION" CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
+              archive > build/xcodebuild.log 2>&1
+          }
+          ok=false
+          # A new target's provisioning profile is created during the archive, and Xcode can
+          # look for its file before it's written ("Build input file cannot be found:
+          # …mobileprovision"). The profile then exists, so archiving again gets past it — up
+          # to three tries, only for that error.
+          for attempt in 1 2 3; do
+            if archive; then ok=true; break; fi
+            grep -q "Build input file cannot be found: .*\.mobileprovision" build/xcodebuild.log || break
+            echo "New provisioning profile wasn't ready yet; archiving again (try $((attempt + 1)))"
+          done
+          if [ "$ok" != true ]; then
+            # Surface compiler errors as annotations (readable without downloading the log).
+            grep -E ': error: ' build/xcodebuild.log | sort -u | head -30 | while IFS= read -r line; do
+              echo "::error::$(echo "$line" | sed -E "s#^$GITHUB_WORKSPACE/##")"
+            done
+            tail -80 build/xcodebuild.log
+            exit 1
+          fi
           tail -60 build/xcodebuild.log
 
       - name: Upload to TestFlight
