@@ -5,6 +5,7 @@ samples. Three variants:
   marimba — two rounded wooden-bar notes (E5, B5), very short and soft
   glow    — a soft three-note major chord swelling in and out, like a warm pad
   mallet  — between bell and marimba: soft mallet notes (E5, B5) with a smooth reverb tail
+  chamber — nearly pure sine chimes (E5, B5) and a soft kiss, in a small room, with an echo
 Writes 16-bit mono WAVs: make_touch_chime.py <out.wav> [variant] [--kiss-only]"""
 import sys
 import wave
@@ -87,6 +88,34 @@ def reverb(x, seconds=1.1, wet=0.32):
     return (1 - wet) * x + wet * tail * (np.max(np.abs(x)) / max(np.max(np.abs(tail)), 1e-9))
 
 
+def sine_chime(t, start, freq, amp, decay=0.6):
+    """A nearly pure sine chime (overtones made it sound square): the fundamental with a
+    whisper of octave, swelling in over 18 ms so there's no hard edge."""
+    tt = np.clip(t - start, 0, None)
+    tone = (np.sin(2 * np.pi * freq * tt) * env(t, start, 0.018, decay)
+            + 0.04 * np.sin(2 * np.pi * freq * 2 * tt) * env(t, start, 0.018, decay * 0.4))
+    return tone * amp
+
+
+def chamber(x, delays=(0.017, 0.029, 0.041, 0.056, 0.071), gains=(0.42, 0.33, 0.26, 0.19, 0.13)):
+    """A small room: a cluster of early reflections off near walls (each a little duller),
+    then a short soft diffuse tail."""
+    out = x.copy()
+    for d, g in zip(delays, gains):
+        n = int(d * RATE)
+        out[n:] += lowpass(x, 6)[:-n] * g
+    return reverb(out, seconds=0.6, wet=0.22)
+
+
+def echo(x, delays=(0.23, 0.46), gains=(0.30, 0.12)):
+    """The whole sound coming back, softer and duller each time."""
+    out = x.copy()
+    for d, g in zip(delays, gains):
+        n = int(d * RATE)
+        out[n:] += lowpass(x, 10)[:-n] * g
+    return out
+
+
 def glow(t, start, freqs, amp, length=1.1):
     tt = np.clip(t - start, 0, None)
     swell = np.where(tt < length, np.sin(np.pi * np.clip(tt / length, 0, 1)) ** 1.5, 0) * (t >= start)
@@ -105,6 +134,14 @@ def kiss_alone():
 def make(variant):
     t = timeline(1.5)
     out = kiss(t)
+    if variant == "chamber":
+        t = timeline(2.6)
+        dry = sine_chime(t, 0.17, 659.3, 0.34, 0.6) + sine_chime(t, 0.34, 987.8, 0.27, 0.7)
+        k = lowpass(kiss_alone(), 5)                       # softer: duller, and quieter below
+        dry[: len(k)] += k * (np.max(np.abs(dry)) / np.max(np.abs(k))) * 0.38
+        out = echo(chamber(dry))
+        out *= np.minimum(1, (2.6 - t) / 0.25)
+        return out
     if variant == "mallet":
         t = timeline(2.2)
         out = soft_mallet(t, 0.17, 659.3, 0.34, 0.55) + soft_mallet(t, 0.34, 987.8, 0.27, 0.65)
