@@ -55,52 +55,80 @@ struct WatchTouchDrawing: View {
     var compact = false
 
     var body: some View {
-        Canvas { ctx, size in
-            let color = Color(rgb: touch.startRGB)
-            let line = compact ? max(2.5, size.height * 0.16) : 5
-            let pill = compact ? max(6, size.height * 0.42) : 14
-            if let bpm = touch.bpm {
-                // Two seconds of EKG at its BPM.
-                let period = 60.0 / Double(min(max(bpm, 30), 220)), w = size.width, mid = size.height * 0.6
-                var path = Path()
-                path.move(to: CGPoint(x: 0, y: mid))
-                var t = 0.0
-                while t < 2.4 {
-                    let x = CGFloat(t / 2.4) * w, beat = CGFloat(period / 2.4) * w
-                    path.addLine(to: CGPoint(x: x + beat * 0.30, y: mid))
-                    path.addLine(to: CGPoint(x: x + beat * 0.36, y: mid - size.height * 0.5))
-                    path.addLine(to: CGPoint(x: x + beat * 0.42, y: mid + size.height * 0.3))
-                    path.addLine(to: CGPoint(x: x + beat * 0.48, y: mid))
-                    t += period
-                }
-                path.addLine(to: CGPoint(x: w, y: mid))
-                ctx.stroke(path, with: .color(color), style: StrokeStyle(lineWidth: max(1.5, line * 0.6), lineCap: .round, lineJoin: .round))
-            } else if touch.generation == 3 {
-                let s = TouchPattern.trimmed(touch.pattern), n = max(s.count, 2)
-                var path = Path(), started = false
-                for (i, sample) in s.enumerated() {
-                    guard let f = TouchPattern.fingers(in: sample).first else { started = false; continue }
-                    let inset = line / 2 + 1
-                    let p = CGPoint(x: inset + (size.width - inset * 2) * CGFloat(i) / CGFloat(n - 1),
-                                    y: size.height - inset - (size.height - inset * 2) * CGFloat(f) / CGFloat(TouchPattern.positions - 1))
-                    if started { path.addLine(to: p) } else { path.move(to: p); started = true }
-                }
-                ctx.stroke(path, with: .shading(.linearGradient(Gradient(colors: [color, Color(rgb: touch.endRGB)]),
-                                                                startPoint: .zero, endPoint: CGPoint(x: size.width, y: 0))),
-                           style: StrokeStyle(lineWidth: line, lineCap: .round, lineJoin: .round))
-            } else {
-                var at = 0.0, presses: [(Double, Double)] = []
-                for (i, ms) in touch.pattern.enumerated() { if i % 2 == 0 { presses.append((at, Double(max(ms, 1)))) }; at += Double(max(ms, 1)) }
-                let total = max(presses.last.map { $0.0 + $0.1 } ?? 1, 1)
-                for p in presses {
-                    let x = 4 + (size.width - 8) * CGFloat(p.0 / total)
-                    let w = max((size.width - 8) * CGFloat(p.1 / total), pill)
-                    ctx.fill(Path(roundedRect: CGRect(x: x, y: size.height / 2 - pill / 2, width: w, height: pill), cornerRadius: pill / 2),
-                             with: .color(color))
-                }
-            }
+        Canvas { ctx, size in draw(&ctx, size) }
+            .background(RoundedRectangle(cornerRadius: 12).fill(Color(rgb: 0x0B2440)).opacity(compact ? 0 : 1))
+    }
+
+    private var line: CGFloat { compact ? 3 : 5 }
+
+    private func draw(_ ctx: inout GraphicsContext, _ size: CGSize) {
+        if let bpm = touch.bpm {
+            drawEKG(&ctx, size, bpm: bpm)
+        } else if touch.generation == 3 {
+            drawTrace(&ctx, size)
+        } else {
+            drawTaps(&ctx, size)
         }
-        .background(RoundedRectangle(cornerRadius: 12).fill(Color(rgb: 0x0B2440)).opacity(compact ? 0 : 1))
+    }
+
+    /// Two and a half seconds of EKG at the heartbeat's BPM.
+    private func drawEKG(_ ctx: inout GraphicsContext, _ size: CGSize, bpm: Int) {
+        let period: Double = 60.0 / Double(min(max(bpm, 30), 220))
+        let w: CGFloat = size.width, h: CGFloat = size.height, mid: CGFloat = h * 0.6
+        let beat: CGFloat = CGFloat(period / 2.4) * w
+        var path = Path()
+        path.move(to: CGPoint(x: 0, y: mid))
+        var t: Double = 0
+        while t < 2.4 {
+            let x: CGFloat = CGFloat(t / 2.4) * w
+            path.addLine(to: CGPoint(x: x + beat * 0.30, y: mid))
+            path.addLine(to: CGPoint(x: x + beat * 0.36, y: mid - h * 0.5))
+            path.addLine(to: CGPoint(x: x + beat * 0.42, y: mid + h * 0.3))
+            path.addLine(to: CGPoint(x: x + beat * 0.48, y: mid))
+            t += period
+        }
+        path.addLine(to: CGPoint(x: w, y: mid))
+        let style = StrokeStyle(lineWidth: max(1.5, line * 0.6), lineCap: .round, lineJoin: .round)
+        ctx.stroke(path, with: .color(Color(rgb: touch.startRGB)), style: style)
+    }
+
+    /// The bar trace: time across, position on the bar up and down.
+    private func drawTrace(_ ctx: inout GraphicsContext, _ size: CGSize) {
+        let s: [Int] = TouchPattern.trimmed(touch.pattern)
+        let n: Int = max(s.count, 2)
+        let inset: CGFloat = line / 2 + 1
+        let top: CGFloat = CGFloat(TouchPattern.positions - 1)
+        var path = Path()
+        var started = false
+        for (i, sample) in s.enumerated() {
+            guard let f = TouchPattern.fingers(in: sample).first else { started = false; continue }
+            let x: CGFloat = inset + (size.width - inset * 2) * CGFloat(i) / CGFloat(n - 1)
+            let y: CGFloat = size.height - inset - (size.height - inset * 2) * CGFloat(f) / top
+            if started { path.addLine(to: CGPoint(x: x, y: y)) } else { path.move(to: CGPoint(x: x, y: y)); started = true }
+        }
+        let gradient = Gradient(colors: [Color(rgb: touch.startRGB), Color(rgb: touch.endRGB)])
+        let shading = GraphicsContext.Shading.linearGradient(gradient, startPoint: .zero, endPoint: CGPoint(x: size.width, y: 0))
+        ctx.stroke(path, with: shading, style: StrokeStyle(lineWidth: line, lineCap: .round, lineJoin: .round))
+    }
+
+    /// The tap rhythm: each press a pill as long as it was held.
+    private func drawTaps(_ ctx: inout GraphicsContext, _ size: CGSize) {
+        let pill: CGFloat = compact ? max(6, size.height * 0.42) : 14
+        var at: Double = 0
+        var presses: [(Double, Double)] = []
+        for (i, ms) in touch.pattern.enumerated() {
+            let d = Double(max(ms, 1))
+            if i % 2 == 0 { presses.append((at, d)) }
+            at += d
+        }
+        let total: Double = max(presses.last.map { $0.0 + $0.1 } ?? 1, 1)
+        let usable: CGFloat = size.width - 8
+        for p in presses {
+            let x: CGFloat = 4 + usable * CGFloat(p.0 / total)
+            let w: CGFloat = max(usable * CGFloat(p.1 / total), pill)
+            let rect = CGRect(x: x, y: size.height / 2 - pill / 2, width: w, height: pill)
+            ctx.fill(Path(roundedRect: rect, cornerRadius: pill / 2), with: .color(Color(rgb: touch.startRGB)))
+        }
     }
 }
 
