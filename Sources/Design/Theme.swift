@@ -31,6 +31,45 @@ enum AppStyle: String, CaseIterable, Identifiable {
     }
 
     var isLight: Bool { self == .pastel || self == .mono || self == .paper }
+
+    /// The colours this theme can wear (its accent, and the main glow in its backdrop). The
+    /// first is the theme's own. Paper & Ink uses its ink colours (`PaperInk`) instead.
+    var tints: [(name: String, rgb: Int)] {
+        switch self {
+        case .aero: return [("Teal", 0x57C3BB), ("Sky", 0x5AB8F0), ("Violet", 0xB18CF0), ("Rose", 0xF07FA8), ("Mint", 0x7FE0A8), ("Gold", 0xF0C35A)]
+        case .neon: return [("Cyan", 0x00E5FF), ("Magenta", 0xFF2BD6), ("Acid", 0xB6FF3B), ("Laser", 0xFF3B5C), ("Volt", 0xFFE600), ("Ultraviolet", 0x9D5CFF)]
+        case .pastel: return [("Coral", 0xF07F6E), ("Lilac", 0xA98BE8), ("Mint", 0x5DBE96), ("Sky", 0x6FB3E8), ("Peach", 0xF5A35E), ("Rose", 0xE8789E)]
+        case .mono: return [("Vermilion", 0xE8452C), ("Cobalt", 0x2850E8), ("Emerald", 0x168A55), ("Black", 0x111111), ("Magenta", 0xD0247A), ("Amber", 0xD98A00)]
+        case .aurora: return [("Mint", 0x5EEAD4), ("Violet", 0xA78BFA), ("Pink", 0xFF6FD8), ("Ice", 0x8FD8FF), ("Lime", 0xA3F27A), ("Gold", 0xFBBF5C)]
+        case .paper: return []
+        case .chalk: return [("Yellow", 0xF4E38C), ("White", 0xF1F0E8), ("Pink", 0xF5A9C4), ("Blue", 0xA9D4F5), ("Green", 0xBDE8A4), ("Orange", 0xF7C98C)]
+        }
+    }
+}
+
+/// The colour picked for each theme, kept per theme ("aero=5AB8F0;neon=FF2BD6"), so
+/// switching themes and back keeps each one's choice.
+enum ThemeTints {
+    static let key = "themeTints"
+
+    static func parse(_ raw: String) -> [String: Int] {
+        var out: [String: Int] = [:]
+        for part in raw.split(separator: ";") {
+            let kv = part.split(separator: "=")
+            if kv.count == 2, let v = Int(kv[1], radix: 16) { out[String(kv[0])] = v }
+        }
+        return out
+    }
+
+    static func encode(_ d: [String: Int]) -> String {
+        d.sorted { $0.key < $1.key }.map { "\($0.key)=\(String($0.value, radix: 16, uppercase: true))" }.joined(separator: ";")
+    }
+
+    /// The picked colour for `style`, or nil for the theme's own.
+    static func tint(for style: AppStyle, in raw: String = UserDefaults.standard.string(forKey: key) ?? "") -> Int? {
+        guard let v = parse(raw)[style.rawValue], v != style.tints.first?.rgb else { return nil }
+        return v
+    }
 }
 
 /// The ink colours for Paper & Ink. Each tints the paper a little to match.
@@ -66,6 +105,27 @@ struct Palette {
     /// The panel fill for themes whose panels aren't frosted glass.
     var surface: Color
     var glassTop: Color, glassBottom: Color
+
+    /// The theme's palette, wearing `tint` (a picked colour) as its accent if given.
+    static func make(_ style: AppStyle, ink paperInk: PaperInk, tint: Int?) -> Palette {
+        var p = make(style, ink: paperInk)
+        guard let tint else { return p }
+        func shade(_ f: Double) -> Color {
+            func ch(_ s: Int) -> Double {
+                let v = Double((tint >> s) & 0xFF) / 255
+                return f >= 0 ? v + (1 - v) * f : v * (1 + f)
+            }
+            return Color(red: ch(16), green: ch(8), blue: ch(0))
+        }
+        let r = Double((tint >> 16) & 0xFF), g = Double((tint >> 8) & 0xFF), b = Double(tint & 0xFF)
+        let luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255
+        p.accent = Color(rgbInt: tint)
+        p.accentDeep = shade(-0.18)
+        p.accentTop = shade(0.3)
+        p.onAccent = luminance > 0.6 ? Color(rgbInt: 0x111418) : .white
+        if style == .neon { p.glassTop = Color(rgbInt: tint).opacity(0.08) }
+        return p
+    }
 
     static func make(_ style: AppStyle, ink paperInk: PaperInk) -> Palette {
         func c(_ v: Int) -> Color { Color(rgbInt: v) }
@@ -134,11 +194,17 @@ enum Theme {
 
     private static var cache: (key: String, palette: Palette)?
     static var p: Palette {
-        let s = style, i = paperInk, key = s.rawValue + i.rawValue
+        let s = style, i = paperInk, raw = UserDefaults.standard.string(forKey: ThemeTints.key) ?? ""
+        let key = s.rawValue + i.rawValue + raw
         if let cache, cache.key == key { return cache.palette }
-        let palette = Palette.make(s, ink: i)
+        let palette = Palette.make(s, ink: i, tint: ThemeTints.tint(for: s, in: raw))
         cache = (key, palette)
         return palette
+    }
+
+    /// Any theme's palette, with its picked colour (for previews).
+    static func palette(for style: AppStyle) -> Palette {
+        Palette.make(style, ink: paperInk, tint: ThemeTints.tint(for: style))
     }
 
     static var bgTop: Color { p.bgTop }
@@ -234,12 +300,13 @@ struct ThemeBackdrop: View {
     var style: AppStyle = Theme.style
 
     var body: some View {
+        let glow = ThemeTints.tint(for: style).map { Color(rgbInt: $0) }
         switch style {
-        case .aero: AeroSky()
-        case .neon: NeonNight()
-        case .pastel: PastelHaze()
+        case .aero: AeroSky(glow: glow)
+        case .neon: NeonNight(glow: glow)
+        case .pastel: PastelHaze(glow: glow)
         case .mono: Color(rgbInt: 0xF4F3EF)
-        case .aurora: AuroraSky()
+        case .aurora: AuroraSky(glow: glow)
         case .paper: RuledPaper()
         case .chalk: Chalkboard()
         }
@@ -257,6 +324,7 @@ private func bloom(_ color: Color, _ opacity: Double, _ size: CGFloat) -> some V
 /// The aero sky: navy gradient with soft blooms of teal, violet and pink light that drift
 /// slowly, under a faint HUD grid — a quietly futuristic, living backdrop.
 struct AeroSky: View {
+    var glow: Color?
     @State private var drift = false
     var body: some View {
         ZStack {
@@ -264,7 +332,7 @@ struct AeroSky: View {
             GeometryReader { geo in
                 let w = geo.size.width, h = geo.size.height
                 ZStack {
-                    bloom(Color(rgbInt: 0x57C3BB), 0.34, w * 1.2).position(x: w * 0.15, y: drift ? h * 0.05 : -h * 0.03)
+                    bloom(glow ?? Color(rgbInt: 0x57C3BB), 0.34, w * 1.2).position(x: w * 0.15, y: drift ? h * 0.05 : -h * 0.03)
                     bloom(Color(rgbInt: 0xB173DF), 0.26, w * 1.0).position(x: drift ? w * 0.9 : w, y: h * 0.35)
                     bloom(Color(rgbInt: 0xEC5A89), 0.22, w * 0.9).position(x: drift ? w * 0.06 : 0, y: drift ? h * 0.94 : h)
                 }
@@ -280,6 +348,7 @@ struct AeroSky: View {
 
 /// Midnight Neon: near-black with a cyan and a magenta glow, under a fine dot grid.
 struct NeonNight: View {
+    var glow: Color?
     @State private var drift = false
     var body: some View {
         ZStack {
@@ -287,7 +356,7 @@ struct NeonNight: View {
             GeometryReader { geo in
                 let w = geo.size.width, h = geo.size.height
                 ZStack {
-                    bloom(Color(rgbInt: 0x00E5FF), 0.22, w * 1.1).position(x: drift ? w * 0.1 : w * 0.2, y: h * 0.08)
+                    bloom(glow ?? Color(rgbInt: 0x00E5FF), 0.22, w * 1.1).position(x: drift ? w * 0.1 : w * 0.2, y: h * 0.08)
                     bloom(Color(rgbInt: 0xFF2BD6), 0.2, w * 1.1).position(x: drift ? w * 0.95 : w * 0.85, y: h * 0.9)
                 }
                 .animation(.easeInOut(duration: 10).repeatForever(autoreverses: true), value: drift)
@@ -310,6 +379,7 @@ struct NeonNight: View {
 
 /// Soft Pastel: warm cream with peach, lilac and mint haze.
 struct PastelHaze: View {
+    var glow: Color?
     @State private var drift = false
     var body: some View {
         ZStack {
@@ -317,7 +387,7 @@ struct PastelHaze: View {
             GeometryReader { geo in
                 let w = geo.size.width, h = geo.size.height
                 ZStack {
-                    bloom(Color(rgbInt: 0xFFC9B5), 0.75, w * 1.2).position(x: drift ? w * 0.1 : w * 0.2, y: h * 0.06)
+                    bloom(glow ?? Color(rgbInt: 0xFFC9B5), glow == nil ? 0.75 : 0.4, w * 1.2).position(x: drift ? w * 0.1 : w * 0.2, y: h * 0.06)
                     bloom(Color(rgbInt: 0xD9C8FF), 0.6, w * 1.1).position(x: drift ? w * 0.95 : w * 0.85, y: h * 0.45)
                     bloom(Color(rgbInt: 0xC5EFD9), 0.6, w * 1.0).position(x: drift ? w * 0.05 : w * 0.15, y: h * 0.92)
                 }
@@ -331,6 +401,7 @@ struct PastelHaze: View {
 /// Liquid Aurora: a deep night sky with ribbons of green, violet and pink light flowing
 /// slowly across it, and a few stars.
 struct AuroraSky: View {
+    var glow: Color?
     @State private var flow = false
     var body: some View {
         ZStack {
@@ -338,11 +409,11 @@ struct AuroraSky: View {
             GeometryReader { geo in
                 let w = geo.size.width, h = geo.size.height
                 ZStack {
-                    ribbon(0x3CF2B0, w * 1.5, h * 0.22).rotationEffect(.degrees(flow ? -18 : -8))
+                    ribbon(glow ?? Color(rgbInt: 0x3CF2B0), w * 1.5, h * 0.22).rotationEffect(.degrees(flow ? -18 : -8))
                         .position(x: w * 0.5, y: flow ? h * 0.2 : h * 0.15)
-                    ribbon(0x8B5CF6, w * 1.4, h * 0.2).rotationEffect(.degrees(flow ? 14 : 24))
+                    ribbon(Color(rgbInt: 0x8B5CF6), w * 1.4, h * 0.2).rotationEffect(.degrees(flow ? 14 : 24))
                         .position(x: flow ? w * 0.6 : w * 0.4, y: h * 0.42)
-                    ribbon(0xFF6FD8, w * 1.2, h * 0.16).rotationEffect(.degrees(flow ? -10 : 4))
+                    ribbon(Color(rgbInt: 0xFF6FD8), w * 1.2, h * 0.16).rotationEffect(.degrees(flow ? -10 : 4))
                         .position(x: w * 0.5, y: flow ? h * 0.78 : h * 0.84)
                 }
                 .blur(radius: 50)
@@ -361,8 +432,8 @@ struct AuroraSky: View {
         .onAppear { flow = true }
     }
 
-    private func ribbon(_ rgb: Int, _ w: CGFloat, _ h: CGFloat) -> some View {
-        Capsule().fill(LinearGradient(colors: [.clear, Color(rgbInt: rgb).opacity(0.55), Color(rgbInt: rgb).opacity(0.3), .clear],
+    private func ribbon(_ color: Color, _ w: CGFloat, _ h: CGFloat) -> some View {
+        Capsule().fill(LinearGradient(colors: [.clear, color.opacity(0.55), color.opacity(0.3), .clear],
                                       startPoint: .leading, endPoint: .trailing))
             .frame(width: w, height: h)
     }
@@ -493,7 +564,7 @@ struct GlassBackground<S: Shape>: View {
     @AppStorage("glassShadow") private var shadowDepth = 0.6
 
     var body: some View {
-        let p = Palette.make(style, ink: Theme.paperInk)
+        let p = Theme.palette(for: style)
         switch style {
         case .aero, .aurora:
             shape

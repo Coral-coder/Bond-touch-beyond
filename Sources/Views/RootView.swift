@@ -9,6 +9,7 @@ struct RootView: View {
     /// rebuilds the whole tree.
     @AppStorage("appStyle") private var appStyle = AppStyle.aero.rawValue
     @AppStorage("paperInk") private var paperInk = PaperInk.aqua.rawValue
+    @AppStorage(ThemeTints.key) private var themeTints = ""
 
     var body: some View {
         ZStack {
@@ -16,7 +17,7 @@ struct RootView: View {
             content
         }
         .modifier(ThemeFonts())
-        .id(appStyle + paperInk)
+        .id(appStyle + paperInk + themeTints)
         .overlay(alignment: .top) { RecoveryBanner().padding(.top, 60) }
         .overlay(alignment: .top) { BraceletPromptBanner().padding(.top, 60) }
         // A heartbeat arriving (or replayed): the live EKG, over whatever screen is open.

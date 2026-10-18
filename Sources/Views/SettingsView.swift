@@ -599,6 +599,7 @@ private struct ThemePickerCard: View {
     /// Folded away until tapped, so it doesn't take over Settings. Stays open across the
     /// redraw a theme change causes.
     @AppStorage("themePickerOpen") private var open = false
+    @AppStorage(ThemeTints.key) private var themeTints = ""
 
     private let columns = [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)]
 
@@ -631,6 +632,37 @@ private struct ThemePickerCard: View {
                         .accessibilityLabel("\(style.title) theme")
                         .accessibilityHint(style.blurb)
                         .accessibilityAddTraits(appStyle == style.rawValue ? .isSelected : [])
+                    }
+                }
+                if let style = AppStyle(rawValue: appStyle), style != .paper {
+                    Text("Colour").font(.caption).foregroundStyle(Theme.subtitle)
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 12) {
+                            ForEach(style.tints.indices, id: \.self) { i in
+                                let tint = style.tints[i]
+                                let picked = (ThemeTints.tint(for: style, in: themeTints) ?? style.tints[0].rgb) == tint.rgb
+                                Button {
+                                    UISelectionFeedbackGenerator().selectionChanged()
+                                    var d = ThemeTints.parse(themeTints)
+                                    d[style.rawValue] = tint.rgb == style.tints[0].rgb ? nil : tint.rgb
+                                    themeTints = ThemeTints.encode(d)
+                                } label: {
+                                    VStack(spacing: 4) {
+                                        Circle().fill(Color(rgbInt: tint.rgb))
+                                            .frame(width: 34, height: 34)
+                                            .overlay(Circle().stroke(Theme.ink.opacity(0.2), lineWidth: 1))
+                                            .padding(3)
+                                            .overlay(Circle().stroke(picked ? Theme.title : .clear, lineWidth: 2))
+                                        Text(tint.name).font(.caption2)
+                                            .foregroundStyle(picked ? Theme.title : Theme.subtitle)
+                                    }
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityLabel("\(tint.name)")
+                                .accessibilityAddTraits(picked ? .isSelected : [])
+                            }
+                        }
+                        .padding(.vertical, 2)
                     }
                 }
                 if appStyle == AppStyle.paper.rawValue {
@@ -666,13 +698,15 @@ private struct ThemePickerCard: View {
 
     private var currentTitle: String {
         let style = AppStyle(rawValue: appStyle) ?? .aero
-        return style == .paper ? "\(style.title) · \((PaperInk(rawValue: paperInk) ?? .aqua).title)" : style.title
+        if style == .paper { return "\(style.title) · \((PaperInk(rawValue: paperInk) ?? .aqua).title)" }
+        let rgb = ThemeTints.tint(for: style, in: themeTints) ?? style.tints[0].rgb
+        return "\(style.title) · \(style.tints.first { $0.rgb == rgb }?.name ?? "")"
     }
 
     /// A small window onto the theme: its backdrop, one of its panels with a touch drawn on
     /// it, and its name in its own type.
     private func tile(_ style: AppStyle) -> some View {
-        let p = Palette.make(style, ink: PaperInk(rawValue: paperInk) ?? .aqua)
+        let p = Theme.palette(for: style)
         let selected = appStyle == style.rawValue
         let shape = RoundedRectangle(cornerRadius: 16, style: .continuous)
         return VStack(alignment: .leading, spacing: 6) {
