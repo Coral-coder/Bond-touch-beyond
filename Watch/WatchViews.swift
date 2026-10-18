@@ -91,7 +91,6 @@ final class WatchRecorder: ObservableObject {
 struct WatchTouchBarView: View {
     @EnvironmentObject var link: PhoneLink
     @StateObject private var recorder = WatchRecorder()
-    @State private var picking = false
 
     private var color: Color { Color(rgb: link.selected?.colorRGB ?? 0xFF2E74) }
     private var expanded: Bool { recorder.recording || recorder.position != nil }
@@ -102,14 +101,7 @@ struct WatchTouchBarView: View {
             let pad = min(full.width, full.height) * 0.12
             ZStack {
                 VStack(spacing: 6) {
-                    Button { picking = true } label: {
-                        HStack(spacing: 4) {
-                            Circle().fill(link.selected?.online == true ? Color(rgb: 0xAEE63C) : .gray).frame(width: 6, height: 6)
-                            Text(link.selected?.name ?? "Partner").font(.system(.footnote, design: .rounded).weight(.heavy))
-                            Image(systemName: "chevron.down").font(.caption2)
-                        }
-                    }
-                    .buttonStyle(.plain)
+                    WatchPartnerHeader()
                     Spacer()
                     Text(link.lastSent.map { "Sent " + $0.formatted(date: .omitted, time: .shortened) } ?? "Touch to start")
                         .font(.caption2).foregroundStyle(.secondary)
@@ -172,7 +164,6 @@ struct WatchTouchBarView: View {
             }
         }
         .onChange(of: link.windowSeconds) { recorder.windowSeconds = $0 }
-        .sheet(isPresented: $picking) { WatchPartnerPicker() }
     }
 
     /// Screen y for bar position f (0 bottom … 1 top).
@@ -187,7 +178,8 @@ struct WatchMeaningsView: View {
     var body: some View {
         let list = link.selected.flatMap { link.meanings[$0.id] } ?? []
         List {
-            Section("Send to \(link.selected?.name ?? "partner")") {
+            WatchPartnerHeader().listRowBackground(Color.clear)
+            Section("Touch Language") {
                 if list.isEmpty {
                     Text("No saved touches yet").foregroundStyle(.secondary)
                 }
@@ -216,7 +208,8 @@ struct WatchHistoryView: View {
     var body: some View {
         let list = (link.selected.flatMap { link.history[$0.id] } ?? []).reversed()
         List {
-            Section("With \(link.selected?.name ?? "partner")") {
+            WatchPartnerHeader().listRowBackground(Color.clear)
+            Section("Recent touches") {
                 if list.isEmpty { Text("No touches yet").foregroundStyle(.secondary) }
                 ForEach(Array(list)) { t in
                     Button { WatchHaptics.play(t) } label: {
@@ -237,6 +230,29 @@ struct WatchHistoryView: View {
                 }
             }
         }
+    }
+}
+
+/// The selected partner, at the top of every watch screen: tap to switch partners.
+struct WatchPartnerHeader: View {
+    @EnvironmentObject var link: PhoneLink
+    @State private var picking = false
+
+    var body: some View {
+        Button { picking = true } label: {
+            HStack(spacing: 5) {
+                Circle().fill(link.selected?.online == true ? Color(rgb: 0xAEE63C) : .gray).frame(width: 6, height: 6)
+                Circle().fill(Color(rgb: link.selected?.colorRGB ?? 0xFF2E74)).frame(width: 10, height: 10)
+                Text(link.selected?.name ?? "Partner").font(.system(.footnote, design: .rounded).weight(.heavy))
+                    .lineLimit(1)
+                if link.partners.count > 1 { Image(systemName: "chevron.down").font(.caption2) }
+            }
+            .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.plain)
+        .disabled(link.partners.count < 2)
+        .accessibilityLabel("Partner: \(link.selected?.name ?? "none"). Tap to switch.")
+        .sheet(isPresented: $picking) { WatchPartnerPicker() }
     }
 }
 
