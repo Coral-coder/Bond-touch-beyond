@@ -22,18 +22,19 @@ def env(start, attack, decay, length=None):
     return e
 
 
-# --- Kiss: a little lip "m" hum, then the smack (a fast upward-gliding pop + a crisp click).
+# --- Kiss: a soft, rounded "mwah" — a warm lip hum, a gentle pop that glides up only a
+# little, and a muffled breath instead of a crisp click (the crisp version sounded sharp).
 k0 = 0.0
-hum = np.sin(2 * np.pi * 210 * t) * env(k0, 0.01, 0.035, 0.07) * 0.18
-glide_t = np.clip(t - (k0 + 0.055), 0, None)
-glide_f = 520 + 2400 * np.minimum(glide_t / 0.035, 1)          # 520 → 2920 Hz in 35 ms
-pop = np.sin(2 * np.pi * np.cumsum(glide_f) / RATE) * env(k0 + 0.055, 0.002, 0.022, 0.09) * 0.55
-noise = rng.standard_normal(len(t))
-# crude band-pass: difference of two smoothed noises (keeps the 1.5–5 kHz "tsk" of lips)
 def smooth(x, n):
     return np.convolve(x, np.ones(n) / n, mode="same")
-click = (smooth(noise, 4) - smooth(noise, 18)) * env(k0 + 0.058, 0.001, 0.012, 0.05) * 0.9
-out += hum + pop + click
+hum = (np.sin(2 * np.pi * 190 * t) + 0.3 * np.sin(2 * np.pi * 380 * t)) * env(k0, 0.015, 0.045, 0.09) * 0.16
+glide_t = np.clip(t - (k0 + 0.06), 0, None)
+glide_f = 480 + 900 * np.minimum(glide_t / 0.05, 1)               # 480 → 1380 Hz over 50 ms
+pop = np.sin(2 * np.pi * np.cumsum(glide_f) / RATE) * env(k0 + 0.06, 0.008, 0.03, 0.11) * 0.42
+noise = rng.standard_normal(len(t))
+# a soft breath: noise low-passed to below ~2 kHz, with a gentle swell
+breath = (smooth(noise, 14) - smooth(noise, 60)) * env(k0 + 0.062, 0.006, 0.02, 0.07) * 0.5
+out += hum + pop + breath
 
 # --- Soft futuristic bell: pure sine partials (no FM — FM's dense overtones sounded like a
 # harsh saw wave), tuned like a glass bell / vibraphone: a warm fundamental, a gentle octave,
