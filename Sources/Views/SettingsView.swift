@@ -596,13 +596,31 @@ struct MyPhotoPicker: View {
 private struct ThemePickerCard: View {
     @AppStorage("appStyle") private var appStyle = AppStyle.aero.rawValue
     @AppStorage("paperInk") private var paperInk = PaperInk.aqua.rawValue
+    /// Folded away until tapped, so it doesn't take over Settings. Stays open across the
+    /// redraw a theme change causes.
+    @AppStorage("themePickerOpen") private var open = false
 
     private let columns = [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)]
 
     var body: some View {
         GlassCard(padding: 20) {
             VStack(alignment: .leading, spacing: 14) {
-                Text("Theme").foregroundStyle(Theme.title)
+                Button {
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { open.toggle() }
+                } label: {
+                    HStack(spacing: 10) {
+                        Text("Theme").foregroundStyle(Theme.title)
+                        Spacer()
+                        Text(currentTitle).font(.subheadline).foregroundStyle(Theme.subtitle)
+                        Image(systemName: "chevron.right").font(.footnote.weight(.semibold)).foregroundStyle(Theme.subtitle)
+                            .rotationEffect(.degrees(open ? 90 : 0))
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Theme, \(currentTitle)")
+                .accessibilityHint(open ? "Hides the themes" : "Shows the themes")
+                if open {
                 LazyVGrid(columns: columns, spacing: 12) {
                     ForEach(AppStyle.allCases) { style in
                         Button {
@@ -641,8 +659,14 @@ private struct ThemePickerCard: View {
                         .padding(.vertical, 2)
                     }
                 }
+                }
             }
         }
+    }
+
+    private var currentTitle: String {
+        let style = AppStyle(rawValue: appStyle) ?? .aero
+        return style == .paper ? "\(style.title) · \((PaperInk(rawValue: paperInk) ?? .aqua).title)" : style.title
     }
 
     /// A small window onto the theme: its backdrop, one of its panels with a touch drawn on

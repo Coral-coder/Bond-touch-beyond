@@ -522,24 +522,23 @@ struct HomeView: View {
                     // A heartbeat is listed as its EKG, with the BPM.
                     Label("\(bpm) BPM", systemImage: "heart.fill")
                         .font(Theme.font(12, .heavy)).foregroundStyle(Theme.title)
-                        .padding(.horizontal, 9).padding(.vertical, 4)
-                        .background(Capsule().fill(.black.opacity(0.45)))
-                        .padding(10)
+                        .shadow(color: Theme.bgBottom, radius: 3)
+                        .shadow(color: Theme.bgBottom.opacity(0.8), radius: 6)
+                        .padding(12)
                         .accessibilityLabel("Heartbeat, \(bpm) beats per minute")
                 }
             }
             .overlay {
-                // A touch that is a saved meaning wears its name right across it.
+                // A touch that is a saved meaning wears its name right across it — just the
+                // words, lifted off the drawing by a soft shadow (no pill around them).
                 if touch.heartbeatBPM == nil, let meaning {
                     HStack(spacing: 6) {
                         if !meaning.emoji.isEmpty { Text(meaning.emoji).font(.system(size: 17)) }
                         Text(meaning.label).font(Theme.font(16, .heavy)).lineLimit(1).minimumScaleFactor(0.7)
                     }
                     .foregroundStyle(Theme.title)
-                    .padding(.horizontal, 14).padding(.vertical, 7)
-                    .background(Capsule().fill(.black.opacity(0.5)))
-                    .overlay(Capsule().stroke(Color(rgbInt: touch.colorRGB).opacity(0.9), lineWidth: 1.5))
-                    .shadow(color: Color(rgbInt: touch.colorRGB).opacity(0.6), radius: 8)
+                    .shadow(color: Theme.bgBottom, radius: 2)
+                    .shadow(color: Theme.bgBottom.opacity(0.9), radius: 7)
                     .padding(.trailing, 120)   // centred on the part of the card not under the details
                     .accessibilityLabel("Meaning: \(meaning.label)")
                 }
