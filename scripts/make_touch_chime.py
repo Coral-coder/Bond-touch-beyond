@@ -5,7 +5,8 @@ samples. Three variants:
   marimba — two rounded wooden-bar notes (E5, B5), very short and soft
   glow    — a soft three-note major chord swelling in and out, like a warm pad
   mallet  — between bell and marimba: soft mallet notes (E5, B5) with a smooth reverb tail
-  glow2   — glow, with a 35 ms breath after the kiss and a touch of reverb on the kiss
+  glow2   — glow, with a 35 ms breath after the kiss and a touch of reverb on the kiss;
+            glow2:<chord> picks another chord from CHORDS (e.g. glow2:maj7)
   chamber — nearly pure sine chimes (E5, B5) and a soft kiss, in a small room, with an echo
 Writes 16-bit mono WAVs: make_touch_chime.py <out.wav> [variant] [--kiss-only]"""
 import sys
@@ -124,6 +125,19 @@ def glow(t, start, freqs, amp, length=1.1):
     return tone * swell * amp
 
 
+# Chords for the glow chime (Hz). "roll" ones strum the notes in one after another.
+CHORDS = {
+    "major":   ([523.3, 659.3, 784.0], 0),            # C major (the original glow)
+    "maj7":    ([523.3, 659.3, 784.0, 987.8], 0),     # C major 7 — dreamy, soft
+    "sus2":    ([440.0, 493.9, 659.3], 0),            # A sus2 — open, floating, no major/minor
+    "min9":    ([293.7, 349.2, 440.0, 523.3, 659.3], 0),  # D minor 9 — warm, a little wistful
+    "fifths":  ([392.0, 587.3, 880.0], 0),            # G–D–A stacked fifths — airy, futuristic
+    "add9":    ([659.3, 830.6, 987.8, 1480.0], 0),    # E add9 — bright, sparkly
+    "maj7roll": ([523.3, 659.3, 784.0, 987.8], 0.06), # C major 7, strummed up (60 ms apart)
+    "sus2roll": ([440.0, 493.9, 659.3, 987.8], 0.07), # A sus2, strummed up — like a harp
+}
+
+
 def kiss_alone():
     """The kiss on its own (the kiss button's sound) — always the same noise."""
     global rng
@@ -135,14 +149,17 @@ def kiss_alone():
 def make(variant):
     t = timeline(1.5)
     out = kiss(t)
-    if variant == "glow2":
+    if variant.startswith("glow2"):
         # the glow chord, 35 ms later than before (a breath between kiss and chime), and the
         # kiss with a teeny bit of short reverb
         t = timeline(1.6)
         k = np.zeros_like(t)
         k[: len(kiss_alone())] = kiss_alone()
         k = reverb(k, seconds=0.35, wet=0.14)
-        out = lowpass(k + glow(t, 0.175, [523.3, 659.3, 784.0], 0.16), 3)
+        freqs, roll = CHORDS[variant.split(":")[1] if ":" in variant else "major"]
+        chord = sum(glow(t, 0.175 + i * roll, [f], 0.16 * 0.8 ** i, 1.1 - i * roll) for i, f in enumerate(freqs))
+        chord *= 0.16 * 1.4 / max(np.max(np.abs(chord)), 1e-9) * (1 + 0.15 * (len(freqs) - 3))
+        out = lowpass(k + chord, 3)
         out *= np.minimum(1, (1.6 - t) / 0.12)
         return out
     if variant == "chamber":
