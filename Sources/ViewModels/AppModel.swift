@@ -870,7 +870,7 @@ final class AppModel: ObservableObject {
     /// ways it arrives (push, iCloud fetch, original backend) — from any partner, in their
     /// slot, up to 15 minutes old (as the original app), and not during Do Not Disturb.
     private var deliveredTouchIDs: Set<UUID> = []
-    func deliver(_ touch: TouchMessage) {
+    func deliver(_ touch: TouchMessage, notify: Bool = true) {
         // A heartbeat is live: it plays only within 2 minutes (it's still kept in history).
         let maxAge: TimeInterval = touch.heartbeatBPM == nil ? 15 * 60 : 120
         guard deliveredTouchIDs.insert(touch.id).inserted else { return }
@@ -884,6 +884,9 @@ final class AppModel: ObservableObject {
         }
         feel(touch)
         watch.forward(touch)
+        // A touch that didn't come with its own push (picked up from iCloud, or from an
+        // original-app partner) still gets the rich notification on the phone and the watch.
+        if notify { Task { await notifyTouch(touch) } }
     }
 
     /// Unbonds: deletes the iCloud bond (owner only) or cancels the original-app bond, and
@@ -911,7 +914,7 @@ final class AppModel: ObservableObject {
         if let touch = touchFromPush(userInfo) {
             NetLog.shared.log(.recv, "Touch in push ← \(partners.first { $0.id == touch.bondID }?.displayName ?? "partner")")
             recordTouches([touch])
-            deliver(touch)
+            deliver(touch, notify: false)    // the push itself is the notification
         }
         await refreshAll()
         await bracelet.waitUntilIdle(timeout: 8)

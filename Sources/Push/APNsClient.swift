@@ -16,10 +16,9 @@ actor APNsClient {
     private let host = "https://api.push.apple.com"
     private var cachedToken: (jwt: String, madeAt: Date)?
 
-    /// Sends an alert push to one device token. Returns true on APNs 200. `silent` (used when
-    /// the partner's bracelet is connected and will play the touch itself): no sound or
-    /// vibration, and the notification goes quietly into Notification Center without lighting
-    /// the screen — still high priority with content-available, so it wakes the app at once.
+    /// Sends an alert push to one device token. Returns true on APNs 200. Always a visible
+    /// banner (phone and watch). `silent` (the partner's bracelet is connected and plays the
+    /// touch itself): no sound, so the phone doesn't buzz on top of the bracelet.
     @discardableResult
     func send(toDeviceToken deviceToken: String, title: String, body: String, silent: Bool = false,
               topic: String = AppConfig.bundleID, collapseID: String? = nil,
@@ -45,7 +44,8 @@ actor APNsClient {
             // Lets the receiving phone's notification extension decrypt the touch and show
             // it richly (its picture, its meaning; long press to replay it).
             "mutable-content": 1,
-            "interruption-level": silent ? "passive" : "time-sensitive",
+            // Never "passive": that files it quietly with no banner and no watch tap.
+            "interruption-level": silent ? "active" : "time-sensitive",
         ]
         if !silent { aps["sound"] = "default" }
         // App data next to "aps" (e.g. the sealed touch) — under the 4 KB push limit.
