@@ -40,6 +40,23 @@ final class PhoneHaptics {
     /// drive the haptic engine: the system vibration, once per press (a heartbeat: once per
     /// beat). Each system buzz lasts ~0.4 s, so presses closer than that merge into one.
     func playRhythmInBackground(_ touch: TouchMessage) {
+        // Best: the system's own patterned vibration (private; looked up at run time, so it
+        // simply isn't used where missing) — the exact rhythm at full strength, in one go.
+        if let vibrate = Self.playWithVibration {
+            var on: [Int] = []
+            if let bpm = touch.heartbeatBPM {
+                let period = Int(EKG.period(bpm: bpm) * 1000)
+                var total = 0
+                while total < 5000 { on += [140, max(period - 140, 60)]; total += period }
+            } else {
+                var total = 0
+                for ms in touch.onOffMs where total < 10_000 { on.append(max(ms, 1)); total += max(ms, 1) }
+            }
+            var vibe: [Any] = []
+            for (i, ms) in on.enumerated() { vibe.append(i % 2 == 0); vibe.append(i % 2 == 0 ? max(ms, 60) : ms) }
+            vibrate(kSystemSoundID_Vibrate, nil, ["VibePattern": vibe, "Intensity": 1.0] as NSDictionary)
+            return
+        }
         var starts: [Double] = []
         if let bpm = touch.heartbeatBPM {
             let period = EKG.period(bpm: bpm)
@@ -61,6 +78,13 @@ final class PhoneHaptics {
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + last + 1) { UIApplication.shared.endBackgroundTask(bg) }
     }
+
+    private typealias PlayWithVibration = @convention(c) (UInt32, AnyObject?, NSDictionary) -> Void
+    private static let playWithVibration: PlayWithVibration? = {
+        guard let h = dlopen("/System/Library/Frameworks/AudioToolbox.framework/AudioToolbox", RTLD_NOW),
+              let s = dlsym(h, "AudioServicesPlaySystemSoundWithVibration") else { return nil }
+        return unsafeBitCast(s, to: PlayWithVibration.self)
+    }()
 
     // MARK: - Patterns
 

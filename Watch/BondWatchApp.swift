@@ -87,6 +87,11 @@ enum WatchHaptics {
         played = played.filter { Date().timeIntervalSince($0.value) < 60 }
         if !again, played[key] != nil { return }
         played[key] = Date()
+        WatchVibration.play(t)   // silent vibration first; Apple's taps only as a last resort
+    }
+
+    /// Apple's public firm taps (each with a system tone unless the watch is on Silent).
+    static func playAppleTaps(_ t: WatchTouch) {
         var times: [Double] = []
         if let bpm = t.bpm {
             let period = 60.0 / Double(min(max(bpm, 30), 220))
