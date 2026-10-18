@@ -54,6 +54,8 @@ targets:
         link: true
         embed: false
       - target: BondTouchBeyondWatch
+      - target: BondTouchBeyondNotificationService
+      - target: BondTouchBeyondNotificationContent
       - package: NordicDFU
     sources:
       - path: Sources
@@ -114,6 +116,8 @@ targets:
         LSSupportsOpeningDocumentsInPlace: false
         # The App Group shared with the home-screen widget (Sources/Shared/WidgetShared.swift).
         BTAppGroup: group.$(APP_BUNDLE_ID)
+        # The Keychain group shared with the notification extension (Sources/Shared/SharedBonds.swift).
+        BTKeychainGroup: $(AppIdentifierPrefix)$(APP_BUNDLE_ID).shared
     entitlements:
       path: Sources/App/BondTouchBeyond.entitlements
       properties:
@@ -128,6 +132,11 @@ targets:
         aps-environment: production
         com.apple.developer.healthkit: true
         com.apple.developer.healthkit.access: []
+        # The app's own group first (where its Keychain items have always lived), then the
+        # group shared with the notification extension — no developer-portal setup needed.
+        keychain-access-groups:
+          - $(AppIdentifierPrefix)$(APP_BUNDLE_ID)
+          - $(AppIdentifierPrefix)$(APP_BUNDLE_ID).shared
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: $(APP_BUNDLE_ID)
@@ -160,6 +169,17 @@ targets:
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         WKApplication: true
         WKCompanionAppBundleIdentifier: $(APP_BUNDLE_ID)
+        # Stand-in mode keeps the watch app awake as a workout session, so touches play on
+        # the wrist the moment they arrive.
+        WKBackgroundModes:
+          - workout-processing
+        NSHealthShareUsageDescription: Stand-in mode keeps Bond Touch Beyond awake on your watch so your partner's touches play on your wrist as they arrive.
+        NSHealthUpdateUsageDescription: Stand-in mode runs as a quiet session on your watch so your partner's touches play on your wrist as they arrive. Nothing is recorded.
+    entitlements:
+      path: Watch/BondTouchBeyondWatch.entitlements
+      properties:
+        com.apple.developer.healthkit: true
+        com.apple.developer.healthkit.access: []
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: $(APP_BUNDLE_ID).watchkitapp
@@ -171,3 +191,69 @@ targets:
   # group.<bundle id> created in the Apple developer portal and enabled on the app and
   # <bundle id>.widget; then restore the target from docs/WIDGET_TARGET.yml, the widget
   # dependency above, and com.apple.security.application-groups in the app's entitlements.
+
+  # Decrypts a partner's touch push on this phone and makes it a rich notification: the
+  # touch's picture, its meaning, and the TOUCH category (long-press replay, watch view).
+  BondTouchBeyondNotificationService:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: NotificationService
+      - path: Sources/Shared/SharedBonds.swift
+      - path: Sources/Shared/TouchNotification.swift
+      - path: Sources/Cloud/BondCrypto.swift
+      - path: Sources/Models/TouchMessage.swift
+      - path: Sources/Models/TouchPattern.swift
+      - path: Sources/Models/Heartbeat.swift
+    info:
+      path: NotificationService/Info.plist
+      properties:
+        CFBundleDisplayName: Bond Touch Beyond
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        BTKeychainGroup: $(AppIdentifierPrefix)$(APP_BUNDLE_ID).shared
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.usernotifications.service
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).NotificationService
+    entitlements:
+      path: NotificationService/NotificationService.entitlements
+      properties:
+        keychain-access-groups:
+          - $(AppIdentifierPrefix)$(APP_BUNDLE_ID).shared
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(APP_BUNDLE_ID).notification-service
+        SKIP_INSTALL: YES
+
+  # The long-press view of a touch notification: the touch replays, the phone buzzes its rhythm.
+  BondTouchBeyondNotificationContent:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: NotificationContent
+      - path: Sources/Shared/TouchNotification.swift
+      - path: Sources/Models/TouchMessage.swift
+      - path: Sources/Models/TouchPattern.swift
+      - path: Sources/Models/Heartbeat.swift
+      - path: Sources/Views/EKGView.swift
+      - path: Sources/Views/Color+RGB.swift
+      - path: Sources/Design/Theme.swift
+      - path: Sources/Design/TouchViz.swift
+    info:
+      path: NotificationContent/Info.plist
+      properties:
+        CFBundleDisplayName: Bond Touch Beyond
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.usernotifications.content-extension
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).NotificationViewController
+          NSExtensionAttributes:
+            UNNotificationExtensionCategory: TOUCH
+            UNNotificationExtensionInitialContentSizeRatio: 0.6
+            UNNotificationExtensionDefaultContentHidden: false
+            UNNotificationExtensionUserInteractionEnabled: false
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(APP_BUNDLE_ID).notification-content
+        SKIP_INSTALL: YES

@@ -42,6 +42,9 @@ actor APNsClient {
         var aps: [String: Any] = [
             "alert": ["title": title, "body": body],
             "content-available": 1,
+            // Lets the receiving phone's notification extension decrypt the touch and show
+            // it richly (its picture, its meaning; long press to replay it).
+            "mutable-content": 1,
             "interruption-level": silent ? "passive" : "time-sensitive",
         ]
         if !silent { aps["sound"] = "default" }

@@ -45,6 +45,13 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
     func application(_ application: UIApplication,
                      didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         UNUserNotificationCenter.current().delegate = self
+        // A touch notification's buttons (also on the Apple Watch): answer without opening the app.
+        let touchBack = UNNotificationAction(identifier: TouchNotification.touchBackAction, title: "❤️ Touch back", options: [])
+        let heartbeat = UNNotificationAction(identifier: TouchNotification.heartbeatAction, title: "💓 Send my heartbeat", options: [])
+        UNUserNotificationCenter.current().setNotificationCategories([
+            UNNotificationCategory(identifier: TouchNotification.category, actions: [touchBack, heartbeat],
+                                   intentIdentifiers: [], options: [])
+        ])
         // Ask to show alert pushes (a partner's touch wakes the phone reliably as an alert);
         // register for a device token either way so pushes reach the app.
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in
@@ -88,5 +95,16 @@ extension AppDelegate: UNUserNotificationCenterDelegate {
         let info = notification.request.content.userInfo
         await MainActor.run { Task { await self.model.handleRemoteNotification(info) } }
         return [.banner, .list]
+    }
+
+    /// A button on a touch notification (phone or watch): touch back, or send my heartbeat,
+    /// to the partner the touch came from.
+    nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter,
+                                            didReceive response: UNNotificationResponse) async {
+        let info = response.notification.request.content.userInfo
+        let action = response.actionIdentifier
+        await MainActor.run {
+            Task { await self.model.answerNotification(action: action, userInfo: info) }
+        }
     }
 }

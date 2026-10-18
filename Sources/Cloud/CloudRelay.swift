@@ -504,6 +504,9 @@ struct PresenceInfo: Codable, Equatable {
     var bracelet: Bool? = nil
     var braceletBattery: Int? = nil
     var braceletLastConnected: Date? = nil
+    /// The Apple Watch is standing in for the bracelet (it plays touches itself), so the
+    /// partner's pushes can stay quiet too.
+    var watchStandIn: Bool? = nil
     /// When this snapshot was written — the phone's last check-in.
     var sentAt = Date()
 }

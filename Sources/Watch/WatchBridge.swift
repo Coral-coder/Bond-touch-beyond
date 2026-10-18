@@ -102,6 +102,10 @@ final class WatchBridge: NSObject, WCSessionDelegate {
                     await model.sendTouch(pattern: pattern, generation: gen,
                                           colorRGB: start, endColorRGB: end, toBondID: bond)
                 }
+            case "standIn":
+                model.watchStandIn = (message["on"] as? Bool) ?? false
+                NetLog.shared.log(.recv, model.watchStandIn ? "Apple Watch is standing in for the bracelet"
+                                                            : "Apple Watch stand-in off")
             case "select":
                 if let bond = message["bond"] as? String, model.partners.contains(where: { $0.id == bond }) {
                     model.selectedPartnerID = bond

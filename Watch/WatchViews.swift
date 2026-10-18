@@ -26,6 +26,7 @@ struct WatchRootView: View {
                 WatchTouchBarView()
                 WatchMeaningsView()
                 WatchHistoryView()
+                WatchStandInView()
             }
             .tabViewStyle(.page)
         }

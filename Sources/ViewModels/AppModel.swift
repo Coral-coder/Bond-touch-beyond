@@ -153,6 +153,10 @@ final class AppModel: ObservableObject {
 
     /// A heartbeat on screen now (the live EKG card), and its monitor beep.
     @Published var heartbeatShow: HeartbeatShow?
+    /// The Apple Watch's Stand-in mode is on: it plays every touch itself, like the bracelet.
+    @Published var watchStandIn = false {
+        didSet { if watchStandIn != oldValue { Task { await publishPresence(force: true) } } }
+    }
     /// Counts double taps on the user's bracelet (Private Space unlocks on one).
     @Published var braceletDoubleTaps = 0
     private let heartbeatSound = HeartbeatSound()
@@ -278,6 +282,10 @@ final class AppModel: ObservableObject {
                 Task { @MainActor in self?.checkBraceletBattery(pct, charging: charging == true) }
             }
             .store(in: &statusWatch)
+        // The notification extension decrypts partners' touch pushes with the bond codes.
+        store.$cloudBondCodes
+            .sink { codes in SharedBonds.save(Array(codes.keys)) }
+            .store(in: &statusWatch)
         // The bracelet shows the user's own colour (sent at every pairing).
         bracelet.setUserColor(store.profile.colorRGB)
         watch.start(self)
@@ -340,6 +348,27 @@ final class AppModel: ObservableObject {
         guard sharingLocation else { return }
         await legacyPushLocation(fix.coordinate)
         await publishPresence(force: false)   // throttled — fixes can arrive every few seconds
+    }
+
+    // MARK: - Notification buttons
+
+    /// "Touch back" or "Send my heartbeat" on a touch notification, to the partner it came from.
+    func answerNotification(action: String, userInfo: [AnyHashable: Any]) async {
+        guard action == TouchNotification.touchBackAction || action == TouchNotification.heartbeatAction else { return }
+        let bg = UIApplication.shared.beginBackgroundTask(withName: "notification-reply")
+        defer { UIApplication.shared.endBackgroundTask(bg) }
+        if !ready { await bootstrap() }
+        let bondID = userInfo[TouchNotification.Key.bond] as? String
+            ?? (userInfo["bl"] as? String).flatMap { locator in partners.first { BondCrypto.locator(forCode: $0.id) == locator }?.id }
+        guard let bondID, partners.contains(where: { $0.id == bondID }) else { return }
+        if action == TouchNotification.touchBackAction {
+            // Two soft taps in your colour.
+            await sendTouch(pattern: [140, 120, 140], generation: 2, colorRGB: store.profile.colorRGB,
+                            toBondID: bondID, matchMeaning: false)
+        } else {
+            selectedPartnerID = bondID
+            await sendHeartbeat()
+        }
     }
 
     // MARK: - Saved places
@@ -481,6 +510,7 @@ final class AppModel: ObservableObject {
         info.bracelet = bracelet.isReady
         info.braceletBattery = bracelet.batteryPercent
         info.braceletLastConnected = bracelet.isReady ? Date() : bracelet.lastConnectedAt
+        info.watchStandIn = watchStandIn
         return info
     }
 
@@ -944,7 +974,11 @@ final class AppModel: ObservableObject {
                 // Cleared when they stop sharing location.
                 cloudPartners[index].latitude = p.lat
                 cloudPartners[index].longitude = p.lng
-                if let ready = p.bracelet { partnerBraceletConnected[partner.id] = ready }
+                // Their bracelet — or their watch standing in for it — plays touches, so pushes
+                // to them go quietly.
+                if p.bracelet != nil || p.watchStandIn != nil {
+                    partnerBraceletConnected[partner.id] = (p.bracelet ?? false) || (p.watchStandIn ?? false)
+                }
             }
 
             // Every partner's touches play, each in its own slot (as the original app); `deliver`

@@ -7,12 +7,19 @@ import WatchKit
 /// works with iCloud and original-app partners alike; the watch needs no account.
 @main
 struct BondWatchApp: App {
+    @WKApplicationDelegateAdaptor private var delegate: WatchAppDelegate
     @StateObject private var link = PhoneLink()
+    @StateObject private var standIn = StandIn()
 
     var body: some Scene {
         WindowGroup {
-            WatchRootView().environmentObject(link)
+            WatchRootView()
+                .environmentObject(link)
+                .environmentObject(standIn)
+                .onAppear { standIn.onChange = { [weak link] on in link?.reportStandIn(on) } }
         }
+        // A partner's touch notification: drawn, and played on the wrist when it opens.
+        WKNotificationScene(controller: TouchNotificationController.self, category: "TOUCH")
     }
 }
 
@@ -138,6 +145,11 @@ final class PhoneLink: NSObject, ObservableObject, WCSessionDelegate {
         send(msg)
         lastSent = Date()
         WKInterfaceDevice.current().play(.success)
+    }
+
+    /// Tells the phone the watch is (or isn't) standing in for the bracelet.
+    func reportStandIn(_ on: Bool) {
+        send(["type": "standIn", "on": on])
     }
 
     func select(_ id: String) {
