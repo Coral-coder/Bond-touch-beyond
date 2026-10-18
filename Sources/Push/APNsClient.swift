@@ -47,7 +47,8 @@ actor APNsClient {
             // Never "passive": that files it quietly with no banner and no watch tap.
             "interruption-level": silent ? "active" : "time-sensitive",
         ]
-        if !silent { aps["sound"] = "default" }
+        // No sound, ever: a touch is felt, not heard — the watch taps the wrist (and plays the
+        // touch's rhythm when it opens); a sound made the watch beep instead.
         // App data next to "aps" (e.g. the sealed touch) — under the 4 KB push limit.
         var payload: [String: Any] = extra
         payload["aps"] = aps
