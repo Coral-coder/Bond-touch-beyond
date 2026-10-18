@@ -986,7 +986,7 @@ final class AppModel: ObservableObject {
 
             // Every partner's touches play, each in its own slot (as the original app); `deliver`
             // skips stale ones, repeats (already played from a push) and Do Not Disturb.
-            events.touches.forEach(deliver)
+            events.touches.forEach { deliver($0) }
             // A heartbeat from an older build (its own record, not in the touch ring): listed
             // in history like any heartbeat, and played if fresh.
             if let bpm = events.latestBPM, let at = events.latestBPMAt {
