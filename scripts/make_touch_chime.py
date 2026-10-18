@@ -1,72 +1,96 @@
-"""Synthesizes the touch notification sound: a soft kiss ("mwah"), then a soft two-note
-glass bell (pure sine partials) with a light echo. Pure synthesis, no samples. Writes a 16-bit mono WAV."""
+"""Synthesizes the touch notification sound: a soft kiss (a short, breathy lip smack — no
+tone, so it doesn't sound like a bubble), then a warm, low, gentle chime. Pure synthesis, no
+samples. Three variants:
+  warm    — two soft bell notes an octave lower (C5, G5), slow attack, mostly fundamental
+  marimba — two rounded wooden-bar notes (E5, B5), very short and soft
+  glow    — a soft three-note major chord swelling in and out, like a warm pad
+Writes 16-bit mono WAVs: make_touch_chime.py <out.wav> [variant] [--kiss-only]"""
 import sys
 import wave
 import numpy as np
 
 RATE = 44100
-DUR = 1.6
-t = np.arange(int(RATE * DUR)) / RATE
-out = np.zeros_like(t)
 rng = np.random.default_rng(7)
 
 
-def env(start, attack, decay, length=None):
-    """Exponential decay envelope starting at `start` seconds."""
+def write(path, out):
+    out = out / (np.max(np.abs(out)) / 0.85)
+    with wave.open(path, "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(RATE)
+        w.writeframes((out * 32767).astype("<i2").tobytes())
+
+
+def timeline(dur):
+    return np.arange(int(RATE * dur)) / RATE
+
+
+def env(t, start, attack, decay, length=None):
     e = np.zeros_like(t)
     i0 = int(start * RATE)
-    n = len(t) - i0 if length is None else int(length * RATE)
+    n = len(t) - i0 if length is None else min(int(length * RATE), len(t) - i0)
     tt = np.arange(n) / RATE
-    a = np.minimum(1, tt / max(attack, 1e-4))
-    e[i0:i0 + n] = a * np.exp(-tt / decay)
+    e[i0:i0 + n] = np.minimum(1, tt / max(attack, 1e-4)) * np.exp(-tt / decay)
     return e
 
 
-# --- Kiss: a soft, rounded "mwah" — a warm lip hum, a gentle pop that glides up only a
-# little, and a muffled breath instead of a crisp click (the crisp version sounded sharp).
-k0 = 0.0
-def smooth(x, n):
+def lowpass(x, n):
     return np.convolve(x, np.ones(n) / n, mode="same")
-hum = (np.sin(2 * np.pi * 190 * t) + 0.3 * np.sin(2 * np.pi * 380 * t)) * env(k0, 0.015, 0.045, 0.09) * 0.16
-glide_t = np.clip(t - (k0 + 0.06), 0, None)
-glide_f = 480 + 900 * np.minimum(glide_t / 0.05, 1)               # 480 → 1380 Hz over 50 ms
-pop = np.sin(2 * np.pi * np.cumsum(glide_f) / RATE) * env(k0 + 0.06, 0.008, 0.03, 0.11) * 0.42
-noise = rng.standard_normal(len(t))
-# a soft breath: noise low-passed to below ~2 kHz, with a gentle swell
-breath = (smooth(noise, 14) - smooth(noise, 60)) * env(k0 + 0.062, 0.006, 0.02, 0.07) * 0.5
-out += hum + pop + breath
 
-# --- Soft futuristic bell: pure sine partials (no FM — FM's dense overtones sounded like a
-# harsh saw wave), tuned like a glass bell / vibraphone: a warm fundamental, a gentle octave,
-# and two inharmonic partials that fade fast, so it shimmers for a moment and then rings pure.
-def soft_bell(start, freq, amp, decay=0.7):
+
+def kiss(t, at=0.0):
+    """A soft lip smack: a breathy 'm' then two tiny muffled smacks of filtered noise."""
+    noise = rng.standard_normal(len(t))
+    breath = lowpass(noise, 24) * env(t, at, 0.02, 0.04, 0.08) * 0.10          # soft "m" breath
+    band = lowpass(noise, 6) - lowpass(noise, 40)                              # ~1–4 kHz, no hiss
+    smack = band * (env(t, at + 0.055, 0.002, 0.010, 0.04) + 0.55 * env(t, at + 0.072, 0.002, 0.008, 0.03))
+    return lowpass(breath + smack * 0.9, 3)
+
+
+def bell(t, start, freq, amp, decay):
+    """A warm bell: mostly fundamental, a little octave, a faint quickly-fading metallic partial."""
     tt = np.clip(t - start, 0, None)
-    tone = np.zeros_like(t)
-    for ratio, gain, dec in [(1.0, 1.0, decay), (2.0, 0.28, decay * 0.55),
-                             (2.76, 0.10, decay * 0.25), (5.40, 0.03, decay * 0.12)]:
-        tone += gain * np.sin(2 * np.pi * freq * ratio * tt) * env(start, 0.006, dec)
-    # a slow, slight vibrato on the fundamental for a "sci-fi" float
-    tone += 0.12 * np.sin(2 * np.pi * freq * tt * (1 + 0.003 * np.sin(2 * np.pi * 5 * tt))) * env(start, 0.02, decay)
+    tone = (1.0 * np.sin(2 * np.pi * freq * tt) * env(t, start, 0.012, decay)
+            + 0.15 * np.sin(2 * np.pi * freq * 2 * tt) * env(t, start, 0.012, decay * 0.5)
+            + 0.03 * np.sin(2 * np.pi * freq * 2.76 * tt) * env(t, start, 0.008, decay * 0.18))
     return tone * amp
 
-bell = soft_bell(0.16, 1046.5, 0.30) + soft_bell(0.32, 1568.0, 0.22, 0.85)   # C6 then G6
-# echo taps: the bell repeating quietly, like it's ringing in a large glass room
-echoed = bell.copy()
-for delay, gain in [(0.13, 0.16), (0.27, 0.06)]:
-    d = int(delay * RATE)
-    echoed[d:] += bell[:-d] * gain
-out += echoed
 
-# take the glassy edge off: a gentle low-pass (3-tap smoothing)
-out = np.convolve(out, np.ones(3) / 3, mode="same")
-# gentle fade at the very end, normalise to -1 dBFS
-out *= np.minimum(1, (DUR - t) / 0.15)
-out /= np.max(np.abs(out)) / 0.89
-pcm = (out * 32767).astype("<i2").tobytes()
+def marimba(t, start, freq, amp):
+    tt = np.clip(t - start, 0, None)
+    tone = (np.sin(2 * np.pi * freq * tt) * env(t, start, 0.004, 0.22)
+            + 0.25 * np.sin(2 * np.pi * freq * 4 * tt) * env(t, start, 0.002, 0.03))
+    return tone * amp
 
-with wave.open(sys.argv[1], "wb") as w:
-    w.setnchannels(1)
-    w.setsampwidth(2)
-    w.setframerate(RATE)
-    w.writeframes(pcm)
-print("wrote", sys.argv[1], f"{DUR}s")
+
+def glow(t, start, freqs, amp, length=1.1):
+    tt = np.clip(t - start, 0, None)
+    swell = np.where(tt < length, np.sin(np.pi * np.clip(tt / length, 0, 1)) ** 1.5, 0) * (t >= start)
+    tone = sum(np.sin(2 * np.pi * f * tt) * (0.8 ** i) for i, f in enumerate(freqs))
+    return tone * swell * amp
+
+
+def make(variant):
+    t = timeline(1.5)
+    out = kiss(t)
+    if variant == "marimba":
+        out += marimba(t, 0.16, 659.3, 0.35) + marimba(t, 0.30, 987.8, 0.28)
+    elif variant == "glow":
+        out += glow(t, 0.14, [523.3, 659.3, 784.0], 0.16)
+    else:
+        out += bell(t, 0.16, 523.3, 0.34, 0.75) + bell(t, 0.33, 784.0, 0.26, 0.9)
+    out = lowpass(out, 3)
+    out *= np.minimum(1, (1.5 - t) / 0.12)
+    return out
+
+
+if __name__ == "__main__":
+    path = sys.argv[1]
+    variant = sys.argv[2] if len(sys.argv) > 2 and not sys.argv[2].startswith("--") else "warm"
+    if "--kiss-only" in sys.argv:
+        t = timeline(0.18)
+        write(path, kiss(t) * np.minimum(1, (0.18 - t) / 0.04))
+    else:
+        write(path, make(variant))
+    print("wrote", path, variant)
