@@ -5,7 +5,7 @@ import UserNotifications
 /// The phone's own rich touch notification — the same one a partner's push becomes — for a
 /// touch that reached the app without a push showing it: picked up from iCloud, or from a
 /// partner on the original app. It mirrors to the Apple Watch, which draws the touch and
-/// plays its rhythm. Vibrates, never beeps.
+/// plays its rhythm. Plays the app's chime and vibrates — never the default beep.
 extension AppModel {
     func notifyTouch(_ touch: TouchMessage) async {
         guard let partner = partners.first(where: { $0.id == touch.bondID }) else { return }
@@ -34,9 +34,8 @@ extension AppModel {
         var info = TouchNotification.userInfo(touch, bondID: partner.id)
         if let locator { info["bl"] = locator }
         content.userInfo = info
-        // Vibrates, never beeps: a silent sound (phones and watches only vibrate for a
-        // notification with a sound).
-        content.sound = UNNotificationSound(named: UNNotificationSoundName(TouchNotification.silentSound))
+        // The app's chime (a kiss and a soft bell), with the vibration that comes with it.
+        content.sound = UNNotificationSound(named: UNNotificationSoundName(TouchNotification.sound))
         if #available(iOS 15.0, *) { content.interruptionLevel = .timeSensitive }
         if let file = TouchNotification.imageFile(touch),
            let attachment = try? UNNotificationAttachment(identifier: "touch", url: file,

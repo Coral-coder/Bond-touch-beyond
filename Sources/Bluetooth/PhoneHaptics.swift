@@ -34,6 +34,34 @@ final class PhoneHaptics {
         play(events)
     }
 
+    // MARK: - In the background
+
+    /// The touch's rhythm while the app runs in the background, where iOS doesn't let apps
+    /// drive the haptic engine: the system vibration, once per press (a heartbeat: once per
+    /// beat). Each system buzz lasts ~0.4 s, so presses closer than that merge into one.
+    func playRhythmInBackground(_ touch: TouchMessage) {
+        var starts: [Double] = []
+        if let bpm = touch.heartbeatBPM {
+            let period = EKG.period(bpm: bpm)
+            var at = 0.0
+            while at < 5 { starts.append(at + EKG.spikeAt); at += period }
+        } else {
+            var at = 0.0
+            for (i, ms) in touch.onOffMs.enumerated() {
+                if i % 2 == 0 { starts.append(at) }
+                at += Double(max(ms, 0)) / 1000
+                if at > 10 { break }
+            }
+        }
+        var last = -1.0
+        let bg = UIApplication.shared.beginBackgroundTask(withName: "touch-rhythm")
+        for s in starts where s - last >= 0.45 {
+            last = s
+            DispatchQueue.main.asyncAfter(deadline: .now() + s) { AudioServicesPlaySystemSound(kSystemSoundID_Vibrate) }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + last + 1) { UIApplication.shared.endBackgroundTask(bg) }
+    }
+
     // MARK: - Patterns
 
     private static func events(onOff pattern: [Int]) -> [CHHapticEvent] {

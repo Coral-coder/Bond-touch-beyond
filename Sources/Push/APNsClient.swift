@@ -47,10 +47,9 @@ actor APNsClient {
             // Never "passive": that files it quietly with no banner and no watch tap.
             "interruption-level": silent ? "active" : "time-sensitive",
         ]
-        // A touch is felt, not heard: a sound of pure silence (bundled in the phone and watch
-        // apps). iOS and watchOS only vibrate for a notification that has a sound, so this
-        // makes the phone vibrate and the watch tap the wrist — with nothing to hear.
-        aps["sound"] = TouchNotification.silentSound
+        // The app's own chime (a kiss and a soft bell), bundled in the phone and watch apps —
+        // never the default beep. A sound is also what makes the phone vibrate and the watch tap.
+        aps["sound"] = TouchNotification.sound
         // App data next to "aps" (e.g. the sealed touch) — under the 4 KB push limit.
         var payload: [String: Any] = extra
         payload["aps"] = aps

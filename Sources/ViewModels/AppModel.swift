@@ -148,6 +148,9 @@ final class AppModel: ObservableObject {
         if foreground {
             haptics.play(touch)
             NetLog.shared.log(.recv, "Bracelet not connected — played the touch on the phone")
+        } else {
+            // In the background (kept running): the touch's rhythm on the phone's vibration.
+            haptics.playRhythmInBackground(touch)
         }
     }
 
@@ -173,6 +176,8 @@ final class AppModel: ObservableObject {
             bracelet.playHeartbeat(bpm: bpm, seconds: seconds, colorRGB: touch.colorRGB)
         } else if foreground {
             haptics.playHeartbeat(bpm: bpm, seconds: seconds)
+        } else {
+            haptics.playRhythmInBackground(touch)
         }
         guard foreground else { return }
         let mine = touch.senderID == myUserID || touch.senderID == ChatMessage.legacySelf
