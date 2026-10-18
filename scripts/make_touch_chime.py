@@ -5,6 +5,7 @@ samples. Three variants:
   marimba — two rounded wooden-bar notes (E5, B5), very short and soft
   glow    — a soft three-note major chord swelling in and out, like a warm pad
   mallet  — between bell and marimba: soft mallet notes (E5, B5) with a smooth reverb tail
+  glow2   — glow, with a 35 ms breath after the kiss and a touch of reverb on the kiss
   chamber — nearly pure sine chimes (E5, B5) and a soft kiss, in a small room, with an echo
 Writes 16-bit mono WAVs: make_touch_chime.py <out.wav> [variant] [--kiss-only]"""
 import sys
@@ -134,6 +135,16 @@ def kiss_alone():
 def make(variant):
     t = timeline(1.5)
     out = kiss(t)
+    if variant == "glow2":
+        # the glow chord, 35 ms later than before (a breath between kiss and chime), and the
+        # kiss with a teeny bit of short reverb
+        t = timeline(1.6)
+        k = np.zeros_like(t)
+        k[: len(kiss_alone())] = kiss_alone()
+        k = reverb(k, seconds=0.35, wet=0.14)
+        out = lowpass(k + glow(t, 0.175, [523.3, 659.3, 784.0], 0.16), 3)
+        out *= np.minimum(1, (1.6 - t) / 0.12)
+        return out
     if variant == "chamber":
         t = timeline(2.6)
         dry = sine_chime(t, 0.17, 659.3, 0.34, 0.6) + sine_chime(t, 0.34, 987.8, 0.27, 0.7)
