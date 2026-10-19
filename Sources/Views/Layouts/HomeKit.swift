@@ -6,7 +6,7 @@ import UIKit
 /// things — partners, sending a touch, meanings, the heartbeat, recent touches — arranged
 /// differently. Themes and colours apply to all of them.
 enum HomeLayout: String, CaseIterable, Identifiable {
-    case classic, focus, conversation, bento, deck, timeline, orbit, oneHand
+    case classic, focus, conversation, bento, deck, timeline, orbit, oneHand, bubbles
     var id: String { rawValue }
 
     var title: String {
@@ -19,6 +19,7 @@ enum HomeLayout: String, CaseIterable, Identifiable {
         case .timeline: return "Timeline"
         case .orbit: return "Orbit"
         case .oneHand: return "One-Hand"
+        case .bubbles: return "Bubbles"
         }
     }
 
@@ -32,6 +33,7 @@ enum HomeLayout: String, CaseIterable, Identifiable {
         case .timeline: return "Your day together on a line"
         case .orbit: return "Your people circling you"
         case .oneHand: return "Every control in thumb reach"
+        case .bubbles: return "Everything in floating glossy bubbles"
         }
     }
 
@@ -45,6 +47,7 @@ enum HomeLayout: String, CaseIterable, Identifiable {
         case .timeline: return "point.topleft.down.curvedto.point.bottomright.up"
         case .orbit: return "circle.dotted"
         case .oneHand: return "hand.thumbsup"
+        case .bubbles: return "circle.hexagongrid.fill"
         }
     }
 }
@@ -63,6 +66,7 @@ struct HomeRouter: View {
         case .timeline: TimelineHome()
         case .orbit: OrbitHome()
         case .oneHand: OneHandHome()
+        case .bubbles: BubbleHome()
         }
     }
 }
