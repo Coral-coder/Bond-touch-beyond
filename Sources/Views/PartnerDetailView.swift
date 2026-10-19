@@ -94,6 +94,8 @@ struct PartnerDetailView: View {
                         }
                         .padding(16).glass(cornerRadius: 22)
 
+                        PartnerMoodRow(partner: partner).padding(16).glass(cornerRadius: 22)
+
                         WeatherCard(partner: partner)
 
                         connectionCard(partner)

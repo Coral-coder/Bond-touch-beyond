@@ -139,7 +139,13 @@ struct TogetherView: View {
             tile("Notes", "note.text", notes == 0 ? "Write one" : "\(notes) note\(notes == 1 ? "" : "s")", Theme.amber) { SharedNotesView() }
             tile("Whiteboard", "scribble.variable", "Draw together", Theme.magenta) { WhiteboardView() }
             tile("Games", "gamecontroller.fill", "Pool, chess, checkers, backgammon", Theme.accent) { GamesView() }
+            tile("Battery & mood", "battery.75", batteryStatus, Theme.lime) { BatteryView() }
         }
+    }
+
+    private var batteryStatus: String {
+        guard let m = model.selectedPartner?.presence?.mood else { return "How are you feeling?" }
+        return "\(model.selectedPartner?.displayName ?? "They"): \(m.emoji) \(m.label) · \(m.battery)%"
     }
 
     private var chessStatus: String {

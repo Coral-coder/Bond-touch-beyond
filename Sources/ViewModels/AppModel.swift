@@ -210,6 +210,10 @@ final class AppModel: ObservableObject {
     let together = TogetherStore()
     /// The weather here, shared with partners in the status snapshot (Settings can turn it off).
     @Published var myWeather: WeatherInfo?
+    /// Your personal battery (Health + your mood logs), shared quietly with partners.
+    let battery = BatteryService()
+    var lastBatteryRead = Date.distantPast
+    var lastCareAlert = Date.distantPast
     /// The weather where each partner is, looked up here from the location they share.
     @Published var partnerWeather: [String: WeatherInfo] = [:]
 
@@ -560,6 +564,7 @@ final class AppModel: ObservableObject {
         info.braceletLastConnected = bracelet.isReady ? Date() : bracelet.lastConnectedAt
         info.watchStandIn = watchStandIn
         if UserDefaults.standard.object(forKey: "shareWeather") as? Bool ?? true { info.weather = myWeather }
+        if UserDefaults.standard.object(forKey: "shareMood") as? Bool ?? true { info.mood = myMoodShare() }
         return info
     }
 
@@ -595,6 +600,7 @@ final class AppModel: ObservableObject {
         if !force, Date().timeIntervalSince(lastPresencePush) < (moving ? 15 : 120) { return }
         lastPresencePush = Date()
         await refreshMyWeather()
+        await refreshBatteryIfDue()
         let info = currentPresence()
         lastPublished = info
         for partner in cloudPartners {

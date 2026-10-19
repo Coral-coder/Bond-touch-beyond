@@ -21,6 +21,7 @@ struct BondTouchBeyondApp: App {
                 .environmentObject(model.heart)
                 .environmentObject(model.recovery)
                 .environmentObject(model.together)
+                .environmentObject(model.battery)
                 .onOpenURL { url in
                     // A meaning tapped on the widget (iOS 16; iOS 17 sends without opening the app).
                     if let request = WidgetShared.sendRequest(from: url) { Task { await model.sendFromWidget(request) } }

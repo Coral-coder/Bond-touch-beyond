@@ -527,6 +527,8 @@ struct PresenceInfo: Codable, Equatable {
     var watchStandIn: Bool? = nil
     /// The weather where this phone is (if it shares it): town, now, the next hours and days.
     var weather: WeatherInfo? = nil
+    /// How they're feeling and their personal battery (if they share it).
+    var mood: MoodShare? = nil
     /// When this snapshot was written — the phone's last check-in.
     var sentAt = Date()
 }
