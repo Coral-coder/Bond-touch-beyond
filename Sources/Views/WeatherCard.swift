@@ -83,9 +83,7 @@ struct WeatherCard: View {
                     .frame(maxWidth: .infinity)
                 }
             }
-            Link(destination: URL(string: "https://weatherkit.apple.com/legal-attribution.html")!) {
-                Text("\(Image(systemName: "apple.logo")) Weather · data sources").font(Theme.font(10)).foregroundStyle(Theme.subtitle)
-            }
+            Text("Weather: Open-Meteo").font(Theme.font(10)).foregroundStyle(Theme.subtitle)
             if let mine = model.myWeather {
                 Text("You: \(WeatherInfo.degrees(mine.temp)) \(mine.summary.lowercased())\(mine.place.map { " in \($0)" } ?? "")")
                     .font(Theme.font(11)).foregroundStyle(Theme.subtitle)

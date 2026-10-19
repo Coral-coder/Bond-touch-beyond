@@ -1,6 +1,6 @@
 import Foundation
 
-/// The weather somewhere: now, the next hours and the next days, from Apple's WeatherKit.
+/// The weather somewhere: now, the next hours and the next days, from Open-Meteo.
 /// Your phone looks it up for where your partner is (from the location they share); if they
 /// don't share their location, their phone's own lookup (shared in their sealed status) is
 /// shown instead.
