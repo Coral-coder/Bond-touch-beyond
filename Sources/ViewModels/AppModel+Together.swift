@@ -183,6 +183,23 @@ extension AppModel {
                 if d.remindDaysBefore > 0 { add(daysBefore: d.remindDaysBefore) }
             }
         }
+        // R.A.D.A.R. check-ins: the day before and on the day, at 9:00.
+        for (bondID, space) in together.spaces {
+            guard let next = space.radarNext else { continue }
+            let name = names[bondID] ?? "your partner"
+            for before in [1, 0] {
+                guard let day = Calendar.current.date(byAdding: .day, value: -before, to: next) else { continue }
+                var c = Calendar.current.dateComponents([.year, .month, .day], from: day)
+                c.hour = 9
+                guard let fire = Calendar.current.date(from: c), fire > Date() else { continue }
+                let content = UNMutableNotificationContent()
+                content.title = before == 0 ? "📡 R.A.D.A.R. with \(name) today" : "📡 R.A.D.A.R. with \(name) tomorrow"
+                content.body = "Add anything you want to talk about to the agenda."
+                content.sound = .default
+                requests.append(UNNotificationRequest(identifier: "date-radar-\(bondID)-\(before)", content: content,
+                                                      trigger: UNCalendarNotificationTrigger(dateMatching: c, repeats: false)))
+            }
+        }
         center.getPendingNotificationRequests { old in
             center.removePendingNotificationRequests(withIdentifiers: old.map(\.identifier).filter { $0.hasPrefix("date-") })
             requests.prefix(60).forEach { center.add($0) }

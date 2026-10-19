@@ -95,6 +95,8 @@ private struct DemoScreen: View {
                 switch name {
                 case "chess": ChessView()
                 case "games": GamesView()
+                case "radar": RadarView()
+                case "battery": BatteryView()
                 case "pool": PoolView()
                 case "checkers": CheckersView()
                 case "backgammon": BackgammonView()

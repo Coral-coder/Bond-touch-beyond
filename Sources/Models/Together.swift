@@ -17,6 +17,12 @@ struct TogetherSpace: Codable, Equatable {
     var checkers: ChessGame?
     var backgammon: ChessGame?
     var pool: ChessGame?
+    /// R.A.D.A.R. check-ins: topics either of you adds, past check-ins, and how often.
+    var radarTopics: [RadarTopic]?
+    var radarSessions: [RadarSession]?
+    var radarEveryDays: Int?
+    var radarNext: Date?
+    var radarEdited: Date?
 
     /// Combines the partner's copy into ours.
     mutating func merge(_ other: TogetherSpace) {
@@ -32,6 +38,11 @@ struct TogetherSpace: Codable, Equatable {
         checkers = ChessGame.merge(checkers, other.checkers)
         backgammon = ChessGame.merge(backgammon, other.backgammon)
         pool = ChessGame.merge(pool, other.pool)
+        if other.radarTopics != nil { radarTopics = Self.mergeItems(radarTopics ?? [], other.radarTopics ?? []) }
+        if other.radarSessions != nil { radarSessions = Self.mergeItems(radarSessions ?? [], other.radarSessions ?? []) }
+        if (other.radarEdited ?? .distantPast) > (radarEdited ?? .distantPast) {
+            radarEveryDays = other.radarEveryDays; radarNext = other.radarNext; radarEdited = other.radarEdited
+        }
     }
 
     static func mergeItems<T: SyncItem>(_ a: [T], _ b: [T]) -> [T] {
@@ -201,4 +212,31 @@ struct Whiteboard: Codable, Equatable {
         strokes = strokes.filter { $0.at > clearedAt && !gone.contains($0.id) }.sorted { $0.at < $1.at }
         if strokes.count > 600 { strokes = Array(strokes.suffix(600)) }
     }
+}
+
+/// Something to talk about at the next R.A.D.A.R. check-in.
+struct RadarTopic: SyncItem, Equatable {
+    var id = UUID()
+    var created = Date()
+    var edited = Date()
+    var deleted = false
+    var text: String
+    var by: String
+    /// Talked through at a check-in.
+    var discussed = false
+}
+
+/// One R.A.D.A.R. check-in: Review, Agenda, Discuss, Action items, Reconnect.
+struct RadarSession: SyncItem, Equatable {
+    var id = UUID()
+    var created = Date()
+    var edited = Date()
+    var deleted = false
+    var highlights = ""
+    var challenges = ""
+    var comingUp = ""
+    var discussed: [String] = []
+    var notes = ""
+    var actions: [String] = []
+    var reconnect = ""
 }

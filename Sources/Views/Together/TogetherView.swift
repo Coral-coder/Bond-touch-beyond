@@ -140,7 +140,18 @@ struct TogetherView: View {
             tile("Whiteboard", "scribble.variable", "Draw together", Theme.magenta) { WhiteboardView() }
             tile("Games", "gamecontroller.fill", "Pool, chess, checkers, backgammon", Theme.accent) { GamesView() }
             tile("Battery & mood", "battery.75", batteryStatus, Theme.lime) { BatteryView() }
+            tile("R.A.D.A.R.", "dot.radiowaves.left.and.right", radarStatus, Theme.pink) { RadarView() }
         }
+    }
+
+    private var radarStatus: String {
+        let open = (space.radarTopics ?? []).filter { !$0.deleted && !$0.discussed }.count
+        if let next = space.radarNext {
+            let days = Calendar.current.dateComponents([.day], from: Calendar.current.startOfDay(for: Date()),
+                                                       to: Calendar.current.startOfDay(for: next)).day ?? 0
+            return (days <= 0 ? "Check-in due" : "In \(days) days") + (open > 0 ? " · \(open) topics" : "")
+        }
+        return open > 0 ? "\(open) topics waiting" : "Set up check-ins"
     }
 
     private var batteryStatus: String {
