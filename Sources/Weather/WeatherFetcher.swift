@@ -30,7 +30,7 @@ actor WeatherFetcher {
             cache[key] = (info, location)
             return info
         } catch {
-            NetLog.shared.log(.fail, "Weather unavailable", error.localizedDescription)
+            await NetLog.shared.log(.fail, "Weather unavailable", error.localizedDescription)
             return cache[key]?.info
         }
     }
