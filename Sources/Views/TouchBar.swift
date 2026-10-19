@@ -314,6 +314,32 @@ struct ComposeTouchView: View {
     @State private var lastTouch: [Int] = []
     @State private var saving = false
     @State private var meaningName = ""
+    /// Off: the window ending only records the touch; Send sends it.
+    @AppStorage("autoSendTouch") private var autoSend = true
+    /// Recorded with auto-send off, waiting for Send.
+    @State private var pending: [Int] = []
+    /// Send was tapped while recording: send as soon as the recording closes.
+    @State private var sendRequested = false
+    @State private var sentAt: Date?
+    /// The touch just sent, shown in the sent animation before going back home.
+    @State private var sentTouch: SentTouch?
+
+    struct SentTouch: Equatable { let pattern: [Int]; let colors: (Int, Int)
+        static func == (a: Self, b: Self) -> Bool { a.pattern == b.pattern && a.colors == b.colors }
+    }
+
+    private var statusText: String {
+        if recorder.recording { return "Recording…" }
+        if mode == .createMeaning { return lastTouch.isEmpty ? "Touch the bar to start" : "Recorded — save it below" }
+        if !pending.isEmpty { return "Ready — tap Send" }
+        if let sentAt { return "Sent ✓ \(sentAt.formatted(date: .omitted, time: .shortened))" }
+        return "Touch the bar to start"
+    }
+
+    private var canSend: Bool {
+        if mode == .createMeaning { return recorder.recording }
+        return (recorder.recording && !recorder.samples.isEmpty) || !pending.isEmpty
+    }
 
     var body: some View {
         VStack(spacing: 16) {
@@ -329,10 +355,10 @@ struct ComposeTouchView: View {
             }
 
             VStack(spacing: 10) {
-                Text(recorder.recording ? "Recording…"
-                     : (lastTouch.isEmpty ? "Touch the bar to start" : (mode == .send ? "Sent" : "Recorded — save it below")))
-                    .font(Theme.font(14, .semibold)).foregroundStyle(Theme.subtitle)
-                TouchViz(pattern: recorder.recording ? recorder.samples : lastTouch, generation: 3,
+                Text(statusText)
+                    .font(Theme.font(14, .semibold))
+                    .foregroundStyle(sentAt != nil && !recorder.recording && pending.isEmpty ? Theme.lime : Theme.subtitle)
+                TouchViz(pattern: recorder.recording ? recorder.samples : (pending.isEmpty ? lastTouch : pending), generation: 3,
                          colorRGB: startColor.rgbInt, endColorRGB: endColor.rgbInt, height: 90)
                     .padding(.horizontal, 4)
                 Text("Time → · position on the bar ↕").font(Theme.font(12)).foregroundStyle(Theme.subtitle)
@@ -347,8 +373,14 @@ struct ComposeTouchView: View {
                 VStack(spacing: 8) {
                     CountdownRing(progress: recorder.progress,
                                   remaining: recorder.recording ? recorder.remaining : store.touchWindowSeconds)
-                    Text("Pauses are fine —\nsends at 0").multilineTextAlignment(.center)
+                    Text(mode == .send && !autoSend ? "Pauses are fine —\ntap Send when ready" : "Pauses are fine —\nsends at 0")
+                        .multilineTextAlignment(.center)
                         .font(Theme.font(12)).foregroundStyle(Theme.subtitle)
+                    if mode == .send {
+                        Toggle("Auto-send", isOn: $autoSend)
+                            .font(Theme.font(12, .bold)).foregroundStyle(Theme.title)
+                            .tint(Theme.accent).fixedSize()
+                    }
                 }
             }
             .frame(maxHeight: .infinity)
@@ -370,10 +402,18 @@ struct ComposeTouchView: View {
             HStack(spacing: 12) {
                 Button("Save as meaning") { saving = true }
                     .buttonStyle(GlassButtonStyle(height: 54))
-                    .disabled(recorder.samples.isEmpty && lastTouch.isEmpty)
-                Button(mode == .send ? "Send now" : "Done") { recorder.finish() }
-                    .buttonStyle(AccentButtonStyle(height: 54))
-                    .disabled(!recorder.recording)
+                    .disabled(recorder.samples.isEmpty && lastTouch.isEmpty && pending.isEmpty)
+                Button(mode == .send ? (recorder.recording && autoSend ? "Send now" : "Send") : "Done") {
+                    if recorder.recording {
+                        sendRequested = true
+                        recorder.finish()
+                    } else if !pending.isEmpty {
+                        send(pending)
+                    }
+                }
+                .buttonStyle(AccentButtonStyle(height: 54))
+                .disabled(!canSend)
+                .opacity(canSend ? 1 : 0.45)
             }
         }
         .padding(.horizontal, 18).padding(.top, 12).padding(.bottom, 20)
@@ -386,23 +426,20 @@ struct ComposeTouchView: View {
             recorder.onFinish = { samples in
                 lastTouch = samples
                 if mode == .createMeaning { saving = true; return }
-                // Regular touches send in your colour, unless you picked a colour, or the
-                // touch closely matches a saved meaning (then its colour).
-                let colors: (Int, Int)
-                if colorCustomized {
-                    colors = (startColor.rgbInt, endColor.rgbInt)
-                } else if let m = model.closeMeaning(pattern: samples, generation: 3) {
-                    colors = (m.colorRGB, m.endColorRGB)
-                } else {
-                    colors = (store.profile.colorRGB, store.profile.colorRGB)
-                }
-                Task {
-                    // A close match to a saved meaning is sent as that meaning (unless you
-                    // picked your own colour for this touch).
-                    await model.sendTouch(pattern: samples, generation: 3,
-                                          colorRGB: colors.0, endColorRGB: colors.1,
-                                          matchMeaning: !colorCustomized)
-                }
+                let now = sendRequested || autoSend
+                sendRequested = false
+                if now { send(samples) } else { pending = samples }
+            }
+        }
+        .onChange(of: recorder.recording) { recording in
+            // Touching the bar again starts over: a touch waiting to be sent is replaced.
+            if recording { pending = [] }
+        }
+        .overlay {
+            if let sentTouch {
+                SentTouchAnimation(pattern: sentTouch.pattern, startRGB: sentTouch.colors.0, endRGB: sentTouch.colors.1,
+                                   name: model.selectedPartner?.displayName ?? "your partner")
+                    .transition(.opacity)
             }
         }
         .alert("Save as meaning", isPresented: $saving) {
@@ -418,6 +455,74 @@ struct ComposeTouchView: View {
                 if mode == .createMeaning { dismiss() }
             }
             Button("Cancel", role: .cancel) {}
+        }
+    }
+
+    /// Sends the touch, plays the sent animation, then goes back home.
+    private func send(_ samples: [Int]) {
+        pending = []
+        // Regular touches send in your colour, unless you picked a colour, or the touch
+        // closely matches a saved meaning (then its colour).
+        let colors: (Int, Int)
+        if colorCustomized {
+            colors = (startColor.rgbInt, endColor.rgbInt)
+        } else if let m = model.closeMeaning(pattern: samples, generation: 3) {
+            colors = (m.colorRGB, m.endColorRGB)
+        } else {
+            colors = (store.profile.colorRGB, store.profile.colorRGB)
+        }
+        Task {
+            // A close match to a saved meaning is sent as that meaning (unless you picked
+            // your own colour for this touch).
+            await model.sendTouch(pattern: samples, generation: 3,
+                                  colorRGB: colors.0, endColorRGB: colors.1,
+                                  matchMeaning: !colorCustomized)
+        }
+        sentAt = Date()
+        withAnimation(.easeOut(duration: 0.2)) { sentTouch = SentTouch(pattern: samples, colors: colors) }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.7) { dismiss() }
+    }
+}
+
+/// "Sent": the touch pops up in a glass card, its glow plays across, then it flies off
+/// toward your partner.
+struct SentTouchAnimation: View {
+    let pattern: [Int]
+    let startRGB: Int
+    let endRGB: Int
+    let name: String
+    @State private var shown = false
+    @State private var flown = false
+    @State private var hearts = false
+
+    var body: some View {
+        ZStack {
+            Color.black.opacity(flown ? 0 : 0.35).ignoresSafeArea()
+            ZStack {
+                ForEach(0..<6, id: \.self) { i in
+                    Text(["💗", "✨", "💞"][i % 3]).font(.system(size: 22))
+                        .offset(x: CGFloat(i * 47 % 140) - 70, y: hearts ? -170 - CGFloat(i * 23 % 60) : 0)
+                        .opacity(hearts ? 0 : 1)
+                }
+                VStack(spacing: 12) {
+                    TouchViz(pattern: pattern, generation: 3, colorRGB: startRGB, endColorRGB: endRGB, height: 80)
+                        .frame(width: 240)
+                    Label("Sent to \(name)", systemImage: "checkmark.circle.fill")
+                        .font(Theme.font(17, .heavy)).foregroundStyle(Theme.title)
+                }
+                .padding(20)
+                .glass(cornerRadius: 28)
+                .shadow(color: Color(rgbInt: startRGB).opacity(0.6), radius: shown ? 24 : 0)
+            }
+            .scaleEffect(flown ? 0.25 : (shown ? 1 : 0.6))
+            .offset(y: flown ? -520 : 0)
+            .opacity(shown && !flown ? 1 : 0)
+        }
+        .allowsHitTesting(true)
+        .onAppear {
+            withAnimation(.spring(response: 0.4, dampingFraction: 0.65)) { shown = true }
+            withAnimation(.easeOut(duration: 1.1).delay(0.25)) { hearts = true }
+            withAnimation(.easeIn(duration: 0.45).delay(1.2)) { flown = true }
         }
     }
 }
