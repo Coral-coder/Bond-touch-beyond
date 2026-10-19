@@ -3,7 +3,7 @@ import SwiftUI
 /// The app's look, picked under Settings → Theme. Each one changes the backdrop, the glass
 /// panels, the colours and the type; the touches keep their own colours in every theme.
 enum AppStyle: String, CaseIterable, Identifiable {
-    case aero, neon, pastel, mono, aurora, paper, chalk
+    case aero, neon, pastel, mono, aurora, paper, chalk, bubble, raindrop, citrus
     var id: String { rawValue }
 
     var title: String {
@@ -15,6 +15,9 @@ enum AppStyle: String, CaseIterable, Identifiable {
         case .aurora: return "Liquid Aurora"
         case .paper: return "Paper & Ink"
         case .chalk: return "Chalkboard"
+        case .bubble: return "Bubble"
+        case .raindrop: return "Raindrop"
+        case .citrus: return "Citrus"
         }
     }
 
@@ -27,10 +30,32 @@ enum AppStyle: String, CaseIterable, Identifiable {
         case .aurora: return "Deep night with flowing northern lights"
         case .paper: return "Ruled paper and fountain-pen ink"
         case .chalk: return "A black chalkboard, sketched in chalk"
+        case .bubble: return "Frutiger Aero: sky, glossy glass, rising bubbles"
+        case .raindrop: return "Frutiger Aero: fresh green, rain on glass"
+        case .citrus: return "Frutiger Aero: sunny, juicy, glossy fruit"
         }
     }
 
-    var isLight: Bool { self == .pastel || self == .mono || self == .paper }
+    var isLight: Bool { [.pastel, .mono, .paper, .bubble, .raindrop, .citrus].contains(self) }
+
+    /// The glossy Frutiger Aero themes: bright, wet-looking glass with a shine across the top.
+    var isAqua: Bool { [.bubble, .raindrop, .citrus].contains(self) }
+
+    /// How round the panels are — sharp for Mono and Paper, soft and pillowy for the Aero ones.
+    var corner: CGFloat {
+        switch self {
+        case .aero: return 24
+        case .neon: return 14
+        case .pastel: return 28
+        case .mono: return 6
+        case .aurora: return 26
+        case .paper: return 10
+        case .chalk: return 18
+        case .bubble: return 32
+        case .raindrop: return 28
+        case .citrus: return 30
+        }
+    }
 
     /// The colours this theme can wear (its accent, and the main glow in its backdrop). The
     /// first is the theme's own. Paper & Ink uses its ink colours (`PaperInk`) instead.
@@ -43,6 +68,9 @@ enum AppStyle: String, CaseIterable, Identifiable {
         case .aurora: return [("Mint", 0x5EEAD4), ("Violet", 0xA78BFA), ("Pink", 0xFF6FD8), ("Ice", 0x8FD8FF), ("Lime", 0xA3F27A), ("Gold", 0xFBBF5C)]
         case .paper: return []
         case .chalk: return [("Yellow", 0xF4E38C), ("White", 0xF1F0E8), ("Pink", 0xF5A9C4), ("Blue", 0xA9D4F5), ("Green", 0xBDE8A4), ("Orange", 0xF7C98C)]
+        case .bubble: return [("Sky", 0x1E9BE8), ("Lagoon", 0x13B5C8), ("Grass", 0x3DBB5C), ("Orchid", 0x9B6CF6), ("Coral", 0xFF7A6B), ("Sun", 0xF5B300)]
+        case .raindrop: return [("Mint", 0x12A594), ("Rain", 0x3D8BD9), ("Leaf", 0x5FB83A), ("Iris", 0x7A6CF0), ("Rose", 0xE86A92), ("Dew", 0x2BB3D9)]
+        case .citrus: return [("Orange", 0xFF8A00), ("Lime", 0x6DB935), ("Lemon", 0xE6B800), ("Grapefruit", 0xFF5E7E), ("Tangerine", 0xFF6A2B), ("Kiwi", 0x4FAE3D)]
         }
     }
 }
@@ -182,6 +210,27 @@ struct Palette {
                            magenta: c(0xC9B3F0), pink: c(0xF5A9C4), lime: c(0xBDE8A4), amber: c(0xF7C98C), danger: c(0xF59A8F),
                            touchSent: c(0x2E3A34), touchReceived: c(0x29332E), surface: c(0x1B221E),
                            glassTop: .clear, glassBottom: .clear)
+        case .bubble:
+            return Palette(bgTop: c(0xBFEFFF), bgBottom: c(0x8ED8F8), ink: c(0x0B3556),
+                           title: c(0x0B3556), subtitle: c(0x2F6A8F), mutedHeadline: c(0x134A73),
+                           accent: c(0x1E9BE8), accentDeep: c(0x0F78C2), accentTop: c(0x7FD0FF), onAccent: white,
+                           magenta: c(0x7B6CF6), pink: c(0xFF5E9A), lime: c(0x3DBB5C), amber: c(0xF5A300), danger: c(0xE5484D),
+                           touchSent: c(0xDDF3FF), touchReceived: c(0xCDEBFA), surface: white,
+                           glassTop: white.opacity(0.85), glassBottom: white.opacity(0.35))
+        case .raindrop:
+            return Palette(bgTop: c(0xDDF7EE), bgBottom: c(0x8FD9CF), ink: c(0x0D3B3A),
+                           title: c(0x0D3B3A), subtitle: c(0x3C6E6A), mutedHeadline: c(0x164F4C),
+                           accent: c(0x12A594), accentDeep: c(0x0B7F72), accentTop: c(0x6EDCCB), onAccent: white,
+                           magenta: c(0x3D8BD9), pink: c(0xE8578A), lime: c(0x5FB83A), amber: c(0xF0A020), danger: c(0xE5484D),
+                           touchSent: c(0xE2F7F1), touchReceived: c(0xD2F0EA), surface: white,
+                           glassTop: white.opacity(0.85), glassBottom: white.opacity(0.35))
+        case .citrus:
+            return Palette(bgTop: c(0xFFF8D6), bgBottom: c(0xFFE08A), ink: c(0x3B2F0B),
+                           title: c(0x3B2F0B), subtitle: c(0x7A6420), mutedHeadline: c(0x4A3B0E),
+                           accent: c(0xFF8A00), accentDeep: c(0xE06C00), accentTop: c(0xFFB85C), onAccent: white,
+                           magenta: c(0xE8457A), pink: c(0xFF5E7E), lime: c(0x6DB935), amber: c(0xFFB000), danger: c(0xD93A3A),
+                           touchSent: c(0xFFF1C2), touchReceived: c(0xF3F7C8), surface: white,
+                           glassTop: white.opacity(0.85), glassBottom: white.opacity(0.35))
         }
     }
 }
@@ -245,7 +294,7 @@ enum Theme {
     static var grid: Color { p.ink.opacity(0.045) }
 
     static let corner: CGFloat = 20
-    static let cardCorner: CGFloat = 24
+    static var cardCorner: CGFloat { style.corner }
 
     static var colorScheme: ColorScheme { style.isLight ? .light : .dark }
 
@@ -265,7 +314,7 @@ enum Theme {
         case .paper: return .system(size: size, weight: weight, design: .serif)
         case .neon: return .system(size: size, weight: weight, design: .monospaced)
         case .mono: return .system(size: size, weight: weight, design: .default)
-        case .aero, .pastel, .aurora: return .system(size: size, weight: weight, design: .rounded)
+        case .aero, .pastel, .aurora, .bubble, .raindrop, .citrus: return .system(size: size, weight: weight, design: .rounded)
         }
     }
 }
@@ -290,7 +339,7 @@ struct ThemeFonts: ViewModifier {
         case .paper: return .serif
         case .neon: return .monospaced
         case .mono, .chalk: return .default
-        case .aero, .pastel, .aurora: return .rounded
+        case .aero, .pastel, .aurora, .bubble, .raindrop, .citrus: return .rounded
         }
     }
 }
@@ -309,6 +358,9 @@ struct ThemeBackdrop: View {
         case .aurora: AuroraSky(glow: glow)
         case .paper: RuledPaper()
         case .chalk: Chalkboard()
+        case .bubble: BubbleSky(glow: glow)
+        case .raindrop: RainOnGlass(glow: glow)
+        case .citrus: CitrusSun(glow: glow)
         }
     }
 }
@@ -614,7 +666,180 @@ struct GlassBackground<S: Shape>: View {
                 .overlay(shape.stroke(chalk.opacity(0.32), lineWidth: 1).offset(x: 0.9, y: -0.8))
                 .overlay(shape.stroke(chalk.opacity(0.18), lineWidth: 1.4).offset(x: -0.7, y: 1))
                 .shadow(color: Color.black.opacity(0.3 * shadowDepth), radius: 8 * shadowDepth, y: 3 * shadowDepth)
+        case .bubble, .raindrop, .citrus:
+            // Aqua glass: milky white, a bright wet shine over the top half, a crisp white rim
+            // and a soft glow in the accent colour underneath — Frutiger Aero.
+            shape
+                .fill(Color.white.opacity(0.62 - clarity * 0.32))
+                .overlay(shape.fill(LinearGradient(stops: [.init(color: .white.opacity(0.85), location: 0),
+                                                           .init(color: .white.opacity(0.25), location: 0.48),
+                                                           .init(color: .clear, location: 0.5),
+                                                           .init(color: p.accent.opacity(0.10), location: 1)],
+                                                   startPoint: .top, endPoint: .bottom))
+                    .opacity(1 - clarity * 0.5))
+                .overlay(shape.stroke(LinearGradient(colors: [.white, .white.opacity(0.55), p.accent.opacity(0.35)],
+                                                     startPoint: .top, endPoint: .bottom), lineWidth: 1.4))
+                .shadow(color: p.accent.opacity(0.28 * shadowDepth), radius: 4 + 14 * shadowDepth, y: 3 + 6 * shadowDepth)
         }
+    }
+}
+
+/// Bubble: a bright sky with soft clouds of light and glossy bubbles drifting up.
+struct BubbleSky: View {
+    var glow: Color?
+    var body: some View {
+        ZStack {
+            LinearGradient(colors: [Color(rgbInt: 0xE6FAFF), Color(rgbInt: 0x9EDFFA), Color(rgbInt: 0x5CC2F0)],
+                           startPoint: .top, endPoint: .bottom)
+            RadialGradient(colors: [.white.opacity(0.9), .clear], center: UnitPoint(x: 0.2, y: 0.05), startRadius: 10, endRadius: 360)
+            RadialGradient(colors: [(glow ?? Color(rgbInt: 0x7CE08A)).opacity(0.45), .clear], center: UnitPoint(x: 0.9, y: 1.05),
+                           startRadius: 10, endRadius: 420)
+            TimelineView(.animation(minimumInterval: 1 / 30)) { ctx in
+                Canvas { g, size in
+                    let t = ctx.date.timeIntervalSinceReferenceDate
+                    var rng = SeededRandom(seed: 21)
+                    for _ in 0..<22 {
+                        let r = CGFloat(rng.next() * 30 + 8)
+                        let speed = rng.next() * 18 + 10
+                        let x0 = CGFloat(rng.next()) * size.width
+                        let phase = rng.next() * 1000
+                        let span = Double(size.height + r * 4)
+                        let y = size.height + r * 2 - CGFloat((t * speed + phase).truncatingRemainder(dividingBy: span))
+                        let x = x0 + CGFloat(sin((t + phase) * 0.6)) * 14
+                        AquaGloss.bubble(&g, center: CGPoint(x: x, y: y), radius: r)
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Raindrop: fresh green-blue light, with raindrops resting on the glass and a few running down.
+struct RainOnGlass: View {
+    var glow: Color?
+    var body: some View {
+        ZStack {
+            LinearGradient(colors: [Color(rgbInt: 0xEFFBF5), Color(rgbInt: 0xA9E6D6), Color(rgbInt: 0x5FC3B8)],
+                           startPoint: .top, endPoint: .bottom)
+            RadialGradient(colors: [.white.opacity(0.85), .clear], center: UnitPoint(x: 0.8, y: 0.0), startRadius: 10, endRadius: 380)
+            RadialGradient(colors: [(glow ?? Color(rgbInt: 0x8BD96B)).opacity(0.4), .clear], center: UnitPoint(x: 0.1, y: 1.0),
+                           startRadius: 10, endRadius: 420)
+            TimelineView(.animation(minimumInterval: 1 / 20)) { ctx in
+                Canvas { g, size in
+                    let t = ctx.date.timeIntervalSinceReferenceDate
+                    var rng = SeededRandom(seed: 9)
+                    // Drops resting on the glass.
+                    for _ in 0..<46 {
+                        let r = CGFloat(rng.next() * 7 + 2.5)
+                        let p = CGPoint(x: CGFloat(rng.next()) * size.width, y: CGFloat(rng.next()) * size.height)
+                        AquaGloss.drop(&g, center: p, radius: r)
+                    }
+                    // A few running down, leaving a faint trail.
+                    for i in 0..<4 {
+                        let x = CGFloat(rng.next()) * size.width
+                        let speed = rng.next() * 40 + 30
+                        let y = CGFloat((t * speed + Double(i) * 400).truncatingRemainder(dividingBy: Double(size.height + 60))) - 30
+                        var trail = Path()
+                        trail.move(to: CGPoint(x: x, y: max(0, y - 90)))
+                        trail.addLine(to: CGPoint(x: x, y: y))
+                        g.stroke(trail, with: .linearGradient(Gradient(colors: [.clear, .white.opacity(0.35)]),
+                                                              startPoint: CGPoint(x: x, y: y - 90), endPoint: CGPoint(x: x, y: y)),
+                                 lineWidth: 2.5)
+                        AquaGloss.drop(&g, center: CGPoint(x: x, y: y), radius: 6)
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Citrus: sunny yellow to fresh lime, glossy citrus slices at the edges and soft bokeh.
+struct CitrusSun: View {
+    var glow: Color?
+    @State private var spin = false
+    var body: some View {
+        ZStack {
+            LinearGradient(colors: [Color(rgbInt: 0xFFFBE3), Color(rgbInt: 0xFFE8A0), Color(rgbInt: 0xC7EC8A)],
+                           startPoint: .top, endPoint: .bottom)
+            RadialGradient(colors: [.white.opacity(0.95), .clear], center: UnitPoint(x: 0.85, y: 0.02), startRadius: 10, endRadius: 340)
+            RadialGradient(colors: [(glow ?? Color(rgbInt: 0xFFB347)).opacity(0.35), .clear], center: UnitPoint(x: 0.0, y: 0.55),
+                           startRadius: 10, endRadius: 360)
+            GeometryReader { geo in
+                let w = geo.size.width, h = geo.size.height
+                ZStack {
+                    CitrusSlice(peel: 0xFF9A1F, flesh: 0xFFC14D).frame(width: 240, height: 240)
+                        .rotationEffect(.degrees(spin ? 12 : -12)).position(x: w + 30, y: h * 0.16)
+                    CitrusSlice(peel: 0x6DB935, flesh: 0xB8E36A).frame(width: 200, height: 200)
+                        .rotationEffect(.degrees(spin ? -10 : 10)).position(x: -30, y: h * 0.62)
+                    CitrusSlice(peel: 0xF2C200, flesh: 0xFFE680).frame(width: 170, height: 170)
+                        .rotationEffect(.degrees(spin ? 8 : -8)).position(x: w * 0.82, y: h + 30)
+                }
+                .opacity(0.85)
+                .animation(.easeInOut(duration: 9).repeatForever(autoreverses: true), value: spin)
+                Canvas { g, size in
+                    var rng = SeededRandom(seed: 33)
+                    for _ in 0..<24 {
+                        let r = CGFloat(rng.next() * 26 + 6)
+                        let p = CGPoint(x: CGFloat(rng.next()) * size.width, y: CGFloat(rng.next()) * size.height)
+                        g.fill(Path(ellipseIn: CGRect(x: p.x - r, y: p.y - r, width: r * 2, height: r * 2)),
+                               with: .radialGradient(Gradient(colors: [.white.opacity(0.55), .white.opacity(0)]),
+                                                     center: p, startRadius: 0, endRadius: r))
+                    }
+                }
+            }
+        }
+        .onAppear { spin = true }
+    }
+}
+
+/// A glossy citrus wheel: peel, pith, juicy segments, and a wet shine.
+struct CitrusSlice: View {
+    var peel: Int
+    var flesh: Int
+    var body: some View {
+        Canvas { g, size in
+            let c = CGPoint(x: size.width / 2, y: size.height / 2), r = min(size.width, size.height) / 2
+            g.fill(Path(ellipseIn: CGRect(x: 0, y: 0, width: r * 2, height: r * 2)), with: .color(Color(rgbInt: peel)))
+            g.fill(Path(ellipseIn: CGRect(x: r * 0.08, y: r * 0.08, width: r * 1.84, height: r * 1.84)), with: .color(Color(rgbInt: 0xFFF8E1)))
+            for i in 0..<10 {
+                let a0 = Double(i) * .pi / 5 + 0.05, a1 = a0 + .pi / 5 - 0.1
+                var seg = Path()
+                seg.move(to: c)
+                seg.addArc(center: c, radius: r * 0.86, startAngle: .radians(a0), endAngle: .radians(a1), clockwise: false)
+                seg.closeSubpath()
+                g.fill(seg, with: .radialGradient(Gradient(colors: [Color(rgbInt: flesh).opacity(0.75), Color(rgbInt: flesh)]),
+                                                  center: c, startRadius: 0, endRadius: r))
+            }
+            var shine = Path()
+            shine.addEllipse(in: CGRect(x: r * 0.3, y: r * 0.15, width: r * 1.0, height: r * 0.5))
+            g.fill(shine, with: .linearGradient(Gradient(colors: [.white.opacity(0.7), .white.opacity(0)]),
+                                                startPoint: CGPoint(x: c.x, y: r * 0.15), endPoint: CGPoint(x: c.x, y: r * 0.65)))
+        }
+    }
+}
+
+/// The shared glossy shapes of the Aero themes.
+enum AquaGloss {
+    /// A soap bubble: a thin bright rim, a faint body, a highlight top-left and a glint bottom-right.
+    static func bubble(_ g: inout GraphicsContext, center c: CGPoint, radius r: CGFloat) {
+        let rect = CGRect(x: c.x - r, y: c.y - r, width: r * 2, height: r * 2)
+        g.fill(Path(ellipseIn: rect), with: .radialGradient(Gradient(colors: [.white.opacity(0.05), .white.opacity(0.12), .white.opacity(0.55)]),
+                                                            center: c, startRadius: 0, endRadius: r))
+        g.stroke(Path(ellipseIn: rect), with: .color(.white.opacity(0.8)), lineWidth: max(1, r * 0.06))
+        let hi = CGRect(x: c.x - r * 0.62, y: c.y - r * 0.7, width: r * 0.7, height: r * 0.42)
+        g.fill(Path(ellipseIn: hi), with: .color(.white.opacity(0.85)))
+        g.fill(Path(ellipseIn: CGRect(x: c.x + r * 0.35, y: c.y + r * 0.35, width: r * 0.22, height: r * 0.22)),
+               with: .color(.white.opacity(0.6)))
+    }
+
+    /// A raindrop on glass: a dark lower edge, a clear body and a bright highlight.
+    static func drop(_ g: inout GraphicsContext, center c: CGPoint, radius r: CGFloat) {
+        let rect = CGRect(x: c.x - r, y: c.y - r * 1.1, width: r * 2, height: r * 2.2)
+        g.fill(Path(ellipseIn: rect.offsetBy(dx: 0, dy: r * 0.25)), with: .color(Color(rgbInt: 0x0D3B3A).opacity(0.12)))
+        g.fill(Path(ellipseIn: rect), with: .radialGradient(Gradient(colors: [.white.opacity(0.15), .white.opacity(0.45)]),
+                                                            center: CGPoint(x: c.x, y: c.y + r * 0.3), startRadius: 0, endRadius: r * 1.2))
+        g.fill(Path(ellipseIn: CGRect(x: c.x - r * 0.5, y: c.y - r * 0.75, width: r * 0.55, height: r * 0.45)),
+               with: .color(.white.opacity(0.9)))
     }
 }
 
@@ -640,7 +865,7 @@ extension View {
 struct AccentButtonStyle: ButtonStyle {
     var height: CGFloat = 50
     func makeBody(configuration: Configuration) -> some View {
-        let glossy = [AppStyle.aero, .aurora, .neon, .pastel].contains(Theme.style)
+        let glossy = [AppStyle.aero, .aurora, .neon, .pastel, .bubble, .raindrop, .citrus].contains(Theme.style)
         return configuration.label
             .font(Theme.font(17, .heavy))
             .foregroundStyle(Theme.onAccent)
