@@ -7,6 +7,7 @@ import SwiftUI
 /// background while they're selected, your colour for them, encounters and unbonding.
 struct PartnerDetailView: View {
     @EnvironmentObject var model: AppModel
+    @EnvironmentObject var together: TogetherStore
     @EnvironmentObject var store: LocalStore
     @AppStorage("glassClarity") private var glassClarity = 0.55
     @AppStorage("glassShadow") private var glassShadow = 0.6
@@ -71,6 +72,15 @@ struct PartnerDetailView: View {
                         }
 
                         PartnerStatusCard(partner: partner)
+
+                        if let since = together.space(partner.id).togetherSince {
+                            VStack(spacing: 8) {
+                                TogetherCounter(since: since)
+                                ForEach(together.space(partner.id).dates.filter { !$0.deleted }
+                                    .sorted { $0.daysUntil() < $1.daysUntil() }.prefix(2)) { SpecialDateRow(date: $0) }
+                            }
+                            .padding(16).frame(maxWidth: .infinity).glass(cornerRadius: 22)
+                        }
 
                         HStack(spacing: 12) {
                             Image(systemName: "location.fill").foregroundStyle(Theme.title)

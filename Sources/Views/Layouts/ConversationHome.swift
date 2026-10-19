@@ -15,6 +15,7 @@ struct ConversationHome: View {
     var body: some View {
         VStack(spacing: 10) {
             header
+            TogetherChip()
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(spacing: 8) {

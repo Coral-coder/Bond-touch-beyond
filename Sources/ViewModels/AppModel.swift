@@ -206,6 +206,8 @@ final class AppModel: ObservableObject {
     let heartLibrary = HeartLibrary()
     let location = LocationService()
     let relay = CloudRelay()
+    /// The shared Us space (dates, likes, to-dos, notes, whiteboard, chess) per partner.
+    let together = TogetherStore()
 
     /// Location sharing — on unless the user turned it off. Kept in the Keychain, so it stays
     /// as set across updates and reinstalls.
@@ -447,6 +449,7 @@ final class AppModel: ObservableObject {
     private var inForeground: Bool { UIApplication.shared.applicationState != .background }
 
     private func runBootstrap() async {
+        startTogetherSync()
         loadMyPhoto()
         bracelet.startScanning()
         // The original backend works without iCloud, so start it first and independently.
@@ -1014,6 +1017,7 @@ final class AppModel: ObservableObject {
             if let seen = events.partnerSeenTouch { markSeen(bondID: partner.id, upTo: seen) }
             if let seen = events.partnerSeenMessage { partnerSeenMessage[partner.id] = seen }
             if let shared = events.partnerMeanings { mergeMeanings(shared, bondID: partner.id) }
+            receiveTogether(space: events.space, board: events.board, bondID: partner.id)
             if let p = events.presence {
                 cloudPartners[index].presence = p
                 cloudPartners[index].online = p.online

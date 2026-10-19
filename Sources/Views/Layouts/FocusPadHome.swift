@@ -28,6 +28,7 @@ struct FocusPadHome: View {
                         Text(p.displayName).font(Theme.font(22, .heavy)).foregroundStyle(Theme.title)
                         Text([model.statusText(p), model.distanceText(to: p)].compactMap { $0 }.joined(separator: " · "))
                             .font(Theme.font(12)).foregroundStyle(Theme.subtitle).lineLimit(1)
+                        TogetherChip()
                     }
                 }
                 .buttonStyle(.plain)

@@ -25,6 +25,7 @@ struct OneHandHome: View {
                 RoundIconButton(icon: "person.2.fill", label: "People", size: 40) { people = true }
             }
             .padding(.top, 8)
+            TogetherChip()
 
             ambient.frame(maxHeight: .infinity)
 

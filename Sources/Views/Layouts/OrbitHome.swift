@@ -111,6 +111,7 @@ struct OrbitHome: View {
                             .buttonStyle(.plain).accessibilityLabel("Replay the last touch")
                     }
                 }
+                TogetherChip()
                 MeaningChipRow(height: 32)
                 InlineTouchPad(shape: .bar, title: "Touch \(p.displayName)", hint: "tap & slide").frame(height: 52)
             }

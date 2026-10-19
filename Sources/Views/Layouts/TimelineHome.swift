@@ -21,6 +21,7 @@ struct TimelineHome: View {
                     Text([model.distanceText(to: model.selectedPartner), store.meetText(for: model.selectedPartnerID)]
                             .compactMap { $0 }.joined(separator: " · "))
                         .font(Theme.font(11)).foregroundStyle(Theme.subtitle).lineLimit(1)
+                    TogetherChip()
                 }
                 .frame(maxWidth: .infinity)
                 MyFace(size: 46)

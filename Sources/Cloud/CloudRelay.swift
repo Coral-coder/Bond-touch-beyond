@@ -24,6 +24,9 @@ import Foundation
 ///   Cursor     L-R-cur       newest touch and message numbers
 ///   Touch      L-R-t-<n>     touch ring, slot n = number % 50
 ///   Message    L-R-m-<n>     chat ring, slot n = number % 50
+///   Profile    L-R-sx        the shared "Us" space (dates, likes, to-dos, notes, chess)
+///   Profile    L-R-wb        the shared whiteboard
+/// (The Us records reuse the Profile type — it only holds sealed bytes — so no schema change.)
 /// The schema (cloudkit.ckdb) gives every type one encrypted BYTES field, `payload`.
 actor CloudRelay {
     static let ringSize = 50
@@ -45,6 +48,9 @@ actor CloudRelay {
         var partnerSeenMessage: Int?
         /// The partner's copy of the shared Touch Language, when their profile changed.
         var partnerMeanings: [TouchMeaning]?
+        /// The partner's copy of the Us space and whiteboard, when they changed.
+        var space: TogetherSpace?
+        var board: Whiteboard?
     }
 
     /// The record kinds, each its own CloudKit record type.
@@ -335,6 +341,15 @@ actor CloudRelay {
                                                                       meanings: meanings), bond.id))
     }
 
+    /// This phone's copy of the Us space / whiteboard (the partner merges it into theirs).
+    func sendSpace(_ space: TogetherSpace, bond: Bond) async throws {
+        try await put(mine(bond, "sx", .profile), seal(space, bond.id))
+    }
+
+    func sendBoard(_ board: Whiteboard, bond: Bond) async throws {
+        try await put(mine(bond, "wb", .profile), seal(board, bond.id))
+    }
+
     private static func hash(_ data: Data) -> String {
         SHA256.hash(data: data).prefix(8).map { String(format: "%02x", $0) }.joined()
     }
@@ -414,7 +429,10 @@ actor CloudRelay {
         var events = RelayEvents()
         let cursorRef = theirs(bond, "cur", .cursor), heartbeatRef = theirs(bond, "hb", .heartbeat)
         let presenceRef = theirs(bond, "pr", .presence), profileRef = theirs(bond, "pf", .profile)
-        let found = try await get([cursorRef, heartbeatRef, presenceRef, profileRef])
+        let spaceRef = theirs(bond, "sx", .profile), boardRef = theirs(bond, "wb", .profile)
+        let found = try await get([cursorRef, heartbeatRef, presenceRef, profileRef, spaceRef, boardRef])
+        if let rec = found[spaceRef.id], isNew(rec) { events.space = open(TogetherSpace.self, rec, code) }
+        if let rec = found[boardRef.id], isNew(rec) { events.board = open(Whiteboard.self, rec, code) }
 
         if let rec = found[heartbeatRef.id], isNew(rec), let p = open(HeartbeatPayload.self, rec, code) {
             events.latestBPM = p.bpm

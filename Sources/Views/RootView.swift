@@ -57,6 +57,7 @@ struct RootView: View {
                 Group {
                     switch tab {
                     case .home: HomeRouter()
+                    case .us: NavigationStack { TogetherView().screenBackground() }
                     case .touches: MeaningsView()
                     case .map: MapTabView()
                     // Chat lives inside Private Space, behind its lock, as the original.

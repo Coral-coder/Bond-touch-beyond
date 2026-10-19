@@ -6,6 +6,7 @@ import SwiftUI
 struct BentoHome: View {
     @EnvironmentObject var model: AppModel
     @EnvironmentObject var store: LocalStore
+    @EnvironmentObject var together: TogetherStore
     @State private var people = false
     @State private var partnerSheet = false
     @State private var compose = false
@@ -35,6 +36,7 @@ struct BentoHome: View {
                             }
                         }
                         .frame(height: 160)
+                        togetherTile(p)
                         heartbeatTile(p)
                         lastTouchTile
                     }
@@ -75,6 +77,19 @@ struct BentoHome: View {
             .glass(cornerRadius: 24)
         }
         .buttonStyle(.plain)
+    }
+
+    @ViewBuilder private func togetherTile(_ p: Partner) -> some View {
+        if let since = together.space(p.id).togetherSince {
+            VStack(spacing: 6) {
+                TogetherCounter(since: since)
+                if let next = together.space(p.id).dates.filter({ !$0.deleted }).min(by: { $0.daysUntil() < $1.daysUntil() }) {
+                    SpecialDateRow(date: next)
+                }
+            }
+            .padding(14).frame(maxWidth: .infinity)
+            .glass(cornerRadius: 24)
+        }
     }
 
     private func stat(_ label: String, _ value: String) -> some View {

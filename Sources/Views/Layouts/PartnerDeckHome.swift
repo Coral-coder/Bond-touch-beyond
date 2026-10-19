@@ -88,6 +88,7 @@ struct PartnerDeckHome: View {
                             Text(p.displayName).font(Theme.font(28, .heavy)).foregroundStyle(.white)
                             Text([model.statusText(p), model.distanceText(to: p)].compactMap { $0 }.joined(separator: " · "))
                                 .font(Theme.font(12, .semibold)).foregroundStyle(.white.opacity(0.85)).lineLimit(2)
+                            if model.selectedPartnerID == p.id { TogetherChip() }
                         }
                     }
                 }

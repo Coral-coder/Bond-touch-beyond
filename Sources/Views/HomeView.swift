@@ -225,6 +225,7 @@ struct HomeView: View {
                             Text(meetText).font(Theme.font(13, .semibold)).foregroundStyle(Theme.subtitle)
                         }
                         .buttonStyle(.plain)
+                        TogetherChip().padding(.top, 4)
                     }
                     Spacer()
                     if let distanceText {

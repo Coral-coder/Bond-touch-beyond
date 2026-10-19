@@ -74,6 +74,27 @@ actor APNsClient {
         }
     }
 
+    /// A silent background push: no banner, no sound — just wakes the partner's app to sync
+    /// (the shared Us space changed). iOS may delay or drop these; the regular poll catches up.
+    @discardableResult
+    func sendBackground(toDeviceToken deviceToken: String, topic: String = AppConfig.bundleID,
+                        extra: [String: Any] = [:]) async -> Bool {
+        guard APNsSecrets.isConfigured, !deviceToken.isEmpty, let jwt = currentToken(),
+              let url = URL(string: "\(host)/3/device/\(deviceToken)") else { return false }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("bearer \(jwt)", forHTTPHeaderField: "authorization")
+        request.setValue(topic, forHTTPHeaderField: "apns-topic")
+        request.setValue("background", forHTTPHeaderField: "apns-push-type")
+        request.setValue("5", forHTTPHeaderField: "apns-priority")
+        var payload: [String: Any] = extra
+        payload["aps"] = ["content-available": 1]
+        request.httpBody = try? JSONSerialization.data(withJSONObject: payload)
+        let code = ((try? await URLSession.shared.data(for: request))?.1 as? HTTPURLResponse)?.statusCode ?? -1
+        if code == 403 { cachedToken = nil }
+        return code == 200
+    }
+
     // MARK: - Provider token (ES256 JWT, cached ~50 min)
 
     private func currentToken() -> String? {
