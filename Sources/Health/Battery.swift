@@ -96,7 +96,9 @@ final class BatteryService: ObservableObject {
 
     /// Reads the body side from Health (asks for access the first time).
     func refresh() async {
-        guard HKHealthStore.isHealthDataAvailable() else { return }
+        // Demo mode runs unsigned in the simulator, without the HealthKit entitlement, where
+        // asking for access ends the app.
+        guard HKHealthStore.isHealthDataAvailable(), !ProcessInfo.processInfo.arguments.contains("-demo") else { return }
         try? await store.requestAuthorization(toShare: [], read: [hrvType, rhrType, sleepType])
         let ms = HKUnit.secondUnit(with: .milli)
         let monthAgo = Date().addingTimeInterval(-30 * 86_400), dayAgo = Date().addingTimeInterval(-36 * 3600)
