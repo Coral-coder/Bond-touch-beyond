@@ -336,6 +336,18 @@ struct ComposeTouchView: View {
         return "Touch the bar to start"
     }
 
+    private var canClear: Bool { recorder.recording || !pending.isEmpty || !lastTouch.isEmpty }
+
+    /// Throws away the touch being drawn or waiting to be sent, to start again.
+    private func clear() {
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        sendRequested = false
+        recorder.cancel()
+        pending = []
+        lastTouch = []
+        sentAt = nil
+    }
+
     private var canSend: Bool {
         if mode == .createMeaning { return recorder.recording }
         return (recorder.recording && !recorder.samples.isEmpty) || !pending.isEmpty
@@ -365,6 +377,19 @@ struct ComposeTouchView: View {
             }
             .padding(16)
             .glass(cornerRadius: 28)
+            .overlay(alignment: .topTrailing) {
+                Button { clear() } label: {
+                    Label("Clear", systemImage: "xmark.circle.fill")
+                        .font(Theme.font(12, .bold)).foregroundStyle(Theme.title)
+                        .padding(.horizontal, 10).frame(height: 28)
+                        .background(Capsule().fill(Theme.ink.opacity(0.12)))
+                }
+                .buttonStyle(.plain)
+                .padding(10)
+                .opacity(canClear ? 1 : 0.35)
+                .disabled(!canClear)
+                .accessibilityLabel("Clear the touch")
+            }
 
             HStack(alignment: .center, spacing: 24) {
                 TouchBarSurface(recorder: recorder, vertical: true,
