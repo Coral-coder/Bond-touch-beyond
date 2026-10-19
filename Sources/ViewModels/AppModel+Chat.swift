@@ -1,5 +1,7 @@
 import CloudKit
 import Foundation
+import UIKit
+import UserNotifications
 
 /// Chat runs over iCloud for every partner. A partner on the original Bond Touch app is
 /// linked to an iCloud bond (invite them, or link one you already share) and chat with them
@@ -129,7 +131,21 @@ extension AppModel {
         if fresh.contains(where: { $0.senderID != myUserID && $0.senderID != ChatMessage.legacySelf
                                    && Date().timeIntervalSince($0.sentAt) < 5 * 60 }) {
             notifyBracelet(bondID: bondID)
+            notifyChatLocally(bondID: bondID)
         }
+    }
+
+    /// A message picked up from iCloud (its push may not have come through): a notification
+    /// that never shows what was said. Same id as the push's, so it's never doubled.
+    private func notifyChatLocally(bondID: String) {
+        guard UIApplication.shared.applicationState != .active else { return }
+        let content = UNMutableNotificationContent()
+        content.title = partners.first { $0.id == bondID }?.displayName ?? "Your partner"
+        content.body = "New message in Private Space"
+        content.sound = .default
+        content.interruptionLevel = .timeSensitive
+        let id = "m-\(BondCrypto.locator(forCode: bondID).prefix(16))"
+        UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: id, content: content, trigger: nil))
     }
 
     // MARK: - Bracelet notifications

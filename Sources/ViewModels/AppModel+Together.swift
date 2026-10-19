@@ -24,15 +24,26 @@ final class TogetherStore: ObservableObject {
     func space(_ bondID: String?) -> TogetherSpace { bondID.flatMap { spaces[$0] } ?? TogetherSpace() }
     func board(_ bondID: String?) -> Whiteboard { bondID.flatMap { boards[$0] } ?? Whiteboard() }
 
-    /// Changes the space for `bondID` here, and sends it.
-    func edit(_ bondID: String?, _ change: (inout TogetherSpace) -> Void) {
+    /// What changed, per bond, for the partner's notification ("added a to-do").
+    private var notes: [String: [String]] = [:]
+
+    /// Changes the space for `bondID` here, and sends it. `note` (e.g. "added a to-do ✅")
+    /// becomes a notification on the partner's phone.
+    func edit(_ bondID: String?, note: String? = nil, _ change: (inout TogetherSpace) -> Void) {
         guard let bondID else { return }
         var s = space(bondID)
         change(&s)
         guard s != spaces[bondID] else { return }
         spaces[bondID] = s
         Self.save(spaces, "together.json")
+        if let note { notes[bondID, default: []].append(note) }
         schedule(bondID, space: true)
+    }
+
+    /// The notes collected since the last send for `bondID`, cleared.
+    func takeNotes(_ bondID: String) -> [String] {
+        defer { notes[bondID] = nil }
+        return notes[bondID] ?? []
     }
 
     func editBoard(_ bondID: String?, _ change: (inout Whiteboard) -> Void) {
@@ -117,13 +128,26 @@ extension AppModel {
         do {
             if space { try await relay.sendSpace(together.space(bondID), bond: partner.bond) }
             if board { try await relay.sendBoard(together.board(bondID), bond: partner.bond) }
-            if let token = partnerPushTokens[bondID], !token.isEmpty {
+            // A visible notification for what changed (it also wakes their app to sync);
+            // otherwise just a silent nudge.
+            let notes = together.takeNotes(bondID)
+            if let last = notes.last {
+                await notifyPartner(bondID, notes.count > 1 ? "\(last) and \(notes.count - 1) more update\(notes.count == 2 ? "" : "s")" : last)
+            } else if let token = partnerPushTokens[bondID], !token.isEmpty {
                 await APNsClient.shared.sendBackground(toDeviceToken: token, extra: ["bl": BondCrypto.locator(forCode: bondID), "us": 1])
             }
         } catch {
             NetLog.shared.log(.fail, "iCloud: Us space not sent", error.localizedDescription)
         }
         if space { scheduleDateReminders() }
+    }
+
+    /// A notification on the partner's phone: "Sam added a to-do ✅". Never the content of
+    /// notes or chat — just what kind of thing changed.
+    func notifyPartner(_ bondID: String?, _ text: String) async {
+        guard let bondID else { return }
+        let me = store.profile.name.isEmpty ? "Your partner" : store.profile.name
+        await pushPartner(bondID: bondID, title: "💞 Us", body: "\(me) \(text)", group: "u", sound: "default")
     }
 
     /// Merges what the partner's phone sent (called from the iCloud poll).

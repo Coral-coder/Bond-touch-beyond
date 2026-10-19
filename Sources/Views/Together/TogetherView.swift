@@ -9,6 +9,7 @@ struct TogetherView: View {
     @EnvironmentObject var store: LocalStore
     @State private var pickingStart = false
     @State private var addingDate = false
+    @State private var editingDate: SpecialDate?
 
     private var partner: Partner? { model.selectedPartner }
     private var space: TogetherSpace { together.space(model.selectedPartnerID) }
@@ -45,6 +46,7 @@ struct TogetherView: View {
         .toolbar(.hidden, for: .navigationBar)
         .sheet(isPresented: $pickingStart) { TogetherStartSheet() }
         .sheet(isPresented: $addingDate) { SpecialDateEditor(date: nil) }
+        .sheet(item: $editingDate) { SpecialDateEditor(date: $0) }
     }
 
     // MARK: Header: you two and the live counter
@@ -96,7 +98,9 @@ struct TogetherView: View {
                 Text("Add your anniversary and both birthdays — you'll get a reminder a week before and on the day.")
                     .font(Theme.font(13)).foregroundStyle(Theme.subtitle)
             }
-            ForEach(upcoming.prefix(3)) { d in SpecialDateRow(date: d) }
+            ForEach(upcoming.prefix(3)) { d in
+                Button { editingDate = d } label: { SpecialDateRow(date: d) }.buttonStyle(.plain)
+            }
         }
         .padding(16)
         .glass(cornerRadius: Theme.cardCorner)
@@ -258,8 +262,12 @@ struct TogetherStartSheet: View {
         NavigationStack {
             VStack(spacing: 16) {
                 Text("When did you get together?").font(Theme.font(20, .heavy)).foregroundStyle(Theme.title)
+                Text("Scroll the day, month and year.").font(Theme.font(13)).foregroundStyle(Theme.subtitle)
                 DatePicker("", selection: $date, in: ...Date(), displayedComponents: .date)
-                    .datePickerStyle(.graphical).tint(Theme.accent)
+                    .datePickerStyle(.wheel).labelsHidden()
+                    .padding(.vertical, 6).glass(cornerRadius: 22)
+                Text(TogetherSpace.durationText(since: date) + " together")
+                    .font(Theme.font(15, .bold)).foregroundStyle(Theme.accent)
                 Spacer()
             }
             .padding()
@@ -269,11 +277,20 @@ struct TogetherStartSheet: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") {
                         let id = model.selectedPartnerID
-                        together.edit(id) { s in
+                        together.edit(id, note: "updated when you got together 💞") { s in
+                            let old = s.togetherSince
                             s.togetherSince = date
                             s.togetherSinceEdited = Date()
-                            // The day you got together is your anniversary — add it once.
-                            if !s.dates.contains(where: { $0.kind == .anniversary && !$0.deleted }) {
+                            // The day you got together is your anniversary: move the one that was
+                            // on the old day (or the only one), or add it.
+                            let cal = Calendar.current
+                            let anniversaries = s.dates.indices.filter { s.dates[$0].kind == .anniversary && !s.dates[$0].deleted }
+                            let match = anniversaries.first { i in old.map { cal.isDate(s.dates[i].date, inSameDayAs: $0) } ?? false }
+                                ?? (anniversaries.count == 1 ? anniversaries.first : nil)
+                            if let i = match {
+                                s.dates[i].date = date
+                                s.dates[i].edited = Date()
+                            } else if anniversaries.isEmpty {
                                 s.dates.append(SpecialDate(title: "Our anniversary", date: date, kind: .anniversary))
                             }
                         }
@@ -297,7 +314,7 @@ struct SpecialDateRow: View {
                 .foregroundStyle(date.kind == .birthday ? Theme.amber : Theme.pink).frame(width: 30)
             VStack(alignment: .leading, spacing: 1) {
                 Text(date.title).font(Theme.font(15, .bold)).foregroundStyle(Theme.title)
-                Text([date.next().formatted(date: .abbreviated, time: .omitted), date.ordinalText()].compactMap { $0 }.joined(separator: " · "))
+                Text([date.date.formatted(date: .abbreviated, time: .omitted), date.ordinalText()].compactMap { $0 }.joined(separator: " · "))
                     .font(Theme.font(12)).foregroundStyle(Theme.subtitle)
             }
             Spacer()
@@ -321,7 +338,7 @@ struct SpecialDatesView: View {
                     .listRowBackground(Theme.ink.opacity(0.06))
                     .swipeActions {
                         Button(role: .destructive) {
-                            together.edit(model.selectedPartnerID) { s in
+                            together.edit(model.selectedPartnerID, note: "removed \(d.title) from your dates") { s in
                                 if let i = s.dates.firstIndex(where: { $0.id == d.id }) { s.dates[i].deleted = true; s.dates[i].edited = Date() }
                             }
                         } label: { Label("Delete", systemImage: "trash") }
@@ -355,7 +372,12 @@ struct SpecialDateEditor: View {
                 }
                 .pickerStyle(.segmented)
                 TextField(kind == .birthday ? "Whose birthday? e.g. Alex's birthday" : "Title, e.g. First date", text: $title)
-                DatePicker("Date", selection: $day, displayedComponents: .date)
+                Section {
+                    DatePicker("Date", selection: $day, displayedComponents: .date)
+                        .datePickerStyle(.wheel).labelsHidden().frame(maxWidth: .infinity)
+                } header: {
+                    Text(day.formatted(date: .long, time: .omitted))
+                }
                 Toggle("Every year", isOn: $yearly)
                 Picker("Remind me", selection: $remind) {
                     Text("On the day").tag(0)
@@ -363,6 +385,14 @@ struct SpecialDateEditor: View {
                     Text("3 days before too").tag(3)
                     Text("1 week before too").tag(7)
                     Text("2 weeks before too").tag(14)
+                }
+                if let date {
+                    Button("Delete this date", role: .destructive) {
+                        together.edit(model.selectedPartnerID, note: "removed \(date.title) from your dates") { s in
+                            if let i = s.dates.firstIndex(where: { $0.id == date.id }) { s.dates[i].deleted = true; s.dates[i].edited = Date() }
+                        }
+                        dismiss()
+                    }
                 }
             }
             .scrollContentBackground(.hidden)
@@ -374,7 +404,8 @@ struct SpecialDateEditor: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") {
                         let t = title.trimmingCharacters(in: .whitespaces)
-                        together.edit(model.selectedPartnerID) { s in
+                        let name = t.isEmpty ? kind.title : t
+                        together.edit(model.selectedPartnerID, note: date == nil ? "added \(name) to your dates 📅" : "changed \(name) 📅") { s in
                             if let date, let i = s.dates.firstIndex(where: { $0.id == date.id }) {
                                 s.dates[i].title = t.isEmpty ? kind.title : t
                                 s.dates[i].date = day; s.dates[i].kind = kind; s.dates[i].yearly = yearly
@@ -423,7 +454,7 @@ struct LikesView: View {
             TextField("e.g. Peonies", text: $value)
             Button("Add") {
                 guard let owner = addingFor, !label.isEmpty || !value.isEmpty else { return }
-                together.edit(id) { $0.likes.append(Preference(owner: owner, label: label, value: value)) }
+                together.edit(id, note: "added something to What we like ✨") { $0.likes.append(Preference(owner: owner, label: label, value: value)) }
                 label = ""; value = ""
             }
             Button("Cancel", role: .cancel) { label = ""; value = "" }
@@ -491,7 +522,7 @@ struct TodoListView: View {
                 ForEach(items.sorted { ($0.done ? 1 : 0, $0.created) < ($1.done ? 1 : 0, $1.created) }) { t in
                     Button {
                         UISelectionFeedbackGenerator().selectionChanged()
-                        together.edit(id) { s in
+                        together.edit(id, note: t.done ? nil : "ticked off a to-do ✅") { s in
                             if let i = s.todos.firstIndex(where: { $0.id == t.id }) { s.todos[i].done.toggle(); s.todos[i].edited = Date() }
                         }
                     } label: {
@@ -524,7 +555,7 @@ struct TodoListView: View {
         let t = text.trimmingCharacters(in: .whitespaces)
         guard !t.isEmpty else { return }
         let id = model.selectedPartnerID
-        together.edit(id) { $0.todos.append(TodoItem(text: t, by: model.myRole(id))) }
+        together.edit(id, note: "added a to-do ✅") { $0.todos.append(TodoItem(text: t, by: model.myRole(id))) }
         text = ""
     }
 }
@@ -563,7 +594,7 @@ struct SharedNotesView: View {
         .toolbar {
             Button {
                 let note = SharedNote(title: "", body: "")
-                together.edit(id) { $0.notes.append(note) }
+                together.edit(id, note: "started a new note 📝") { $0.notes.append(note) }
                 openID = note.id
             } label: { Image(systemName: "square.and.pencil") }
         }
@@ -596,6 +627,10 @@ struct SharedNoteEditor: View {
         }
         .onChange(of: title) { _ in save() }
         .onChange(of: text) { _ in save() }
+        // One notification for a round of edits, when you leave the note.
+        .onDisappear {
+            if lastTyped != .distantPast { Task { await model.notifyPartner(model.selectedPartnerID, "updated a note 📝") } }
+        }
         // The partner edited it while it's open: show theirs if it's newer than what we typed.
         .onChange(of: together.space(model.selectedPartnerID).notes.first(where: { $0.id == noteID })) { n in
             guard loaded, let n, n.title != title || n.body != text, Date().timeIntervalSince(lastTyped) > 3 else { return }

@@ -55,12 +55,12 @@ struct ChessView: View {
         .navigationTitle("Chess")
         .navigationBarTitleDisplayMode(.inline)
         .confirmationDialog("Start a new game? The current one ends for both of you.", isPresented: $confirmNew, titleVisibility: .visible) {
-            Button("New game") { together.edit(bondID) { $0.chess = ChessGame() }; selected = nil }
+            Button("New game") { together.edit(bondID, note: "started a new chess game ♟️") { $0.chess = ChessGame() }; selected = nil }
         }
         .confirmationDialog("Resign this game?", isPresented: $confirmResign, titleVisibility: .visible) {
             Button("Resign", role: .destructive) {
                 let me = model.myRole(bondID)
-                together.edit(bondID) { s in s.chess?.resigned = me; s.chess?.edited = Date() }
+                together.edit(bondID, note: "resigned the chess game 🏳️") { s in s.chess?.resigned = me; s.chess?.edited = Date() }
             }
         }
     }
@@ -99,7 +99,10 @@ struct ChessView: View {
         guard myTurn, position.status != .checkmate, position.status != .stalemate else { return }
         if let from = selected, let move = position.legalMoves(from: from).first(where: { $0.to == sq && ($0.promo == nil || $0.promo == "q") }) {
             UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-            together.edit(bondID) { s in
+            var after = position
+            after.apply(move)
+            let note = after.status == .checkmate ? "checkmated you ♟️" : after.status == .check ? "put you in check ♟️ — your move" : "made a chess move ♟️ — your turn"
+            together.edit(bondID, note: note) { s in
                 if s.chess == nil { s.chess = ChessGame() }
                 s.chess?.moves.append(move.uci)
                 s.chess?.edited = Date()

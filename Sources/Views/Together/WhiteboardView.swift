@@ -9,6 +9,8 @@ struct WhiteboardView: View {
     @State private var rgb = 0xEC5A89
     @State private var width = 4.0
     @State private var confirmClear = false
+    /// Drew something this visit: one notification for the partner when you leave.
+    @State private var drew = false
 
     private static let colors = [0xEC5A89, 0xB173DF, 0x57C3BB, 0x3D8BD9, 0x9FD257, 0xECA94B, 0xFF6B6B, 0x111111, 0xFFFFFF]
 
@@ -58,6 +60,10 @@ struct WhiteboardView: View {
         .padding(16).padding(.bottom, 84)
         .navigationTitle("Whiteboard")
         .navigationBarTitleDisplayMode(.inline)
+        .onDisappear {
+            if drew { Task { await model.notifyPartner(model.selectedPartnerID, "drew on the whiteboard 🎨 — come look") } }
+            drew = false
+        }
         .confirmationDialog("Clear the whiteboard for both of you?", isPresented: $confirmClear, titleVisibility: .visible) {
             Button("Clear", role: .destructive) { together.editBoard(id) { $0.clearedAt = Date(); $0.strokes = [] } }
         }
@@ -90,6 +96,7 @@ struct WhiteboardView: View {
         let stroke = Whiteboard.Stroke(rgb: rgb, width: width, points: flat, by: model.myRole(model.selectedPartnerID))
         current = []
         together.editBoard(model.selectedPartnerID) { $0.strokes.append(stroke) }
+        drew = true
     }
 
     private func undo() {

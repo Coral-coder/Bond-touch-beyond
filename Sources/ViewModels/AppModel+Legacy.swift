@@ -461,6 +461,7 @@ extension AppModel {
             var m = meaning
             m.updatedAt = Date()
             changeCloudLibrary(bond.id) { $0.append(m) }
+            Task { await notifyPartner(bond.id, "added \u{201C}\(m.label)\u{201D} to your Touch Language 🫶") }
             return
         }
         do {
@@ -495,6 +496,7 @@ extension AppModel {
             var m = meaning
             m.updatedAt = Date()
             changeCloudLibrary(bond.id) { lib in if let i = lib.firstIndex(where: { $0.id == m.id }) { lib[i] = m } }
+            Task { await notifyPartner(bond.id, "changed \u{201C}\(m.label)\u{201D} in your Touch Language 🫶") }
         } else if let i = store.meanings.firstIndex(where: { $0.id == meaning.id }) {
             store.meanings[i] = meaning
         }
@@ -506,6 +508,7 @@ extension AppModel {
             changeCloudLibrary(bond.id) { lib in
                 if let i = lib.firstIndex(where: { $0.id == meaning.id }) { lib[i].deleted = true; lib[i].updatedAt = Date() }
             }
+            Task { await notifyPartner(bond.id, "removed \u{201C}\(meaning.label)\u{201D} from your Touch Language") }
             return
         }
         guard let bond = selectedPartner?.bond, bond.legacy, let serverID = meaning.serverID else {
