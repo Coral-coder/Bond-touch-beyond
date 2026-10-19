@@ -83,7 +83,10 @@ struct PrivateSpaceView: View {
             }
             .buttonStyle(.plain)
         }
-        .padding(Metric.buttonMargin)
+        .padding(.horizontal, Metric.buttonMargin)
+        .padding(.top, Metric.buttonMargin)
+        // Clear of the floating tab bar, so Setup is never under it.
+        .padding(.bottom, 104)
     }
 
     // MARK: Passcode entry
