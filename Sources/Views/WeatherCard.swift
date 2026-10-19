@@ -8,12 +8,12 @@ struct WeatherCard: View {
     var compact = false
 
     var body: some View {
-        if let w = partner.presence?.weather {
+        if let w = model.weather(for: partner) {
             if compact { compactView(w) } else { fullView(w) }
         } else {
             HStack(spacing: 10) {
                 Image(systemName: "cloud.sun.fill").symbolRenderingMode(.multicolor).font(.system(size: 24))
-                Text("\(partner.displayName)'s weather shows up here once their app shares it (Settings → Share my weather).")
+                Text("\(partner.displayName)'s weather shows up here when they share their location (Map tab) or their weather.")
                     .font(Theme.font(12)).foregroundStyle(Theme.subtitle)
             }
             .padding(14).frame(maxWidth: .infinity, alignment: .leading)
@@ -31,9 +31,9 @@ struct WeatherCard: View {
 
     private func compactView(_ w: WeatherInfo) -> some View {
         HStack(spacing: 10) {
-            Image(systemName: WeatherInfo.symbol(w.code, isDay: w.isDay)).symbolRenderingMode(.multicolor).font(.system(size: 26))
+            Image(systemName: w.symbol).symbolRenderingMode(.multicolor).font(.system(size: 26))
             VStack(alignment: .leading, spacing: 1) {
-                Text("\(WeatherInfo.degrees(w.temp)) · \(WeatherInfo.text(w.code))").font(Theme.font(15, .heavy)).foregroundStyle(Theme.title)
+                Text("\(WeatherInfo.degrees(w.temp)) · \(w.summary)").font(Theme.font(15, .heavy)).foregroundStyle(Theme.title)
                 Text([w.place, localTime(w).map { "\($0) there" }].compactMap { $0 }.joined(separator: " · "))
                     .font(Theme.font(11)).foregroundStyle(Theme.subtitle).lineLimit(1)
             }
@@ -55,10 +55,10 @@ struct WeatherCard: View {
                 if let t = localTime(w) { Text("\(t) there").font(Theme.font(12, .semibold)).foregroundStyle(Theme.subtitle) }
             }
             HStack(spacing: 12) {
-                Image(systemName: WeatherInfo.symbol(w.code, isDay: w.isDay)).symbolRenderingMode(.multicolor).font(.system(size: 40))
+                Image(systemName: w.symbol).symbolRenderingMode(.multicolor).font(.system(size: 40))
                 VStack(alignment: .leading, spacing: 0) {
                     Text(WeatherInfo.degrees(w.temp)).font(Theme.font(34, .heavy)).foregroundStyle(Theme.title)
-                    Text(WeatherInfo.text(w.code)).font(Theme.font(13, .semibold)).foregroundStyle(Theme.subtitle)
+                    Text(w.summary).font(Theme.font(13, .semibold)).foregroundStyle(Theme.subtitle)
                 }
                 Spacer()
                 VStack(alignment: .trailing, spacing: 6) {
@@ -66,7 +66,7 @@ struct WeatherCard: View {
                         HStack(spacing: 6) {
                             Text(d.date.formatted(.dateTime.weekday(.abbreviated))).font(Theme.font(11, .bold)).foregroundStyle(Theme.subtitle)
                                 .frame(width: 30, alignment: .leading)
-                            Image(systemName: WeatherInfo.symbol(d.code)).symbolRenderingMode(.multicolor).font(.system(size: 13))
+                            Image(systemName: d.symbol).symbolRenderingMode(.multicolor).font(.system(size: 13))
                             Text("\(WeatherInfo.degrees(d.high)) \(WeatherInfo.degrees(d.low))").font(Theme.font(11, .semibold))
                                 .foregroundStyle(Theme.title).monospacedDigit()
                         }
@@ -77,14 +77,17 @@ struct WeatherCard: View {
                 ForEach(w.hours.prefix(7), id: \.at) { h in
                     VStack(spacing: 4) {
                         Text(hourLabel(h.at, w)).font(Theme.font(10, .bold)).foregroundStyle(Theme.subtitle)
-                        Image(systemName: WeatherInfo.symbol(h.code, isDay: h.isDay)).symbolRenderingMode(.multicolor).font(.system(size: 15))
+                        Image(systemName: h.symbol).symbolRenderingMode(.multicolor).font(.system(size: 15))
                         Text(WeatherInfo.degrees(h.temp)).font(Theme.font(12, .heavy)).foregroundStyle(Theme.title)
                     }
                     .frame(maxWidth: .infinity)
                 }
             }
+            Link(destination: URL(string: "https://weatherkit.apple.com/legal-attribution.html")!) {
+                Text("\(Image(systemName: "apple.logo")) Weather · data sources").font(Theme.font(10)).foregroundStyle(Theme.subtitle)
+            }
             if let mine = model.myWeather {
-                Text("You: \(WeatherInfo.degrees(mine.temp)) \(WeatherInfo.text(mine.code).lowercased())\(mine.place.map { " in \($0)" } ?? "")")
+                Text("You: \(WeatherInfo.degrees(mine.temp)) \(mine.summary.lowercased())\(mine.place.map { " in \($0)" } ?? "")")
                     .font(Theme.font(11)).foregroundStyle(Theme.subtitle)
             }
         }

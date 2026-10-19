@@ -240,15 +240,15 @@ struct WeatherWidgetView: View {
         if let w = entry.snapshot?.weather {
             switch family {
             case .accessoryInline:
-                Text("\(Image(systemName: WeatherInfo.symbol(w.code, isDay: w.isDay))) \(WeatherInfo.degrees(w.temp)) \(w.place ?? name)")
+                Text("\(Image(systemName: w.symbol)) \(WeatherInfo.degrees(w.temp)) \(w.place ?? name)")
             case .accessoryRectangular:
                 VStack(alignment: .leading, spacing: 1) {
                     HStack(spacing: 4) {
-                        Image(systemName: WeatherInfo.symbol(w.code, isDay: w.isDay))
+                        Image(systemName: w.symbol)
                         Text(WeatherInfo.degrees(w.temp)).font(.headline)
                     }
                     Text(w.place ?? name).font(.caption).lineLimit(1)
-                    Text(WeatherInfo.text(w.code)).font(.caption2).lineLimit(1)
+                    Text(w.summary).font(.caption2).lineLimit(1)
                 }
                 .accessoryBackground()
             default:
@@ -256,16 +256,16 @@ struct WeatherWidgetView: View {
                     HStack {
                         Text(w.place ?? name).font(Theme.font(13, .heavy)).foregroundStyle(Theme.title).lineLimit(1)
                         Spacer(minLength: 2)
-                        Image(systemName: WeatherInfo.symbol(w.code, isDay: w.isDay)).symbolRenderingMode(.multicolor)
+                        Image(systemName: w.symbol).symbolRenderingMode(.multicolor)
                     }
                     Text(WeatherInfo.degrees(w.temp)).font(Theme.font(34, .heavy)).foregroundStyle(Theme.title)
-                    Text(WeatherInfo.text(w.code) + (w.high.map { " · H \(WeatherInfo.degrees($0))" } ?? ""))
+                    Text(w.summary + (w.high.map { " · H \(WeatherInfo.degrees($0))" } ?? ""))
                         .font(Theme.font(11, .semibold)).foregroundStyle(Theme.subtitle).lineLimit(1)
                     Spacer(minLength: 0)
                     HStack(spacing: 0) {
                         ForEach(w.hours.prefix(family == .systemSmall ? 4 : 7), id: \.at) { h in
                             VStack(spacing: 2) {
-                                Image(systemName: WeatherInfo.symbol(h.code, isDay: h.isDay)).symbolRenderingMode(.multicolor)
+                                Image(systemName: h.symbol).symbolRenderingMode(.multicolor)
                                     .font(.system(size: 12))
                                 Text(WeatherInfo.degrees(h.temp)).font(Theme.font(10, .bold)).foregroundStyle(Theme.title)
                             }

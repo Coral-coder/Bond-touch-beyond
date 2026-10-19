@@ -210,6 +210,8 @@ final class AppModel: ObservableObject {
     let together = TogetherStore()
     /// The weather here, shared with partners in the status snapshot (Settings can turn it off).
     @Published var myWeather: WeatherInfo?
+    /// The weather where each partner is, looked up here from the location they share.
+    @Published var partnerWeather: [String: WeatherInfo] = [:]
 
     /// Location sharing — on unless the user turned it off. Kept in the Keychain, so it stays
     /// as set across updates and reinstalls.
@@ -565,7 +567,23 @@ final class AppModel: ObservableObject {
     func refreshMyWeather() async {
         guard UserDefaults.standard.object(forKey: "shareWeather") as? Bool ?? true, let fix = location.roughFix else { return }
         if let w = myWeather, Date().timeIntervalSince(w.fetchedAt) < 30 * 60 { return }
-        if let w = await WeatherService.shared.weather(at: fix) { myWeather = w }
+        if let w = await WeatherFetcher.shared.weather(at: fix, key: "me") { myWeather = w }
+    }
+
+    /// The weather where each partner is, from the location they share (looked up on this
+    /// phone with WeatherKit, every 30 minutes at most).
+    func refreshPartnerWeather() async {
+        for p in partners {
+            guard let lat = p.latitude, let lng = p.longitude else { continue }
+            if let w = await WeatherFetcher.shared.weather(at: CLLocation(latitude: lat, longitude: lng), key: p.id) {
+                if partnerWeather[p.id] != w { partnerWeather[p.id] = w }
+            }
+        }
+    }
+
+    /// Their weather: looked up here from their location, else what their phone shares.
+    func weather(for partner: Partner) -> WeatherInfo? {
+        partnerWeather[partner.id] ?? partner.presence?.weather
     }
 
     /// Writes the status snapshot to every iCloud partner. `force: false` (location updates)
@@ -979,7 +997,10 @@ final class AppModel: ObservableObject {
     }
 
     func refreshAll() async {
-        defer { autoLinkPartners() }
+        defer {
+            autoLinkPartners()
+            Task { await refreshPartnerWeather() }
+        }
         // An invite we created: once the partner's profile appears, they've joined — make
         // them a partner (no relaunch needed).
         for bond in cloudPending {

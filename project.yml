@@ -129,6 +129,8 @@ targets:
         com.apple.developer.icloud-container-environment: Production
         com.apple.developer.ubiquity-kvstore-identifier: $(TeamIdentifierPrefix)$(CFBundleIdentifier)
         aps-environment: production
+        # WeatherKit: the weather where your partner is (enabled on the App ID).
+        com.apple.developer.weatherkit: true
         com.apple.developer.healthkit: true
         com.apple.developer.healthkit.access: []
         # The app's own group first (where its Keychain items have always lived), then the

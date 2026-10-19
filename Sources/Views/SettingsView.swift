@@ -604,7 +604,7 @@ private struct ShareWeatherCard: View {
             Toggle(isOn: Binding(get: { share }, set: { share = $0; Task { await model.publishPresence(force: true) } })) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Share my weather").foregroundStyle(Theme.title)
-                    Text("Partners see the weather where you are — your town, now and the next days. Looked up from Open-Meteo with your position rounded to about 10 km.")
+                    Text("Partners who don't see your location still see the weather where you are — your town, now and the next days (Apple Weather).")
                         .font(.caption).foregroundStyle(Theme.subtitle)
                 }
             }

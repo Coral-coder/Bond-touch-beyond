@@ -19,6 +19,7 @@ extension AppModel {
             store.$meanings.map { _ in () }.eraseToAnyPublisher(),
             $history.map { _ in () }.eraseToAnyPublisher(),
             together.$spaces.map { _ in () }.eraseToAnyPublisher(),
+            $partnerWeather.map { _ in () }.eraseToAnyPublisher(),
         ]
         Publishers.MergeMany(changes)
             .debounce(for: .seconds(1), scheduler: DispatchQueue.main)
@@ -45,7 +46,7 @@ extension AppModel {
                                            colorRGB: t.colorRGB, endColorRGB: t.endColorRGB,
                                            label: t.meaningLabel, emoji: t.meaningEmoji, bpm: t.heartbeatBPM, at: t.sentAt)
             }
-            snapshot.weather = partner.presence?.weather
+            snapshot.weather = weather(for: partner)
             let space = together.space(partner.id)
             let next = space.dates.filter { !$0.deleted }.min { $0.daysUntil() < $1.daysUntil() }
             if space.togetherSince != nil || next != nil {

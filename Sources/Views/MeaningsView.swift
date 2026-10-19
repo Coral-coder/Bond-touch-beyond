@@ -9,6 +9,9 @@ struct MeaningsView: View {
     @State private var showAdd = false
     @State private var pendingDelete: TouchMeaning?
     @State private var editing: TouchMeaning?
+    @State private var drawing = false
+    @State private var drawn: [Int]?
+    @State private var drawnName = ""
 
     /// Favourites first, as the original library.
     private var sorted: [TouchMeaning] {
@@ -31,13 +34,17 @@ struct MeaningsView: View {
                             .font(Theme.font(32, .heavy))
                             .foregroundStyle(Theme.title)
                         Spacer()
-                        Button { showAdd = true } label: {
+                        Menu {
+                            Button { showAdd = true } label: { Label("Record a touch", systemImage: "hand.tap") }
+                            Button { drawing = true } label: { Label("Draw a touch", systemImage: "scribble") }
+                        } label: {
                             Image(systemName: "plus")
                                 .font(.system(size: 18, weight: .bold))
                                 .foregroundStyle(Theme.accent)
                                 .frame(width: 46, height: 46)
                                 .glass(Circle())
                         }
+                        .accessibilityLabel("Add a touch")
                     }
                     .padding(.top, 8)
 
@@ -67,6 +74,25 @@ struct MeaningsView: View {
             }
         }
         .fullScreenCover(isPresented: $showAdd) { ComposeTouchView(mode: .createMeaning) }
+        .sheet(isPresented: $drawing) {
+            PatternDrawer(colorRGB: store.profile.colorRGB, endColorRGB: store.profile.colorRGB) { samples in
+                // Name it once the drawing sheet has closed.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { drawn = samples }
+            }
+        }
+        .alert("Name this touch", isPresented: Binding(get: { drawn != nil }, set: { if !$0 { drawn = nil } })) {
+            TextField("e.g. Love you", text: $drawnName)
+            Button("Save") {
+                if let pattern = drawn {
+                    let m = TouchMeaning(label: drawnName.isEmpty ? "Touch" : String(drawnName.prefix(20)), emoji: "",
+                                         colorRGB: store.profile.colorRGB, endColorRGB: store.profile.colorRGB,
+                                         pattern: pattern, isNew: true, generation: 3)
+                    Task { await model.addMeaning(m) }
+                }
+                drawnName = ""; drawn = nil
+            }
+            Button("Cancel", role: .cancel) { drawnName = ""; drawn = nil }
+        }
         .sheet(item: $editing) { m in
             EditMeaningSheet(meaning: m) { edited in Task { await model.updateMeaning(edited) } }
         }
@@ -154,6 +180,9 @@ private struct EditMeaningSheet: View {
     @State private var emoji = ""
     @State private var start: Color = .pink
     @State private var end: Color = .pink
+    @State private var pattern: [Int] = []
+    @State private var generation = 2
+    @State private var redrawing = false
 
     private static let maxName = 20
     private var trimmed: String { label.trimmingCharacters(in: .whitespaces) }
@@ -170,8 +199,10 @@ private struct EditMeaningSheet: View {
                 Section("Colours") {
                     ColorPicker("Start", selection: $start, supportsOpacity: false)
                     ColorPicker("End", selection: $end, supportsOpacity: false)
-                    TouchViz(pattern: meaning.pattern, generation: meaning.touchGeneration,
-                             colorRGB: start.rgbInt, endColorRGB: end.rgbInt)
+                }
+                Section("Pattern") {
+                    TouchViz(pattern: pattern, generation: generation, colorRGB: start.rgbInt, endColorRGB: end.rgbInt, height: 44)
+                    Button { redrawing = true } label: { Label("Edit the pattern", systemImage: "scribble") }
                 }
             }
             .navigationTitle("Edit touch")
@@ -185,6 +216,10 @@ private struct EditMeaningSheet: View {
                         m.emoji = emoji
                         m.colorRGB = start.rgbInt
                         m.endColorRGB = end.rgbInt
+                        if pattern != meaning.pattern || generation != meaning.touchGeneration {
+                            m.pattern = pattern
+                            m.generation = generation
+                        }
                         onSave(m)
                         dismiss()
                     }
@@ -195,6 +230,14 @@ private struct EditMeaningSheet: View {
         .onAppear {
             label = meaning.label; emoji = meaning.emoji
             start = Color(rgbInt: meaning.colorRGB); end = Color(rgbInt: meaning.endColorRGB)
+            if pattern.isEmpty { pattern = meaning.pattern; generation = meaning.touchGeneration }
+        }
+        .sheet(isPresented: $redrawing) {
+            PatternDrawer(initial: pattern, initialGeneration: generation, colorRGB: start.rgbInt, endColorRGB: end.rgbInt,
+                          title: "Edit pattern") { samples in
+                pattern = samples
+                generation = 3
+            }
         }
         .preferredColorScheme(Theme.colorScheme)
     }
