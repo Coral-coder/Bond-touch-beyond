@@ -94,6 +94,13 @@ final class WatchBridge: NSObject, WCSessionDelegate {
               WCSession.default.isPaired, WCSession.default.isWatchAppInstalled else { return }
         var message = Self.encode(touch, model: model)
         message["type"] = "received"
+        // A partner's touch with the complication on the watch face: send it as complication
+        // data, which wakes the watch app in the background to update the face (a daily budget).
+        if (message["mine"] as? Bool) == false, !WCSession.default.isReachable, WCSession.default.isComplicationEnabled,
+           WCSession.default.remainingComplicationUserInfoTransfers > 0 {
+            WCSession.default.transferCurrentComplicationUserInfo(message)
+            return
+        }
         if WCSession.default.isReachable {
             WCSession.default.sendMessage(message, replyHandler: nil) { _ in WCSession.default.transferUserInfo(message) }
         } else {

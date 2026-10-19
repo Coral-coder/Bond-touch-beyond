@@ -257,6 +257,11 @@ final class PhoneLink: NSObject, ObservableObject, WCSessionDelegate {
             guard !list.contains(where: { $0.id == touch.id }) else { return }
             list.append(touch)
             self.history[touch.bondID] = Array(list.suffix(30))
+            if !touch.mine {
+                ComplicationTouch(from: self.partners.first { $0.id == touch.bondID }?.name ?? "Partner",
+                                  pattern: touch.pattern, generation: touch.generation, startRGB: touch.startRGB,
+                                  endRGB: touch.endRGB, label: touch.label, bpm: touch.bpm, at: touch.sentAt).save()
+            }
             // Felt straight away when the watch is standing in, or the app is open on the wrist.
             if !touch.mine, Date().timeIntervalSince(touch.sentAt) < 120,
                StandIn.shared.on || WKApplication.shared().applicationState == .active {

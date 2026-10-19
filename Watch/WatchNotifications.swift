@@ -29,7 +29,13 @@ final class TouchNotificationController: WKUserNotificationHostingController<Tou
     override func didReceive(_ notification: UNNotification) {
         title = notification.request.content.title
         touch = WatchTouch(notification: notification.request.content.userInfo)
-        if let touch { WatchHaptics.alert(touch) }
+        if let touch {
+            WatchHaptics.alert(touch)
+            // "Alex touched you" → "Alex", for the watch face.
+            let name = title.components(separatedBy: " ").first ?? title
+            ComplicationTouch(from: name, pattern: touch.pattern, generation: touch.generation, startRGB: touch.startRGB,
+                              endRGB: touch.endRGB, label: touch.label, bpm: touch.bpm, at: touch.sentAt).save()
+        }
         notificationActions = [UNNotificationAction(identifier: "feel-again", title: "Feel it again", options: [.foreground])]
     }
 }
