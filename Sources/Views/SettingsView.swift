@@ -598,9 +598,21 @@ struct MyPhotoPicker: View {
 private struct ShareWeatherCard: View {
     @EnvironmentObject var model: AppModel
     @AppStorage("shareWeather") private var share = true
+    @AppStorage(Units.key) private var units = "auto"
 
     var body: some View {
         GlassCard(padding: 20) {
+            VStack(alignment: .leading, spacing: 14) {
+            HStack {
+                Text("Units").foregroundStyle(Theme.title)
+                Spacer()
+                Picker("Units", selection: Binding(get: { units }, set: { units = $0; model.writeWidgetSnapshot() })) {
+                    Text("Automatic").tag("auto")
+                    Text("Imperial (°F, mi)").tag("imperial")
+                    Text("Metric (°C, km)").tag("metric")
+                }
+                .tint(Theme.accent)
+            }
             Toggle(isOn: Binding(get: { share }, set: { share = $0; Task { await model.publishPresence(force: true) } })) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Share my weather").foregroundStyle(Theme.title)
@@ -609,6 +621,7 @@ private struct ShareWeatherCard: View {
                 }
             }
             .tint(Theme.accent)
+            }
         }
     }
 }

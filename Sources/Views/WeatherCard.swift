@@ -1,4 +1,15 @@
+import MapKit
 import SwiftUI
+
+extension Units {
+    /// "1,092 km" or "679 mi".
+    static func distanceText(_ meters: CLLocationDistance) -> String {
+        let f = MKDistanceFormatter()
+        f.units = imperial ? .imperial : .metric
+        f.unitStyle = .abbreviated
+        return f.string(fromDistance: meters)
+    }
+}
 
 /// The weather where your partner is: now, the next hours and the next days, with their
 /// local time — from the status their phone shares. `compact` is a one-row version.

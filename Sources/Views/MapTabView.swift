@@ -196,7 +196,7 @@ struct MapTabView: View {
         if let me = model.location.coordinate, let lat = p.latitude, let lng = p.longitude {
             let m = CLLocation(latitude: me.latitude, longitude: me.longitude)
                 .distance(from: CLLocation(latitude: lat, longitude: lng))
-            parts.append(MKDistanceFormatter().string(fromDistance: m))
+            parts.append(Units.distanceText(m))
         }
         return parts.joined(separator: " · ")
     }

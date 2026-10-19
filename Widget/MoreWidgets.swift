@@ -13,6 +13,7 @@ struct SnapshotProvider: TimelineProvider {
 
     func getSnapshot(in context: Context, completion: @escaping (SnapshotEntry) -> Void) {
         let s = WidgetShared.loadSnapshot()
+        Units.override = s?.units
         completion(SnapshotEntry(date: Date(), snapshot: context.isPreview && s?.partner == nil ? .sample : s))
     }
 
@@ -22,6 +23,7 @@ struct SnapshotProvider: TimelineProvider {
         let now = Date()
         let midnight = Calendar.current.startOfDay(for: now.addingTimeInterval(86_400)).addingTimeInterval(5)
         let s = WidgetShared.loadSnapshot()
+        Units.override = s?.units
         completion(Timeline(entries: [SnapshotEntry(date: now, snapshot: s), SnapshotEntry(date: midnight, snapshot: s)],
                             policy: .after(midnight)))
     }

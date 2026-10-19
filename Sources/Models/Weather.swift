@@ -24,12 +24,24 @@ struct WeatherInfo: Codable, Equatable {
     /// The phone's time zone, so their local time can be shown.
     var timeZone: String?
 
-    /// "18°" in the viewer's own units.
+    /// "64°" or "18°", in the units picked in Settings (Automatic follows the phone's region).
     static func degrees(_ celsius: Double) -> String {
-        let m = Measurement(value: celsius, unit: UnitTemperature.celsius)
-        let f = MeasurementFormatter()
-        f.numberFormatter.maximumFractionDigits = 0
-        f.unitOptions = .temperatureWithoutUnit
-        return f.string(from: m)
+        let value = Units.imperial ? celsius * 9 / 5 + 32 : celsius
+        return "\(Int(value.rounded()))°"
+    }
+}
+
+/// Imperial (°F, miles) or metric (°C, km): Settings → Units. "auto" follows the region.
+enum Units {
+    static let key = "units"
+    /// Set by the widgets from the app's snapshot (they don't share the app's settings).
+    static var override: String?
+    static var choice: String { override ?? UserDefaults.standard.string(forKey: key) ?? "auto" }
+    static var imperial: Bool {
+        switch choice {
+        case "imperial": return true
+        case "metric": return false
+        default: return Locale.current.measurementSystem == .us
+        }
     }
 }

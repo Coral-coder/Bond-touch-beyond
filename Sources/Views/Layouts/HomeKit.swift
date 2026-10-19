@@ -86,7 +86,7 @@ extension AppModel {
     func distanceText(to partner: Partner?) -> String? {
         guard let a = location.coordinate, let lat = partner?.latitude, let lng = partner?.longitude else { return nil }
         let meters = CLLocation(latitude: a.latitude, longitude: a.longitude).distance(from: CLLocation(latitude: lat, longitude: lng))
-        return MKDistanceFormatter().string(fromDistance: meters) + " apart"
+        return Units.distanceText(meters) + " apart"
     }
 
     /// "Online · bracelet on" style status for a partner.

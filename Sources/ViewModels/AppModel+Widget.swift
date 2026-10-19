@@ -38,6 +38,7 @@ extension AppModel {
 
     func writeWidgetSnapshot() {
         var snapshot = WidgetSnapshot(partner: nil, meanings: [])
+        snapshot.units = Units.choice
         if let partner = selectedPartner ?? partners.first {
             snapshot.partner = .init(id: partner.id, name: partner.displayName, colorRGB: partner.colorRGB,
                                      photo: widgetThumbnail(bondID: partner.id))

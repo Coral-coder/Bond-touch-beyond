@@ -203,7 +203,7 @@ struct HomeView: View {
         guard let a = myCoordinate, let b = partnerCoordinate else { return nil }
         let meters = CLLocation(latitude: a.latitude, longitude: a.longitude)
             .distance(from: CLLocation(latitude: b.latitude, longitude: b.longitude))
-        return MKDistanceFormatter().string(fromDistance: meters) + " apart"
+        return Units.distanceText(meters) + " apart"
     }
 
     private var pairCard: some View {

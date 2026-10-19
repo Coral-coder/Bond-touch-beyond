@@ -206,6 +206,8 @@ struct WidgetSnapshot: Codable, Equatable {
     var together: Together? = nil
     /// The weather where the partner is.
     var weather: WeatherInfo? = nil
+    /// Settings → Units ("auto", "imperial" or "metric").
+    var units: String? = nil
 }
 
 enum WidgetSendState: String, Codable {

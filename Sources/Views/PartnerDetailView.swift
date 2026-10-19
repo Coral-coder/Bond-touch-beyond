@@ -28,7 +28,7 @@ struct PartnerDetailView: View {
         guard let me = model.location.coordinate, let lat = partner?.latitude, let lng = partner?.longitude else { return nil }
         let meters = CLLocation(latitude: me.latitude, longitude: me.longitude)
             .distance(from: CLLocation(latitude: lat, longitude: lng))
-        return MKDistanceFormatter().string(fromDistance: meters)
+        return Units.distanceText(meters)
     }
 
     private var useBackground: Binding<Bool> {
