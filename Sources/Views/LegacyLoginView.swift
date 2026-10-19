@@ -36,7 +36,7 @@ struct LegacyLoginView: View {
 
     private var emailStep: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("Hi there! 👋\nLet's get you connected.")
+            Text("Hi there!\nLet's get you connected.")
                 .font(.title2.bold()).foregroundStyle(Theme.title)
             Text("Sign in with the email on your original Bond Touch account.")
                 .font(.subheadline).foregroundStyle(Theme.subtitle)

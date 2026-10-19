@@ -25,7 +25,7 @@ struct BattleshipView: View {
                 }
                 Button("New game") { confirmNew = true }.font(Theme.font(13, .bold)).foregroundStyle(Theme.accent)
             }
-            .padding(16).padding(.bottom, 90)
+            .padding(16)
         }
         .navigationTitle("Battleship").navigationBarTitleDisplayMode(.inline)
         .onAppear { model.answerBattleship(bondID) }
@@ -45,8 +45,8 @@ struct BattleshipView: View {
                 draft.contains { $0.contains(c) } ? AnyView(shipCell) : AnyView(waterCell)
             }, tap: nil)
             HStack(spacing: 12) {
-                Button("Shuffle 🔀") { draft = BattleshipGame.randomFleet() }.buttonStyle(GlassButtonStyle(height: 48))
-                Button("Ready ⚓️") { ready() }.buttonStyle(AccentButtonStyle(height: 48))
+                Button("Shuffle") { draft = BattleshipGame.randomFleet() }.buttonStyle(GlassButtonStyle(height: 48))
+                Button("Ready") { ready() }.buttonStyle(AccentButtonStyle(height: 48))
             }
         }
     }
@@ -71,8 +71,8 @@ struct BattleshipView: View {
         grid(cell: { c in
             switch mine[c] {
             case "m": return AnyView(ZStack { waterCell; Circle().fill(.white.opacity(0.7)).frame(width: 7, height: 7) })
-            case .some(let r) where r.hasPrefix("s"): return AnyView(ZStack { Rectangle().fill(Color(rgbInt: 0x7A1E2A)); Text("💥").font(.system(size: 14)) })
-            case "h": return AnyView(ZStack { waterCell; Text("💥").font(.system(size: 16)) })
+            case .some(let r) where r.hasPrefix("s"): return AnyView(ZStack { Rectangle().fill(Color(rgbInt: 0x7A1E2A)); Image(systemName: "xmark").font(.system(size: 12, weight: .heavy)).foregroundStyle(.white) })
+            case "h": return AnyView(ZStack { waterCell; Image(systemName: "flame.fill").font(.system(size: 13)).foregroundStyle(Color(rgbInt: 0xFF7A2E)) })
             default:
                 let pending = g.shots(by: me).contains(c)
                 return AnyView(ZStack { waterCell; if pending { ProgressView().scaleEffect(0.6) } })
@@ -84,7 +84,7 @@ struct BattleshipView: View {
             return AnyView(ZStack {
                 ship ? AnyView(shipCell) : AnyView(waterCell)
                 if theirs.contains(c) {
-                    if ship { Text("🔥").font(.system(size: 14)) } else { Circle().fill(.white.opacity(0.7)).frame(width: 7, height: 7) }
+                    if ship { Image(systemName: "flame.fill").font(.system(size: 11)).foregroundStyle(Color(rgbInt: 0xFF7A2E)) } else { Circle().fill(.white.opacity(0.7)).frame(width: 7, height: 7) }
                 }
             })
         }, tap: nil, small: true)
@@ -99,9 +99,9 @@ struct BattleshipView: View {
     }
 
     private func status(_ g: BattleshipGame) -> String {
-        if let w = g.winner { return w == me ? "You sank their fleet! 🎉" : "\(name) sank your fleet" }
+        if let w = g.winner { return w == me ? "You sank their fleet!" : "\(name) sank your fleet" }
         if !g.ready(them) { return "Waiting for \(name) to place their fleet…" }
-        if g.turn == me { return "Your shot 🎯" }
+        if g.turn == me { return "Your shot" }
         if g.turn == nil { return "Waiting for the answer…" }
         return "Waiting for \(name)…"
     }

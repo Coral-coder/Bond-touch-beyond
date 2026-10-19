@@ -32,7 +32,7 @@ struct BackgammonView: View {
             HStack(spacing: 12) {
                 ForEach(Array(pos.dice.enumerated()), id: \.offset) { _, d in die(d) }
                 if myTurn && !pos.rolled {
-                    Button("Roll the dice 🎲") { roll() }.buttonStyle(AccentButtonStyle(height: 46))
+                    Button("Roll the dice") { roll() }.buttonStyle(AccentButtonStyle(height: 46))
                 }
                 if targets.contains(pos.offPoint) {
                     Button("Bear off") { move(to: pos.offPoint, pos: pos) }.buttonStyle(AccentButtonStyle(height: 46))
@@ -47,7 +47,7 @@ struct BackgammonView: View {
             .font(Theme.font(12)).foregroundStyle(Theme.subtitle)
             Spacer(minLength: 0)
         }
-        .padding(16).padding(.bottom, 84)
+        .padding(16)
         .navigationTitle("Backgammon").navigationBarTitleDisplayMode(.inline)
         .confirmationDialog("Start a new game of backgammon?", isPresented: $confirmNew, titleVisibility: .visible) {
             Button("New game") { together.edit(bondID, note: "started a new game of backgammon 🎲") { $0.backgammon = ChessGame() }; selected = nil }
@@ -168,7 +168,7 @@ struct BackgammonView: View {
     }
 
     private func status(_ p: BackgammonPosition, myTurn: Bool) -> String {
-        if let w = p.winner { return w == model.myRole(bondID) ? "You win! 🎉" : "\(model.selectedPartner?.displayName ?? "They") won" }
+        if let w = p.winner { return w == model.myRole(bondID) ? "You win!" : "\(model.selectedPartner?.displayName ?? "They") won" }
         if !myTurn { return "Waiting for \(model.selectedPartner?.displayName ?? "them")…" }
         return p.rolled ? "Move your checkers" : "Your roll"
     }

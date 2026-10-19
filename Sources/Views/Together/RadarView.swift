@@ -25,7 +25,7 @@ struct RadarView: View {
                     .buttonStyle(AccentButtonStyle(height: 52))
                 if !sessions.isEmpty { history }
             }
-            .padding(16).padding(.bottom, 90)
+            .padding(16)
         }
         .navigationTitle("R.A.D.A.R.")
         .fullScreenCover(isPresented: $running) { RadarSessionView().screenBackground() }
@@ -33,7 +33,7 @@ struct RadarView: View {
 
     private var intro: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("📡 Your regular check-in").font(Theme.font(18, .heavy)).foregroundStyle(Theme.title)
+            Label("Your regular check-in", systemImage: "dot.radiowaves.left.and.right").font(Theme.font(18, .heavy)).foregroundStyle(Theme.title)
             let rows = [["R", "Review", "how things have been since last time"],
                         ["A", "Agenda", "pick what you both want to talk about"],
                         ["D", "Discuss", "one topic at a time, with a gentle timer"],
@@ -125,7 +125,7 @@ struct RadarView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(s.created.formatted(date: .long, time: .omitted)).font(Theme.font(14, .bold)).foregroundStyle(Theme.title)
                     if !s.discussed.isEmpty { Text("Talked about: " + s.discussed.joined(separator: ", ")).font(Theme.font(12)).foregroundStyle(Theme.subtitle) }
-                    ForEach(s.actions, id: \.self) { a in Text("✅ \(a)").font(Theme.font(12)).foregroundStyle(Theme.title) }
+                    ForEach(s.actions, id: \.self) { a in Label(a, systemImage: "checkmark.circle").font(Theme.font(12)).foregroundStyle(Theme.title) }
                 }
                 .padding(.vertical, 4)
             }
@@ -192,9 +192,9 @@ struct RadarSessionView: View {
     private var review: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("Look back together since your last check-in. Take turns; just listen.").font(Theme.font(13)).foregroundStyle(Theme.subtitle)
-            field("Highlights 🌟", "What felt good, what you appreciated…", $session.highlights)
-            field("Challenges 🌧️", "What was hard, what you missed…", $session.challenges)
-            field("Coming up 📅", "Trips, busy weeks, dates with other partners…", $session.comingUp)
+            field("Highlights", "What felt good, what you appreciated…", $session.highlights)
+            field("Challenges", "What was hard, what you missed…", $session.challenges)
+            field("Coming up", "Trips, busy weeks, dates with other partners…", $session.comingUp)
         }
     }
 
@@ -258,7 +258,7 @@ struct RadarSessionView: View {
                     .padding(10).background(RoundedRectangle(cornerRadius: 12).fill(Theme.ink.opacity(0.06)))
                 Button(action: addAction) { Image(systemName: "plus.circle.fill").font(.title2).foregroundStyle(Theme.accent) }
             }
-            ForEach(session.actions, id: \.self) { a in Text("✅ \(a)").font(Theme.font(15)).foregroundStyle(Theme.title) }
+            ForEach(session.actions, id: \.self) { a in Label(a, systemImage: "checkmark.circle").font(Theme.font(15)).foregroundStyle(Theme.title) }
         }
     }
 
@@ -272,8 +272,8 @@ struct RadarSessionView: View {
     private var reconnect: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("End close. Pick something to do right after:").font(Theme.font(13)).foregroundStyle(Theme.subtitle)
-            ForEach(["A long hug 🤗", "Send each other a touch 💞", "Plan your next date 🍝", "A walk together 🚶",
-                     "Say one thing you love about them 💬", "Cuddle and a film 🎬"], id: \.self) { idea in
+            ForEach(["A long hug", "Send each other a touch", "Plan your next date", "A walk together",
+                     "Say one thing you love about them", "Cuddle and a film"], id: \.self) { idea in
                 Button { session.reconnect = idea } label: {
                     HStack {
                         Text(idea).font(Theme.font(15)).foregroundStyle(Theme.title)

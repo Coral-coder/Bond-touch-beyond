@@ -67,7 +67,7 @@ struct PrivateSpaceView: View {
             Spacer()
             Image(systemName: "lock.shield.fill").font(.system(size: 64)).foregroundStyle(.white)
             Text("Welcome to Private Space!").font(.title2.bold()).foregroundStyle(.white)
-            Text("This is a safe space just for you two. ❤️ Use it to share messages and photos privately.")
+            Text("This is a safe space just for you two. Use it to share messages and photos privately.")
                 .multilineTextAlignment(.center).foregroundStyle(.white.opacity(0.9))
             VStack(alignment: .leading, spacing: 6) {
                 Text("Cool features of Private Space:").font(.subheadline.bold()).foregroundStyle(.white)
@@ -85,8 +85,7 @@ struct PrivateSpaceView: View {
         }
         .padding(.horizontal, Metric.buttonMargin)
         .padding(.top, Metric.buttonMargin)
-        // Clear of the floating tab bar, so Setup is never under it.
-        .padding(.bottom, 104)
+        .padding(.bottom, 16)
     }
 
     // MARK: Passcode entry
@@ -112,8 +111,7 @@ struct PrivateSpaceView: View {
         }
         .padding(.horizontal, Metric.buttonMargin)
         .padding(.top, Metric.buttonMargin)
-        // Clear of the floating tab bar, so the bottom row (Face ID, 0, delete) is reachable.
-        .padding(.bottom, 104)
+        .padding(.bottom, 16)
     }
 
     private func keypad(allowBiometrics: Bool) -> some View {

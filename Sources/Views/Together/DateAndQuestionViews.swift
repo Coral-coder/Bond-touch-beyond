@@ -28,11 +28,11 @@ struct DateRouletteView: View {
             VStack(spacing: 14) {
                 wheel
                 filters
-                Button(spinning ? "Spinning…" : "Spin 🎰") { spin() }
+                Button(spinning ? "Spinning…" : "Spin") { spin() }
                     .buttonStyle(AccentButtonStyle(height: 52)).disabled(spinning || pool.isEmpty)
                 if let pick, !spinning {
                     HStack(spacing: 10) {
-                        Button("We did it! 🎉") { markDone(pick) }.buttonStyle(AccentButtonStyle(height: 44))
+                        Button("We did it") { markDone(pick) }.buttonStyle(AccentButtonStyle(height: 44))
                         Button("Add to to-dos") {
                             together.edit(id, note: "picked a date idea 🎲") { $0.todos.append(TodoItem(text: "Date: \(pick.text)", by: me)) }
                         }
@@ -41,7 +41,7 @@ struct DateRouletteView: View {
                 }
                 list
             }
-            .padding(16).padding(.bottom, 90)
+            .padding(16)
         }
         .navigationTitle("Date roulette")
     }
@@ -49,7 +49,8 @@ struct DateRouletteView: View {
     private var wheel: some View {
         let shown = spinning ? pool[safe: flicker % max(1, pool.count)] : pick
         return VStack(spacing: 8) {
-            Text(shown?.emoji ?? "🎲").font(.system(size: 64))
+            Image(systemName: "dice.fill").font(.system(size: 48)).foregroundStyle(Theme.accent)
+                .rotationEffect(.degrees(spinning ? Double(flicker * 40) : 0))
             Text(shown?.text ?? "Spin for a date idea").font(Theme.font(20, .heavy)).foregroundStyle(Theme.title)
                 .multilineTextAlignment(.center).frame(minHeight: 56)
             if let s = shown {
@@ -80,7 +81,6 @@ struct DateRouletteView: View {
             .padding(10).glass(cornerRadius: 14)
             ForEach(ideas.filter { !$0.done }) { idea in
                 HStack {
-                    Text(idea.emoji)
                     Text(idea.text).font(Theme.font(14)).foregroundStyle(Theme.title)
                     Spacer()
                     Button { remove(idea) } label: { Image(systemName: "minus.circle").foregroundStyle(Theme.subtitle) }
@@ -170,7 +170,7 @@ struct QuestionOfDayView: View {
                     }
                     if let theirs {
                         if mine != nil { answerRow(model.selectedPartner?.displayName ?? "Them", theirs.text) }
-                        else { Text("🔒 \(model.selectedPartner?.displayName ?? "They") answered — answer to see theirs")
+                        else { Label("\(model.selectedPartner?.displayName ?? "They") answered — answer to see theirs", systemImage: "lock.fill")
                             .font(Theme.font(13, .semibold)).foregroundStyle(Theme.accent) }
                     } else if mine != nil {
                         Text("Waiting for \(model.selectedPartner?.displayName ?? "them") to answer…").font(Theme.font(13)).foregroundStyle(Theme.subtitle)
@@ -179,7 +179,7 @@ struct QuestionOfDayView: View {
                 .padding(16).glass(cornerRadius: Theme.cardCorner)
                 past
             }
-            .padding(16).padding(.bottom, 90)
+            .padding(16)
         }
         .navigationTitle("Question of the day")
     }

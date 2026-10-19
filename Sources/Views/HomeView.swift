@@ -56,7 +56,7 @@ struct HomeView: View {
             ForEach(cards) { card($0) }
             if !cards.contains(.feed) { Spacer(minLength: 0) }
         }
-        .padding(.bottom, 92)   // clear of the floating tab bar
+        .padding(.bottom, 12)
         .sheet(isPresented: $editingCards) { HomeCardsEditor() }
         .sheet(isPresented: $showHeart) {
             NavigationStack { HeartView().navigationTitle("Heartbeat") }
@@ -284,7 +284,7 @@ struct HomeView: View {
                     .accessibilityLabel("Add a partner")
                 }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity).padding(.bottom, 60)
+            .frame(maxWidth: .infinity, maxHeight: .infinity).padding(.bottom, 12)
         }
     }
 

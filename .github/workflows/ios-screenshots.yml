@@ -85,7 +85,7 @@ jobs:
           done
           shot "tab-settings-open" -appStyle aero -demoTab settings -themePickerOpen 1 -layoutPickerOpen 1
           shot "tab-us-raindrop" -appStyle raindrop -demoTab us
-          for s in chess whiteboard todo notes likes dates compose draw partner weather homeCards people private; do
+          for s in chat games pool chess checkers backgammon battleship whiteboard todo notes likes dates radar battery jar love roulette question agreements repair memories polycal metamours story wavelength compose draw partner weather homeCards people private; do
             shot "screen-$s" -appStyle aero -demoScreen "$s"
           done
 

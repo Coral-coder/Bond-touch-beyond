@@ -80,13 +80,13 @@ struct MapTabView: View {
                 }
                 Spacer()
                 if let id = focused, let p = model.partners.first(where: { $0.id == id }) {
-                    focusCard(p).padding(.bottom, 92)
+                    focusCard(p).padding(.bottom, 12)
                 } else if pins.isEmpty {
                     Text(model.partners.isEmpty ? "Add a partner to see each other on the map"
                                                 : "No one is sharing a location yet")
                         .font(Theme.font(13, .semibold)).foregroundStyle(Theme.title)
                         .padding(.horizontal, 16).padding(.vertical, 10).glass(Capsule())
-                        .padding(.bottom, 92)
+                        .padding(.bottom, 12)
                 }
             }
             .padding(.horizontal, 16).padding(.top, 10)

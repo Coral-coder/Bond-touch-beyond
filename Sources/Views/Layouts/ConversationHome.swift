@@ -44,7 +44,7 @@ struct ConversationHome: View {
             }
             composer
         }
-        .padding(.bottom, 92)
+        .padding(.bottom, 12)
         .modifier(HomeSheets(people: $people, partner: $partnerSheet, compose: $compose))
     }
 

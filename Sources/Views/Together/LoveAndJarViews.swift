@@ -21,7 +21,7 @@ struct LoveLanguageView: View {
                 compare
                 history
             }
-            .padding(16).padding(.bottom, 90)
+            .padding(16)
         }
         .navigationTitle("Love languages")
         .onAppear {
@@ -49,7 +49,7 @@ struct LoveLanguageView: View {
             }
             TextField("What would you love more of?", text: $wish, axis: .vertical)
                 .font(Theme.font(14)).padding(10).glass(cornerRadius: 14)
-            Button(saved ? "Shared 💗" : "Share with \(model.selectedPartner?.displayName ?? "your partner")") { save() }
+            Button(saved ? "Shared" : "Share with \(model.selectedPartner?.displayName ?? "your partner")") { save() }
                 .buttonStyle(AccentButtonStyle(height: 46)).disabled(saved)
         }
         .padding(16).glass(cornerRadius: Theme.cardCorner)
@@ -148,7 +148,7 @@ struct AppreciationJarView: View {
                     .buttonStyle(AccentButtonStyle(height: 50)).disabled(unopened.isEmpty)
                 if let shown {
                     VStack(spacing: 8) {
-                        Text("💌").font(.system(size: 34))
+                        Image(systemName: "envelope.open.fill").font(.system(size: 30)).foregroundStyle(Theme.pink)
                         Text(shown.text).font(Theme.font(18, .bold)).foregroundStyle(Theme.title).multilineTextAlignment(.center)
                         Text(shown.created.formatted(date: .abbreviated, time: .omitted)).font(Theme.font(12)).foregroundStyle(Theme.subtitle)
                     }
@@ -158,7 +158,7 @@ struct AppreciationJarView: View {
                 write
                 if !forMe.filter(\.opened).isEmpty { opened }
             }
-            .padding(16).padding(.bottom, 90)
+            .padding(16)
         }
         .navigationTitle("Appreciation jar")
     }
@@ -171,7 +171,8 @@ struct AppreciationJarView: View {
                 .frame(width: 170, height: 200)
             VStack(spacing: -6) {
                 ForEach(0..<min(12, unopened.count), id: \.self) { i in
-                    Text(["💌", "💗", "📝", "💛"][i % 4]).font(.system(size: 26))
+                    Image(systemName: i % 2 == 0 ? "envelope.fill" : "heart.fill").font(.system(size: 22))
+                        .foregroundStyle([Theme.pink, Theme.amber, Theme.magenta, Theme.accent][i % 4])
                         .rotationEffect(.degrees(Double((i * 37) % 50) - 25))
                         .offset(x: CGFloat((i * 23) % 60) - 30)
                 }

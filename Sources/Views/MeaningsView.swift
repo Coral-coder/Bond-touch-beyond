@@ -68,7 +68,7 @@ struct MeaningsView: View {
                                 } label: { Label("Delete", systemImage: "trash") }
                             }
                     }
-                    Color.clear.frame(height: 90)
+                    Color.clear.frame(height: 12)
                 }
                 .padding(.horizontal, 20)
             }

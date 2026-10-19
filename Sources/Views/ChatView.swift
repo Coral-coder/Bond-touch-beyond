@@ -12,6 +12,9 @@ struct ChatView: View {
     @State private var inviting = false
     @State private var showShare = false
     @State private var shareError: String?
+    /// Whether the end of the chat is on screen; new messages only pull the view down then.
+    @State private var atBottom = true
+    @State private var viewportHeight: CGFloat = 0
 
     private var messages: [ChatMessage] { model.chatMessages(for: model.selectedPartnerID) }
 
@@ -48,12 +51,63 @@ struct ChatView: View {
                                 case .touch(let t): touchBubble(t).id(t.id)
                                 }
                             }
+                            // Where the bottom of the chat is, relative to the visible area.
                             Color.clear.frame(height: 8).id("bottom")
+                                .background(GeometryReader { g in
+                                    Color.clear.preference(key: ChatBottomKey.self, value: g.frame(in: .named("chat")).maxY)
+                                })
                         }
                         .padding(.horizontal, 16).padding(.top, 8)
                     }
+                    .coordinateSpace(name: "chat")
+                    .scrollDismissesKeyboard(.interactively)
+                    .background(GeometryReader { g in
+                        Color.clear
+                            .onAppear { viewportHeight = g.size.height }
+                            .onChange(of: g.size.height) { h in
+                                viewportHeight = h
+                                // The keyboard (or the tab bar) changed the space: keep the
+                                // latest message in view if we were at the bottom.
+                                if atBottom { scrollToBottom(proxy, animated: false) }
+                            }
+                    })
+                    .onPreferenceChange(ChatBottomKey.self) { maxY in
+                        // At the bottom = the end of the chat is (nearly) on screen.
+                        let now = maxY <= viewportHeight + 40
+                        if now != atBottom { withAnimation(.easeOut(duration: 0.2)) { atBottom = now } }
+                    }
+                    .onAppear {
+                        scrollToBottom(proxy, animated: false)
+                        // Once more after the lazy rows have laid out.
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { scrollToBottom(proxy, animated: false) }
+                    }
+                    .onChange(of: model.selectedPartnerID) { _ in
+                        atBottom = true
+                        DispatchQueue.main.async { scrollToBottom(proxy, animated: false) }
+                    }
                     .onChange(of: items.count) { _ in
-                        withAnimation { proxy.scrollTo("bottom", anchor: .bottom) }
+                        // Follow new messages only if we're at the bottom, or it's our own.
+                        let mineLast: Bool = {
+                            switch items.last {
+                            case .message(let m): return m.senderID == model.myUserID
+                            case .touch(let t): return t.senderID == model.myUserID || t.senderID == ChatMessage.legacySelf
+                            case nil: return false
+                            }
+                        }()
+                        if atBottom || mineLast { scrollToBottom(proxy, animated: true) }
+                    }
+                    .overlay(alignment: .bottomTrailing) {
+                        if !atBottom {
+                            Button { scrollToBottom(proxy, animated: true) } label: {
+                                Image(systemName: "chevron.down")
+                                    .font(.system(size: 16, weight: .bold)).foregroundStyle(Theme.title)
+                                    .frame(width: 44, height: 44).glass(Circle())
+                            }
+                            .buttonStyle(.plain)
+                            .padding(.trailing, 16).padding(.bottom, 10)
+                            .transition(.scale.combined(with: .opacity))
+                            .accessibilityLabel("Jump to the latest message")
+                        }
                     }
                 }
                 inputBar
@@ -156,7 +210,7 @@ struct ChatView: View {
                 .glass(cornerRadius: 18)
                 if !mine { Spacer(minLength: 60) }
             }
-            let label = t.heartbeatBPM.map { "💓 \($0) BPM" } ?? t.meaningLabel.map { [t.meaningEmoji, $0].compactMap { $0 }.joined(separator: " ") }
+            let label = t.heartbeatBPM.map { "Heartbeat \($0) BPM" } ?? t.meaningLabel.map { [t.meaningEmoji, $0].compactMap { $0 }.joined(separator: " ") }
             Text([label, t.sentAt.formatted(date: .omitted, time: .shortened)].compactMap { $0 }.joined(separator: " · "))
                 .font(.caption2).foregroundStyle(Theme.subtitle)
                 .frame(maxWidth: .infinity, alignment: mine ? .trailing : .leading)
@@ -211,6 +265,12 @@ struct ChatView: View {
         }
     }
 
+    private func scrollToBottom(_ proxy: ScrollViewProxy, animated: Bool) {
+        if animated { withAnimation(.easeOut(duration: 0.25)) { proxy.scrollTo("bottom", anchor: .bottom) } }
+        else { proxy.scrollTo("bottom", anchor: .bottom) }
+        atBottom = true
+    }
+
     private var inputBar: some View {
         HStack(spacing: 10) {
             PhotosPicker(selection: $photo, matching: .images) {
@@ -240,6 +300,12 @@ struct ChatView: View {
         }
         .padding(8)
         .glass(cornerRadius: 30)
-        .padding(.horizontal, 12).padding(.bottom, 90)
+        .padding(.horizontal, 12).padding(.bottom, 8)
     }
+}
+
+/// The chat's bottom edge, in the scroll view's visible coordinates.
+private struct ChatBottomKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
 }

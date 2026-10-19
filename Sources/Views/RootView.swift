@@ -19,6 +19,7 @@ struct RootView: View {
     @AppStorage("appStyle") private var appStyle = AppStyle.aero.rawValue
     @AppStorage("paperInk") private var paperInk = PaperInk.aqua.rawValue
     @AppStorage(ThemeTints.key) private var themeTints = ""
+    @State private var keyboardUp = false
 
     var body: some View {
         ZStack {
@@ -62,11 +63,10 @@ struct RootView: View {
         if !store.profile.isComplete {
             OnboardingView()
         } else {
-            ZStack(alignment: .bottom) {
-                Group {
-                    if AppModel.isDemo, let screen = AppModel.demoArgument("-demoScreen") {
-                        DemoScreen(name: screen)
-                    } else {
+            Group {
+                if AppModel.isDemo, let screen = AppModel.demoArgument("-demoScreen") {
+                    DemoScreen(name: screen)
+                } else {
                     switch tab {
                     case .home: HomeRouter()
                     case .us: NavigationStack { TogetherView().screenBackground() }
@@ -76,9 +76,21 @@ struct RootView: View {
                     case .chat: NavigationStack { PrivateSpaceView() }
                     case .settings: NavigationStack { SettingsView() }
                     }
-                    }
                 }
-                FloatingTabBar(selection: $tab).padding(.bottom, 6)
+            }
+            // The tab bar takes real space at the bottom: every screen, list, form and
+            // scroll view inside lays out (and scrolls its last row) above it, instead of
+            // sliding under it. Hidden while the keyboard is up.
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                if !keyboardUp {
+                    FloatingTabBar(selection: $tab).padding(.top, 4).padding(.bottom, 6)
+                }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
+                keyboardUp = true
+            }
+            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
+                keyboardUp = false
             }
         }
     }
@@ -94,6 +106,19 @@ private struct DemoScreen: View {
             Group {
                 switch name {
                 case "chess": ChessView()
+                case "battleship": BattleshipView()
+                case "jar": AppreciationJarView()
+                case "love": LoveLanguageView()
+                case "roulette": DateRouletteView()
+                case "question": QuestionOfDayView()
+                case "agreements": AgreementsView()
+                case "repair": RepairView()
+                case "memories": MemoryLaneView()
+                case "polycal": PolyCalendarView()
+                case "metamours": MetamoursView()
+                case "story": StoryTogetherView()
+                case "wavelength": WavelengthView()
+                case "chat": ChatView()
                 case "games": GamesView()
                 case "radar": RadarView()
                 case "battery": BatteryView()

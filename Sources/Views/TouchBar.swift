@@ -525,7 +525,8 @@ struct SentTouchAnimation: View {
             Color.black.opacity(flown ? 0 : 0.35).ignoresSafeArea()
             ZStack {
                 ForEach(0..<6, id: \.self) { i in
-                    Text(["💗", "✨", "💞"][i % 3]).font(.system(size: 22))
+                    Image(systemName: i % 3 == 1 ? "sparkle" : "heart.fill").font(.system(size: 18))
+                        .foregroundStyle(Color(rgbInt: i % 2 == 0 ? startRGB : endRGB))
                         .offset(x: CGFloat(i * 47 % 140) - 70, y: hearts ? -170 - CGFloat(i * 23 % 60) : 0)
                         .opacity(hearts ? 0 : 1)
                 }

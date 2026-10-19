@@ -38,7 +38,7 @@ struct TogetherView: View {
                     Text("Add a partner to start your Us space.")
                         .font(Theme.font(15)).foregroundStyle(Theme.subtitle).padding(.top, 40)
                 }
-                Color.clear.frame(height: 90)
+                Color.clear.frame(height: 12)
             }
             .padding(.horizontal, 16)
         }
@@ -157,7 +157,7 @@ struct TogetherView: View {
         let me = model.myRole(model.selectedPartnerID), day = DailyQuestion.key()
         let answers = syncLive(space.answers).filter { $0.day == day }
         if answers.contains(where: { $0.by == me }) {
-            return answers.count > 1 ? "You both answered 💞" : "Waiting for them"
+            return answers.count > 1 ? "You both answered" : "Waiting for them"
         }
         return answers.isEmpty ? "Today's is ready" : "They answered — your turn"
     }
@@ -165,7 +165,7 @@ struct TogetherView: View {
     private var jarStatus: String {
         let me = model.myRole(model.selectedPartnerID)
         let n = syncLive(space.appreciations).filter { $0.by != me && !$0.opened }.count
-        return n == 0 ? "Leave a little note" : "\(n) note\(n == 1 ? "" : "s") for you 💌"
+        return n == 0 ? "Leave a little note" : "\(n) note\(n == 1 ? "" : "s") for you"
     }
 
     private var memoryStatus: String {
@@ -305,7 +305,7 @@ struct TogetherHomeCard: View {
             if let next {
                 VStack(alignment: .trailing, spacing: 2) {
                     Text(next.title).font(Theme.font(12, .bold)).foregroundStyle(Theme.title).lineLimit(1)
-                    Text(next.daysUntil() == 0 ? "today 🎉" : "in \(next.daysUntil()) days").font(Theme.font(12, .heavy)).foregroundStyle(Theme.accent)
+                    Text(next.daysUntil() == 0 ? "today" : "in \(next.daysUntil()) days").font(Theme.font(12, .heavy)).foregroundStyle(Theme.accent)
                 }
             }
         }
@@ -380,7 +380,7 @@ struct SpecialDateRow: View {
                     .font(Theme.font(12)).foregroundStyle(Theme.subtitle)
             }
             Spacer()
-            Text(days == 0 ? "Today 🎉" : days == 1 ? "Tomorrow" : "\(days) days")
+            Text(days == 0 ? "Today" : days == 1 ? "Tomorrow" : "\(days) days")
                 .font(Theme.font(13, .heavy)).foregroundStyle(days <= 7 ? Theme.accent : Theme.subtitle)
         }
     }
@@ -681,7 +681,7 @@ struct SharedNoteEditor: View {
                 .scrollContentBackground(.hidden)
                 .padding(8).glass(cornerRadius: 16)
         }
-        .padding(16).padding(.bottom, 80)
+        .padding(16)
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
             guard !loaded, let n = together.space(model.selectedPartnerID).notes.first(where: { $0.id == noteID }) else { return }

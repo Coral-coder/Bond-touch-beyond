@@ -28,7 +28,7 @@ struct AgreementsView: View {
                     .padding(16).glass(cornerRadius: Theme.cardCorner)
                 }
             }
-            .padding(16).padding(.bottom, 90)
+            .padding(16)
         }
         .navigationTitle("Agreements")
         .alert("Change the wording", isPresented: Binding(get: { editing != nil }, set: { if !$0 { editing = nil } })) {
@@ -137,7 +137,7 @@ struct RepairView: View {
                 phrases
                 log
             }
-            .padding(16).padding(.bottom, 90)
+            .padding(16)
         }
         .navigationTitle("Repair")
     }
@@ -146,11 +146,11 @@ struct RepairView: View {
         let active = notes.filter { $0.kind == .timeout && ($0.until ?? .distantPast) > Date() }
         ForEach(active) { t in
             HStack(spacing: 12) {
-                Text("🫖").font(.system(size: 30))
+                Image(systemName: "cup.and.saucer.fill").font(.system(size: 24)).foregroundStyle(Theme.accent)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(t.by == me ? "You're taking a breather" : "\(partnerName) is taking a breather")
                         .font(Theme.font(15, .heavy)).foregroundStyle(Theme.title)
-                    Text("Back by \(t.until?.formatted(date: .omitted, time: .shortened) ?? "soon") — it's a pause, not a goodbye 💛")
+                    Text("Back by \(t.until?.formatted(date: .omitted, time: .shortened) ?? "soon") — it's a pause, not a goodbye")
                         .font(Theme.font(12)).foregroundStyle(Theme.subtitle)
                 }
                 Spacer()
@@ -223,7 +223,7 @@ struct RepairView: View {
                     .buttonStyle(.plain)
                 }
             }
-            Button("We're good now 🤍") {
+            Button("We're good now") {
                 together.edit(id, note: "marked things as resolved 🤍") { syncAppend(&$0.repairs, RepairNote(by: me, kind: .resolved, text: "We talked it through.")) }
             }
             .font(Theme.font(14, .bold)).foregroundStyle(Theme.lime)
@@ -236,7 +236,8 @@ struct RepairView: View {
             if !notes.isEmpty { Text("Recently").font(Theme.font(15, .heavy)).foregroundStyle(Theme.title) }
             ForEach(notes.filter { $0.kind != .timeout }.prefix(20)) { n in
                 HStack(alignment: .top, spacing: 8) {
-                    Text(n.kind == .feeling ? "💬" : n.kind == .repair ? "💛" : "🤍")
+                    Image(systemName: n.kind == .feeling ? "text.bubble.fill" : n.kind == .repair ? "heart.fill" : "checkmark.circle.fill")
+                        .font(.system(size: 14)).foregroundStyle(n.kind == .resolved ? Theme.lime : Theme.pink)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(n.text).font(Theme.font(14)).foregroundStyle(Theme.title)
                         Text("\(n.by == me ? "You" : partnerName) · \(n.created.formatted(.relative(presentation: .named)))")

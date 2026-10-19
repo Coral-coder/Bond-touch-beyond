@@ -39,7 +39,7 @@ struct PolyCalendarView: View {
                     }
                 }
             }
-            .padding(16).padding(.bottom, 90)
+            .padding(16)
         }
         .navigationTitle("Poly calendar")
         .toolbar { Button { adding = true } label: { Image(systemName: "plus") } }
@@ -155,7 +155,7 @@ struct MetamoursView: View {
                 add
                 compersion
             }
-            .padding(16).padding(.bottom, 90)
+            .padding(16)
         }
         .navigationTitle("Metamours")
     }
@@ -212,7 +212,7 @@ struct MetamoursView: View {
     private var compersion: some View {
         let moments = syncLive(space.compersion).sorted { $0.created > $1.created }
         return VStack(alignment: .leading, spacing: 8) {
-            Text("Compersion ✨").font(Theme.font(16, .heavy)).foregroundStyle(Theme.title)
+            Text("Compersion").font(Theme.font(16, .heavy)).foregroundStyle(Theme.title)
             Text("Moments you felt happy for \(partnerName)'s happiness with someone else.")
                 .font(Theme.font(12)).foregroundStyle(Theme.subtitle)
             HStack {

@@ -57,7 +57,7 @@ struct WhiteboardView: View {
             }
             .foregroundStyle(Theme.accent)
         }
-        .padding(16).padding(.bottom, 84)
+        .padding(16)
         .navigationTitle("Whiteboard")
         .navigationBarTitleDisplayMode(.inline)
         .onDisappear {

@@ -75,7 +75,7 @@ struct SettingsView: View {
                     }
                 }
                 Text("Bond Touch Beyond").font(.caption2).foregroundStyle(Theme.subtitle).padding(.top, 8)
-                Color.clear.frame(height: 90)
+                Color.clear.frame(height: 12)
             }
             .padding(.horizontal, 20)
         }

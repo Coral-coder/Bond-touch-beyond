@@ -63,7 +63,7 @@ private struct BondHeartHome: View {
                     link("Shared & requests", "envelope.open", sharedSubtitle) { HeartSharedView() }
                     link("Tutorials", "book", "Get to know your Heart") { HeartTutorialsView() }
                 }
-                Color.clear.frame(height: 90)
+                Color.clear.frame(height: 12)
             }
             .padding(20)
         }

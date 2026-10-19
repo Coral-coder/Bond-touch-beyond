@@ -52,7 +52,7 @@ struct TimelineHome: View {
                         }
                         .padding(.vertical, 10)
                     }
-                    .padding(.bottom, 80)
+                    .padding(.bottom, 12)
                 }
                 .scrollIndicators(.hidden)
 
@@ -71,7 +71,7 @@ struct TimelineHome: View {
                 .padding(.trailing, 20).padding(.bottom, 8)
             }
         }
-        .padding(.bottom, 92)
+        .padding(.bottom, 12)
         .modifier(HomeSheets(people: $people, partner: $partnerSheet, compose: $compose))
     }
 

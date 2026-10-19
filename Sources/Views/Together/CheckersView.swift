@@ -47,7 +47,7 @@ struct CheckersView: View {
                 .font(Theme.font(12)).foregroundStyle(Theme.subtitle)
             Spacer(minLength: 0)
         }
-        .padding(16).padding(.bottom, 84)
+        .padding(16)
         .navigationTitle("Checkers").navigationBarTitleDisplayMode(.inline)
         .confirmationDialog("Start a new game of checkers?", isPresented: $confirmNew, titleVisibility: .visible) {
             Button("New game") { together.edit(bondID, note: "started a new game of checkers 🔴") { $0.checkers = ChessGame() }; path = [] }
@@ -99,7 +99,7 @@ struct CheckersView: View {
     }
 
     private func status(_ p: CheckersPosition, myTurn: Bool) -> String {
-        if let w = p.winner { return w == model.myRole(bondID) ? "You win! 🎉" : "\(model.selectedPartner?.displayName ?? "They") won" }
+        if let w = p.winner { return w == model.myRole(bondID) ? "You win!" : "\(model.selectedPartner?.displayName ?? "They") won" }
         if game == nil { return "Make the first move" }
         return myTurn ? "Your move" : "Waiting for \(model.selectedPartner?.displayName ?? "them")…"
     }

@@ -25,7 +25,7 @@ struct MemoryLaneView: View {
             VStack(alignment: .leading, spacing: 14) {
                 if !onThisDay.isEmpty {
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("On this day ✨").font(Theme.font(17, .heavy)).foregroundStyle(Theme.title)
+                        Text("On this day").font(Theme.font(17, .heavy)).foregroundStyle(Theme.title)
                         ForEach(onThisDay) { m in card(m, highlight: true) }
                     }
                 }
@@ -43,7 +43,7 @@ struct MemoryLaneView: View {
                     ForEach(years[y] ?? []) { m in card(m, highlight: false) }
                 }
             }
-            .padding(16).padding(.bottom, 90)
+            .padding(16)
         }
         .navigationTitle("Memory lane")
         .toolbar { Button { adding = true } label: { Image(systemName: "plus") } }
@@ -165,7 +165,7 @@ struct StoryTogetherView: View {
                         .font(Theme.font(13, .bold)).foregroundStyle(Theme.accent)
                 }
             }
-            .padding(16).padding(.bottom, 90)
+            .padding(16)
         }
         .navigationTitle("Story together")
     }
@@ -207,17 +207,17 @@ struct WavelengthView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 16) {
-                Text("🌊 \(score.match) / \(score.total) in sync").font(Theme.font(22, .heavy)).foregroundStyle(Theme.title)
+                Text("\(score.match) / \(score.total) in sync").font(Theme.font(22, .heavy)).foregroundStyle(Theme.title)
                 if current < Wavelength.questions.count {
                     question(current)
                 } else {
-                    Text("You've done them all! \(score.match) matches 🎉").font(Theme.font(16, .bold)).foregroundStyle(Theme.accent)
+                    Text("You've done them all! \(score.match) matches").font(Theme.font(16, .bold)).foregroundStyle(Theme.accent)
                     Button("Play again") { together.edit(id) { s in for p in syncLive(s.wavelength) { syncDelete(&s.wavelength, p.id) } } }
                         .buttonStyle(AccentButtonStyle(height: 44))
                 }
                 results
             }
-            .padding(16).padding(.bottom, 90)
+            .padding(16)
         }
         .navigationTitle("Same wavelength")
     }
@@ -261,7 +261,8 @@ struct WavelengthView: View {
                 let a = pick(q, me) ?? 0, b = pick(q, them) ?? 0
                 let opts = Wavelength.questions[q]
                 HStack {
-                    Text(a == b ? "💞" : "↔️")
+                    Image(systemName: a == b ? "checkmark.circle.fill" : "arrow.left.arrow.right")
+                        .font(.system(size: 13)).foregroundStyle(a == b ? Theme.lime : Theme.subtitle)
                     Text(a == b ? (a == 0 ? opts.0 : opts.1) : "You: \(a == 0 ? opts.0 : opts.1) · Them: \(b == 0 ? opts.0 : opts.1)")
                         .font(Theme.font(13)).foregroundStyle(Theme.title)
                     Spacer()

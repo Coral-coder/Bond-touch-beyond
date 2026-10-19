@@ -57,7 +57,7 @@ struct PoolView: View {
             }
             Spacer(minLength: 0)
         }
-        .padding(16).padding(.bottom, 84)
+        .padding(16)
         .navigationTitle("Pool").navigationBarTitleDisplayMode(.inline)
         .onAppear { seenShots = shots.count; aimAtNearest(state) }
         .onChange(of: shots.count) { n in
@@ -188,7 +188,7 @@ struct PoolView: View {
     }
 
     private func status(_ s: Pool.State, myTurn: Bool) -> String {
-        if let w = s.winner { return w == me ? "You win! 🎉" : "\(model.selectedPartner?.displayName ?? "They") won" }
+        if let w = s.winner { return w == me ? "You win!" : "\(model.selectedPartner?.displayName ?? "They") won" }
         if animating { return "…" }
         if myTurn { return s.lastShot?.scratch == true && s.lastShot?.by != me ? "Ball in hand — your shot" : "Your shot" }
         return "Waiting for \(model.selectedPartner?.displayName ?? "them")…"

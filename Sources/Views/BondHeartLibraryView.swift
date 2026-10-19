@@ -124,7 +124,7 @@ private struct HeartbeatDetail: View {
                 Button("Delete heartbeat") { confirmDelete = true }
                     .font(Theme.font(15, .bold)).foregroundStyle(Theme.danger)
                     .padding(.top, 4)
-                Color.clear.frame(height: 60)
+                Color.clear.frame(height: 12)
             }
             .padding(20)
         }
@@ -426,7 +426,7 @@ private struct HeartShared: View {
                         Text("Updated \(at.formatted(date: .omitted, time: .shortened))").font(.caption).foregroundStyle(Theme.subtitle)
                     }
                 }
-                Color.clear.frame(height: 60)
+                Color.clear.frame(height: 12)
             }
             .padding(20)
         }

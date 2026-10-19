@@ -63,7 +63,7 @@ struct PartnerDeckHome: View {
                 }
             }
         }
-        .padding(.bottom, 92)
+        .padding(.bottom, 12)
         .modifier(HomeSheets(people: $people, partner: $partnerSheet, compose: $compose))
         .sheet(isPresented: $history) { TouchHistorySheet() }
     }

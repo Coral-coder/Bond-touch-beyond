@@ -51,7 +51,7 @@ struct ChessView: View {
                 .font(Theme.font(12)).foregroundStyle(Theme.subtitle)
             Spacer(minLength: 0)
         }
-        .padding(16).padding(.bottom, 84)
+        .padding(16)
         .navigationTitle("Chess")
         .navigationBarTitleDisplayMode(.inline)
         .confirmationDialog("Start a new game? The current one ends for both of you.", isPresented: $confirmNew, titleVisibility: .visible) {
@@ -121,7 +121,7 @@ struct ChessView: View {
         if let r = game.resigned { return r == model.myRole(bondID) ? "You resigned" : "\(model.selectedPartner?.displayName ?? "They") resigned — you win!" }
         let mine = p.whiteToMove == iAmWhite
         switch p.status {
-        case .checkmate: return mine ? "Checkmate — they win" : "Checkmate — you win! 🎉"
+        case .checkmate: return mine ? "Checkmate — they win" : "Checkmate — you win!"
         case .stalemate: return "Stalemate — a draw"
         case .check: return mine ? "Check! Your move" : "Check — their move"
         case .playing: return mine ? "Your move" : "Waiting for \(model.selectedPartner?.displayName ?? "them")…"

@@ -29,7 +29,7 @@ struct BatteryView: View {
                 }
                 .tint(Theme.accent).padding(16).glass(cornerRadius: Theme.cardCorner)
             }
-            .padding(16).padding(.bottom, 90)
+            .padding(16)
         }
         .navigationTitle("Stress & mood")
         .task { await battery.refresh() }
@@ -67,7 +67,7 @@ struct BatteryView: View {
         case ..<20: return "Running on empty — go gently"
         case ..<45: return "Low — take it easy"
         case ..<70: return "Doing OK"
-        default: return "Charged up ✨"
+        default: return "Charged up"
         }
     }
 
