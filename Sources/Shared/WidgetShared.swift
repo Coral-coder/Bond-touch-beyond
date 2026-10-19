@@ -1,18 +1,20 @@
 import CryptoKit
 import Foundation
+import Security
 import UIKit
 import WidgetKit
 
-/// What the app and its home-screen widget share, through the App Group container (compiled
-/// into both targets). The app writes a small snapshot — the selected partner and their first
-/// meanings, with a photo thumbnail and a rendered image of each touch — and the result of
-/// each widget send; the widget only reads, except for queueing a send when it has to (see
-/// `SendMeaningIntent`).
+/// What the app and its widgets share: a small snapshot the app writes — the selected
+/// partner and their first meanings, the last touch received, your days together and the next
+/// special date — plus the result of each widget send. The widgets only read, except for
+/// queueing a send when they have to (see `SendMeaningIntent`).
 ///
-/// Files, in `<group>/Widget/`: `snapshot.json`, `status.json` (Sent / Failed per meaning),
-/// `requests.json` (sends queued by the widget for the app), and the images.
+/// Shared through the app's Keychain group (`BTKeychainGroup`), not an App Group, so it needs
+/// no developer-portal setup. Items: `snapshot.json`, `status.json`, `requests.json`.
 enum WidgetShared {
     static let kind = "BondTouchBeyondWidget"
+    static let lastTouchKind = "BondTouchBeyondLastTouch"
+    static let togetherKind = "BondTouchBeyondTogether"
     /// The original's widget has up to 10 meaning slots.
     static let maxMeanings = 10
     /// How long Sent / Failed shows on a meaning.
@@ -20,77 +22,69 @@ enum WidgetShared {
     /// A queued send older than this is dropped (and shown failed) rather than sent late.
     static let requestLifetime: TimeInterval = 10 * 60
 
-    /// `group.<app bundle id>`, from the `BTAppGroup` Info.plist key both targets carry (the
-    /// bundle id can be overridden at build time, so it isn't hardcoded).
-    static let appGroupID: String = {
-        if let id = Bundle.main.object(forInfoDictionaryKey: "BTAppGroup") as? String,
-           !id.isEmpty, !id.contains("$(") { return id }
-        return "group." + AppGroupFallback.bundleID
-    }()
-
     /// Darwin notification the widget posts after queueing a send.
-    static var requestNotification: String { appGroupID + ".widget-send" }
+    static let requestNotification = "com.lightwave.beyond.widget-send"
 
-    /// The shared folder, or nil when the App Group isn't available (an unsigned build).
-    static var directory: URL? {
-        guard let base = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroupID) else {
-            return nil
-        }
-        let dir = base.appendingPathComponent("Widget", isDirectory: true)
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        return dir
-    }
+    /// Always available (the Keychain group needs no setup).
+    static var available: Bool { true }
 
     private static let snapshotFile = "snapshot.json"
     private static let statusFile = "status.json"
     private static let requestsFile = "requests.json"
-    static let dataFiles: Set<String> = [snapshotFile, statusFile, requestsFile]
 
-    // MARK: - Files
+    // MARK: - Storage (Keychain)
 
-    static func url(_ name: String) -> URL? { directory?.appendingPathComponent(name) }
+    private static let service = "BondTouchBeyond.widget"
+    private static var group: String? {
+        (Bundle.main.object(forInfoDictionaryKey: "BTKeychainGroup") as? String).flatMap { $0.isEmpty || $0.contains("$(") ? nil : $0 }
+    }
+
+    private static func query(_ name: String) -> [String: Any] {
+        var q: [String: Any] = [kSecClass as String: kSecClassGenericPassword,
+                                kSecAttrService as String: service,
+                                kSecAttrAccount as String: name]
+        if let group { q[kSecAttrAccessGroup as String] = group }
+        return q
+    }
+
+    static func data(_ name: String) -> Data? {
+        var q = query(name)
+        q[kSecReturnData as String] = true
+        q[kSecMatchLimit as String] = kSecMatchLimitOne
+        var out: AnyObject?
+        guard SecItemCopyMatching(q as CFDictionary, &out) == errSecSuccess else { return nil }
+        return out as? Data
+    }
+
+    static func write(_ data: Data, named name: String) {
+        let attrs: [String: Any] = [kSecValueData as String: data,
+                                    kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock]
+        if SecItemUpdate(query(name) as CFDictionary, attrs as CFDictionary) == errSecItemNotFound {
+            SecItemAdd(query(name).merging(attrs) { $1 } as CFDictionary, nil)
+        }
+    }
+
+    static func remove(_ name: String) { SecItemDelete(query(name) as CFDictionary) }
 
     static func read<T: Decodable>(_ type: T.Type, _ name: String) -> T? {
-        guard let url = url(name), let data = try? Data(contentsOf: url) else { return nil }
+        guard let data = data(name) else { return nil }
         return try? JSONDecoder().decode(type, from: data)
     }
 
     static func write<T: Encodable>(_ value: T, _ name: String) {
-        guard let url = url(name), let data = try? JSONEncoder().encode(value) else { return }
-        try? data.write(to: url, options: .atomic)
+        guard let data = try? JSONEncoder().encode(value) else { return }
+        write(data, named: name)
     }
 
-    static func write(_ data: Data, named name: String) {
-        guard let url = url(name) else { return }
-        try? data.write(to: url, options: .atomic)
-    }
+    static func image(_ data: Data?) -> UIImage? { data.flatMap(UIImage.init(data:)) }
 
-    static func fileExists(_ name: String) -> Bool {
-        guard let url = url(name) else { return false }
-        return FileManager.default.fileExists(atPath: url.path)
-    }
-
-    static func image(named name: String?) -> UIImage? {
-        guard let name, let url = url(name) else { return nil }
-        return UIImage(contentsOfFile: url.path)
-    }
-
-    /// Deletes images no longer named by the snapshot.
-    static func removeFiles(except keep: Set<String>) {
-        guard let dir = directory,
-              let names = try? FileManager.default.contentsOfDirectory(atPath: dir.path) else { return }
-        for name in names where !dataFiles.contains(name) && !keep.contains(name) {
-            try? FileManager.default.removeItem(at: dir.appendingPathComponent(name))
-        }
-    }
-
-    /// A short stable file-name key (Swift's own hashes change every launch).
+    /// A short stable key (Swift's own hashes change every launch).
     static func fileKey(_ text: String) -> String {
         SHA256.hash(data: Data(text.utf8)).prefix(10).map { String(format: "%02x", $0) }.joined()
     }
 
     static func reloadWidget() {
-        WidgetCenter.shared.reloadTimelines(ofKind: kind)
+        WidgetCenter.shared.reloadAllTimelines()
     }
 
     // MARK: - Snapshot
@@ -132,7 +126,7 @@ enum WidgetShared {
     /// Reads and clears the queue.
     static func takeRequests() -> [WidgetSendRequest] {
         guard let queue = read([WidgetSendRequest].self, requestsFile), !queue.isEmpty else { return [] }
-        if let url = url(requestsFile) { try? FileManager.default.removeItem(at: url) }
+        remove(requestsFile)
         return queue
     }
 
@@ -156,14 +150,6 @@ enum WidgetShared {
     }
 }
 
-/// Only used if the Info.plist key is missing.
-private enum AppGroupFallback {
-    static var bundleID: String {
-        let id = Bundle.main.bundleIdentifier ?? "com.lightwave.beyond"
-        return id.hasSuffix(".widget") ? String(id.dropLast(".widget".count)) : id
-    }
-}
-
 /// The widget's view of the app: the selected partner and their first meanings
 /// (favourites first).
 struct WidgetSnapshot: Codable, Equatable {
@@ -171,8 +157,29 @@ struct WidgetSnapshot: Codable, Equatable {
         var id: String          // bond id
         var name: String
         var colorRGB: Int
-        /// Small JPEG in the shared folder, if the partner has a photo.
-        var photoFile: String?
+        /// A small JPEG of their photo, if they have one.
+        var photo: Data?
+    }
+
+    /// The last touch received from the partner.
+    struct LastTouch: Codable, Equatable {
+        var from: String
+        var pattern: [Int]
+        var generation: Int
+        var colorRGB: Int
+        var endColorRGB: Int
+        var label: String?
+        var emoji: String?
+        var bpm: Int?
+        var at: Date
+    }
+
+    /// Your days together and the next special date.
+    struct Together: Codable, Equatable {
+        var since: Date?
+        var nextTitle: String?
+        var nextDate: Date?
+        var nextIsBirthday: Bool = false
     }
 
     struct Meaning: Codable, Equatable, Identifiable {
@@ -189,12 +196,14 @@ struct WidgetSnapshot: Codable, Equatable {
         var generation: Int
         var serverID: String?
         var favourite: Bool
-        /// PNG of the touch (TouchViz) in the shared folder.
-        var imageFile: String?
+        /// Not used any more (the widget draws the touch itself).
+        var imageFile: String? = nil
     }
 
     var partner: Partner?
     var meanings: [Meaning]
+    var lastTouch: LastTouch? = nil
+    var together: Together? = nil
 }
 
 enum WidgetSendState: String, Codable {

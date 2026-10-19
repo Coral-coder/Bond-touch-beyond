@@ -8,6 +8,14 @@ import WidgetKit
 /// iOS 16 it opens the app, which sends it. Everything shown comes from the snapshot the app
 /// keeps in the App Group (`WidgetShared`).
 @main
+struct BondWidgets: WidgetBundle {
+    var body: some Widget {
+        BondTouchWidget()
+        LastTouchWidget()
+        TogetherWidget()
+    }
+}
+
 struct BondTouchWidget: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: WidgetShared.kind, provider: BondProvider()) { entry in
@@ -66,7 +74,7 @@ extension BondEntry {
                   pattern: [100, 100, 100, 100, 100, 100, 100], generation: 2, serverID: nil, favourite: false, imageFile: nil),
         ]
         return BondEntry(date: Date(),
-                         snapshot: WidgetSnapshot(partner: .init(id: "sample", name: "Alex", colorRGB: 0xEC5A89, photoFile: nil),
+                         snapshot: WidgetSnapshot(partner: .init(id: "sample", name: "Alex", colorRGB: 0xEC5A89, photo: nil),
                                                   meanings: meanings),
                          states: ["s1": .sent])
     }
@@ -166,7 +174,7 @@ struct PartnerHeader: View {
         let size: CGFloat = compact ? 26 : 32
         HStack(spacing: 8) {
             ZStack {
-                if let photo = WidgetShared.image(named: partner.photoFile) {
+                if let photo = WidgetShared.image(partner.photo) {
                     Image(uiImage: photo).resizable().scaledToFill()
                 } else {
                     Circle().fill(LinearGradient(colors: [ring.opacity(0.85), ring.opacity(0.45)],
@@ -258,18 +266,10 @@ struct MeaningButton: View {
         .overlay { if let state { StatusBadge(state: state, shape: shape) } }
     }
 
-    /// The touch as the app draws it (pre-rendered by the app), or drawn here if the image
-    /// isn't there.
-    @ViewBuilder private var touch: some View {
-        if let image = WidgetShared.image(named: meaning.imageFile) {
-            Image(uiImage: image)
-                .resizable()
-                .aspectRatio(contentMode: .fit)
-                .frame(maxWidth: .infinity, maxHeight: 16, alignment: .leading)
-        } else {
-            TouchViz(pattern: meaning.pattern, generation: meaning.generation,
-                     colorRGB: meaning.colorRGB, endColorRGB: meaning.endColorRGB, height: 14)
-        }
+    /// The touch as the app draws it.
+    private var touch: some View {
+        TouchViz(pattern: meaning.pattern, generation: meaning.generation,
+                 colorRGB: meaning.colorRGB, endColorRGB: meaning.endColorRGB, height: 14)
     }
 }
 

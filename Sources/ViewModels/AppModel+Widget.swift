@@ -17,6 +17,8 @@ extension AppModel {
             $legacyMeanings.map { _ in () }.eraseToAnyPublisher(),
             $partnerPhotos.map { _ in () }.eraseToAnyPublisher(),
             store.$meanings.map { _ in () }.eraseToAnyPublisher(),
+            $history.map { _ in () }.eraseToAnyPublisher(),
+            together.$spaces.map { _ in () }.eraseToAnyPublisher(),
         ]
         Publishers.MergeMany(changes)
             .debounce(for: .seconds(1), scheduler: DispatchQueue.main)
@@ -34,53 +36,42 @@ extension AppModel {
     private func widgetID(_ m: TouchMeaning) -> String { m.serverID ?? m.id.uuidString }
 
     func writeWidgetSnapshot() {
-        guard WidgetShared.directory != nil else { return }
         var snapshot = WidgetSnapshot(partner: nil, meanings: [])
         if let partner = selectedPartner ?? partners.first {
             snapshot.partner = .init(id: partner.id, name: partner.displayName, colorRGB: partner.colorRGB,
-                                     photoFile: widgetThumbnail(bondID: partner.id))
+                                     photo: widgetThumbnail(bondID: partner.id))
+            if let t = history.last(where: { $0.bondID == partner.id && !isMine($0) }) {
+                snapshot.lastTouch = .init(from: partner.displayName, pattern: t.pattern, generation: t.generation,
+                                           colorRGB: t.colorRGB, endColorRGB: t.endColorRGB,
+                                           label: t.meaningLabel, emoji: t.meaningEmoji, bpm: t.heartbeatBPM, at: t.sentAt)
+            }
+            let space = together.space(partner.id)
+            let next = space.dates.filter { !$0.deleted }.min { $0.daysUntil() < $1.daysUntil() }
+            if space.togetherSince != nil || next != nil {
+                snapshot.together = .init(since: space.togetherSince, nextTitle: next?.title, nextDate: next?.next(),
+                                          nextIsBirthday: next?.kind == .birthday)
+            }
             let list = meanings(for: partner.bond)
             let ordered = list.filter { $0.favourite == true } + list.filter { $0.favourite != true }
             snapshot.meanings = ordered.prefix(WidgetShared.maxMeanings).map { m in
                 WidgetSnapshot.Meaning(id: widgetID(m), label: m.label, emoji: m.emoji,
                                        colorRGB: m.colorRGB, endColorRGB: m.endColorRGB,
                                        pattern: m.pattern, generation: m.touchGeneration,
-                                       serverID: m.serverID, favourite: m.favourite == true,
-                                       imageFile: widgetTouchImage(m))
+                                       serverID: m.serverID, favourite: m.favourite == true)
             }
         }
         guard WidgetShared.save(snapshot) else { return }
-        var keep = Set(snapshot.meanings.compactMap(\.imageFile))
-        if let photo = snapshot.partner?.photoFile { keep.insert(photo) }
-        WidgetShared.removeFiles(except: keep)
         WidgetShared.reloadWidget()
     }
 
-    /// A 160 px JPEG of the partner's photo, named by its content so a new photo reloads the
-    /// widget. Re-encoded only when the photo itself changes.
-    private func widgetThumbnail(bondID: String) -> String? {
+    /// A small JPEG of the partner's photo for the widgets, re-encoded only when it changes.
+    private func widgetThumbnail(bondID: String) -> Data? {
         guard let photo = photo(forBond: bondID) else { return nil }
         let key = "\(bondID)#\(ObjectIdentifier(photo).hashValue)"
-        if let cached = widgetPhotoCache[key], WidgetShared.fileExists(cached) { return cached }
-        guard let data = Self.profileJPEG(photo, side: 160) else { return nil }
-        let name = "photo-\(WidgetShared.fileKey(data.base64EncodedString())).jpg"
-        WidgetShared.write(data, named: name)
-        widgetPhotoCache = [key: name]
-        return name
-    }
-
-    /// The touch drawn as in the app (TouchViz), as a PNG named by the touch and its colours.
-    private func widgetTouchImage(_ m: TouchMeaning) -> String? {
-        let name = "touch-\(WidgetShared.fileKey("\(m.touchGeneration)|\(m.colorRGB)|\(m.endColorRGB)|\(m.pattern)")).png"
-        if WidgetShared.fileExists(name) { return name }
-        let view = TouchViz(pattern: m.pattern, generation: m.touchGeneration, colorRGB: m.colorRGB,
-                            endColorRGB: m.endColorRGB, height: 36)
-            .frame(width: 220, height: 36)
-        let renderer = ImageRenderer(content: view)
-        renderer.scale = 2
-        guard let data = renderer.uiImage?.pngData() else { return nil }
-        WidgetShared.write(data, named: name)
-        return name
+        if let cached = widgetPhotoData[key] { return cached }
+        guard let data = Self.profileJPEG(photo, side: 96) else { return nil }
+        widgetPhotoData = [key: data]
+        return data
     }
 
     // MARK: - Sending

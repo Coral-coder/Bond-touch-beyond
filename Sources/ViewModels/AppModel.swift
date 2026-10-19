@@ -60,7 +60,7 @@ final class AppModel: ObservableObject {
     /// The home-screen widget's snapshot updates (see AppModel+Widget).
     var widgetWatch = Set<AnyCancellable>()
     /// The partner photo last written for the widget: "bond#image" → thumbnail file.
-    var widgetPhotoCache: [String: String] = [:]
+    var widgetPhotoData: [String: Data] = [:]
     /// Repairs a bracelet stuck in firmware-update mode.
     let recovery = FirmwareRecovery()
     /// Keeps the app running in the background for original-app partners.

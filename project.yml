@@ -56,6 +56,7 @@ targets:
       - target: BondTouchBeyondWatch
       - target: BondTouchBeyondNotificationService
       - target: BondTouchBeyondNotificationContent
+      - target: BondTouchBeyondWidget
       - package: NordicDFU
     sources:
       - path: Sources
@@ -114,8 +115,6 @@ targets:
             LSItemContentTypes:
               - public.zip-archive
         LSSupportsOpeningDocumentsInPlace: false
-        # The App Group shared with the home-screen widget (Sources/Shared/WidgetShared.swift).
-        BTAppGroup: group.$(APP_BUNDLE_ID)
         # The Keychain group shared with the notification extension (Sources/Shared/SharedBonds.swift).
         BTKeychainGroup: $(AppIdentifierPrefix)$(APP_BUNDLE_ID).shared
     entitlements:
@@ -187,10 +186,42 @@ targets:
         TARGETED_DEVICE_FAMILY: "4"
         SKIP_INSTALL: YES
 
-  # Home-screen widget (Widget/, Sources/Shared/): not built yet. It needs the App Group
-  # group.<bundle id> created in the Apple developer portal and enabled on the app and
-  # <bundle id>.widget; then restore the target from docs/WIDGET_TARGET.yml, the widget
-  # dependency above, and com.apple.security.application-groups in the app's entitlements.
+  # Widgets (home screen + Lock Screen): meanings to send, the last touch received, days
+  # together. They share data with the app through its Keychain group (no App Group, so no
+  # developer-portal setup). Embedded in the iOS app.
+  BondTouchBeyondWidget:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: Widget
+      - path: Sources/Shared/WidgetShared.swift
+      - path: Sources/Shared/SendMeaningIntent.swift
+      - path: Sources/Design/Theme.swift
+      - path: Sources/Design/TouchViz.swift
+      - path: Sources/Models/TouchPattern.swift
+      - path: Sources/Models/Heartbeat.swift
+      - path: Sources/Views/EKGView.swift
+      - path: Sources/Views/Color+RGB.swift
+    info:
+      path: Widget/Info.plist
+      properties:
+        CFBundleDisplayName: Bond Touch Beyond
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        BTKeychainGroup: $(AppIdentifierPrefix)$(APP_BUNDLE_ID).shared
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    entitlements:
+      path: Widget/BondTouchBeyondWidget.entitlements
+      properties:
+        keychain-access-groups:
+          - $(AppIdentifierPrefix)$(APP_BUNDLE_ID).shared
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(APP_BUNDLE_ID).widget
+        SKIP_INSTALL: YES
+        # Sources/Shared/SendMeaningIntent.swift queues the send instead of calling the app.
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: $(inherited) WIDGET_EXTENSION
 
   # Decrypts a partner's touch push on this phone and makes it a rich notification: the
   # touch's picture, its meaning, and the TOUCH category (long-press replay, watch view).
