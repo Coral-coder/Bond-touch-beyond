@@ -12,7 +12,7 @@ struct WeatherInfo: Codable, Equatable {
     var place: String?
     /// °C.
     var temp: Double
-    /// SF Symbol name, as WeatherKit gives it.
+    /// SF Symbol name.
     var symbol: String
     /// "Partly Cloudy".
     var summary: String

@@ -571,7 +571,7 @@ final class AppModel: ObservableObject {
     }
 
     /// The weather where each partner is, from the location they share (looked up on this
-    /// phone with WeatherKit, every 30 minutes at most).
+    /// phone, every 30 minutes at most).
     func refreshPartnerWeather() async {
         for p in partners {
             guard let lat = p.latitude, let lng = p.longitude else { continue }
