@@ -54,3 +54,33 @@ struct FloatingTabBar: View {
         .padding(.horizontal, 16)
     }
 }
+
+/// Room for the floating tab bar.
+enum TabBarSpace {
+    /// The bar's height plus its margin and a little breathing room.
+    static let scrollGap: CGFloat = 110
+    /// For screens that don't scroll: keep their bottom edge above the bar.
+    static let fixed: CGFloat = 92
+}
+
+extension View {
+    /// An empty gap at the bottom of every scroll view, list and form inside this view.
+    @ViewBuilder func tabBarScrollGap() -> some View {
+        if #available(iOS 17.0, *) {
+            contentMargins(.bottom, TabBarSpace.scrollGap, for: .scrollContent)
+                .contentMargins(.bottom, TabBarSpace.scrollGap - 30, for: .scrollIndicators)
+        } else {
+            // iOS 16 has no content margins: make the bar's space part of the safe area.
+            safeAreaInset(edge: .bottom, spacing: 0) { Color.clear.frame(height: TabBarSpace.fixed) }
+        }
+    }
+
+    /// For a sideways scroller inside a screen: no bottom gap.
+    @ViewBuilder func noTabBarGap() -> some View {
+        if #available(iOS 17.0, *) {
+            contentMargins(.bottom, 0, for: .scrollContent).contentMargins(.bottom, 0, for: .scrollIndicators)
+        } else {
+            self
+        }
+    }
+}

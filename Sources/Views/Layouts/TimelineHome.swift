@@ -71,7 +71,7 @@ struct TimelineHome: View {
                 .padding(.trailing, 20).padding(.bottom, 8)
             }
         }
-        .padding(.bottom, 12)
+        .padding(.bottom, TabBarSpace.fixed)
         .modifier(HomeSheets(people: $people, partner: $partnerSheet, compose: $compose))
     }
 

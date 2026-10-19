@@ -754,6 +754,7 @@ private struct ThemePickerCard: View {
                         }
                         .padding(.vertical, 2)
                     }
+                    .noTabBarGap()
                 }
                 if appStyle == AppStyle.paper.rawValue {
                     Text("Ink").font(.caption).foregroundStyle(Theme.subtitle)
@@ -780,6 +781,7 @@ private struct ThemePickerCard: View {
                         }
                         .padding(.vertical, 2)
                     }
+                    .noTabBarGap()
                 }
                 }
             }

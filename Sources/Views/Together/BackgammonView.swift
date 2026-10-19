@@ -47,7 +47,7 @@ struct BackgammonView: View {
             .font(Theme.font(12)).foregroundStyle(Theme.subtitle)
             Spacer(minLength: 0)
         }
-        .padding(16)
+        .padding(16).padding(.bottom, TabBarSpace.fixed)
         .navigationTitle("Backgammon").navigationBarTitleDisplayMode(.inline)
         .confirmationDialog("Start a new game of backgammon?", isPresented: $confirmNew, titleVisibility: .visible) {
             Button("New game") { together.edit(bondID, note: "started a new game of backgammon 🎲") { $0.backgammon = ChessGame() }; selected = nil }

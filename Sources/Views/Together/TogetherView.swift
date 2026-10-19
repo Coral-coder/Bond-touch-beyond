@@ -553,6 +553,7 @@ struct LikesView: View {
                         .buttonStyle(.plain).foregroundStyle(Theme.accent)
                 }
             }
+            .noTabBarGap()
             .listRowBackground(Color.clear)
         } header: {
             Text(title).font(Theme.font(15, .heavy)).foregroundStyle(Theme.title)
@@ -680,8 +681,9 @@ struct SharedNoteEditor: View {
             TextEditor(text: $text).font(Theme.font(16)).foregroundStyle(Theme.title)
                 .scrollContentBackground(.hidden)
                 .padding(8).glass(cornerRadius: 16)
+                .noTabBarGap()
         }
-        .padding(16)
+        .padding(16).padding(.bottom, TabBarSpace.fixed)
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
             guard !loaded, let n = together.space(model.selectedPartnerID).notes.first(where: { $0.id == noteID }) else { return }

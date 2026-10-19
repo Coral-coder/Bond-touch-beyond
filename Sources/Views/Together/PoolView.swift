@@ -57,7 +57,7 @@ struct PoolView: View {
             }
             Spacer(minLength: 0)
         }
-        .padding(16)
+        .padding(16).padding(.bottom, TabBarSpace.fixed)
         .navigationTitle("Pool").navigationBarTitleDisplayMode(.inline)
         .onAppear { seenShots = shots.count; aimAtNearest(state) }
         .onChange(of: shots.count) { n in

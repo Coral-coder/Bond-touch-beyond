@@ -63,27 +63,27 @@ struct RootView: View {
         if !store.profile.isComplete {
             OnboardingView()
         } else {
-            Group {
-                if AppModel.isDemo, let screen = AppModel.demoArgument("-demoScreen") {
-                    DemoScreen(name: screen)
-                } else {
-                    switch tab {
-                    case .home: HomeRouter()
-                    case .us: NavigationStack { TogetherView().screenBackground() }
-                    case .touches: MeaningsView()
-                    case .map: MapTabView()
-                    // Chat lives inside Private Space, behind its lock, as the original.
-                    case .chat: NavigationStack { PrivateSpaceView() }
-                    case .settings: NavigationStack { SettingsView() }
+            ZStack(alignment: .bottom) {
+                Group {
+                    if AppModel.isDemo, let screen = AppModel.demoArgument("-demoScreen") {
+                        DemoScreen(name: screen)
+                    } else {
+                        switch tab {
+                        case .home: HomeRouter()
+                        case .us: NavigationStack { TogetherView().screenBackground() }
+                        case .touches: MeaningsView()
+                        case .map: MapTabView()
+                        // Chat lives inside Private Space, behind its lock, as the original.
+                        case .chat: NavigationStack { PrivateSpaceView() }
+                        case .settings: NavigationStack { SettingsView() }
+                        }
                     }
                 }
-            }
-            // The tab bar takes real space at the bottom: every screen, list, form and
-            // scroll view inside lays out (and scrolls its last row) above it, instead of
-            // sliding under it. Hidden while the keyboard is up.
-            .safeAreaInset(edge: .bottom, spacing: 0) {
+                // Every scroll view, list and form below gets an empty gap at the end of
+                // its content, so the last row always scrolls up clear of the bar.
+                .tabBarScrollGap()
                 if !keyboardUp {
-                    FloatingTabBar(selection: $tab).padding(.top, 4).padding(.bottom, 6)
+                    FloatingTabBar(selection: $tab).padding(.bottom, 6)
                 }
             }
             .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in

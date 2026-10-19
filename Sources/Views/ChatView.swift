@@ -15,6 +15,7 @@ struct ChatView: View {
     /// Whether the end of the chat is on screen; new messages only pull the view down then.
     @State private var atBottom = true
     @State private var viewportHeight: CGFloat = 0
+    @State private var keyboardUp = false
 
     private var messages: [ChatMessage] { model.chatMessages(for: model.selectedPartnerID) }
 
@@ -60,6 +61,8 @@ struct ChatView: View {
                         .padding(.horizontal, 16).padding(.top, 8)
                     }
                     .coordinateSpace(name: "chat")
+                    // The message box sits between the chat and the bar, so no extra gap here.
+                    .noTabBarGap()
                     .scrollDismissesKeyboard(.interactively)
                     .background(GeometryReader { g in
                         Color.clear
@@ -113,6 +116,8 @@ struct ChatView: View {
                 inputBar
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in keyboardUp = true }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in keyboardUp = false }
         .onChange(of: photo) { item in
             guard let item else { return }
             Task {
@@ -300,7 +305,7 @@ struct ChatView: View {
         }
         .padding(8)
         .glass(cornerRadius: 30)
-        .padding(.horizontal, 12).padding(.bottom, 8)
+        .padding(.horizontal, 12).padding(.bottom, keyboardUp ? 8 : TabBarSpace.fixed)
     }
 }
 

@@ -58,6 +58,7 @@ struct PolyCalendarView: View {
                 }
             }
         }
+        .noTabBarGap()
     }
 
     private func eventRow(_ r: Row) -> some View {

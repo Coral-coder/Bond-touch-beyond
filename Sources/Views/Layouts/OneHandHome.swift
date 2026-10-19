@@ -39,7 +39,7 @@ struct OneHandHome: View {
             }
         }
         .padding(.horizontal, 16)
-        .padding(.bottom, 12)
+        .padding(.bottom, TabBarSpace.fixed)
         .modifier(HomeSheets(people: $people, partner: $partnerSheet, compose: $compose))
         .sheet(isPresented: $history) { TouchHistorySheet() }
     }

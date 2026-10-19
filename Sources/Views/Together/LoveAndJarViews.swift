@@ -201,6 +201,7 @@ struct AppreciationJarView: View {
                     }
                 }
             }
+            .noTabBarGap()
             Button("Drop it in the jar") {
                 let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
                 guard !t.isEmpty else { return }

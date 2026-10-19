@@ -85,7 +85,8 @@ struct PrivateSpaceView: View {
         }
         .padding(.horizontal, Metric.buttonMargin)
         .padding(.top, Metric.buttonMargin)
-        .padding(.bottom, 16)
+        // Clear of the floating tab bar.
+        .padding(.bottom, TabBarSpace.fixed + 12)
     }
 
     // MARK: Passcode entry
@@ -111,7 +112,8 @@ struct PrivateSpaceView: View {
         }
         .padding(.horizontal, Metric.buttonMargin)
         .padding(.top, Metric.buttonMargin)
-        .padding(.bottom, 16)
+        // Clear of the floating tab bar.
+        .padding(.bottom, TabBarSpace.fixed + 12)
     }
 
     private func keypad(allowBiometrics: Bool) -> some View {

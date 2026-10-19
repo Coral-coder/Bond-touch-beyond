@@ -51,7 +51,7 @@ struct ChessView: View {
                 .font(Theme.font(12)).foregroundStyle(Theme.subtitle)
             Spacer(minLength: 0)
         }
-        .padding(16)
+        .padding(16).padding(.bottom, TabBarSpace.fixed)
         .navigationTitle("Chess")
         .navigationBarTitleDisplayMode(.inline)
         .confirmationDialog("Start a new game? The current one ends for both of you.", isPresented: $confirmNew, titleVisibility: .visible) {

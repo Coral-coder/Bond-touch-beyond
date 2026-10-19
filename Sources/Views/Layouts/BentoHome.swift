@@ -55,7 +55,7 @@ struct BentoHome: View {
             }
             .scrollIndicators(.hidden)
         }
-        .padding(.bottom, 12)
+        .padding(.bottom, TabBarSpace.fixed)
         .modifier(HomeSheets(people: $people, partner: $partnerSheet, compose: $compose))
         .sheet(isPresented: $history) { TouchHistorySheet() }
     }

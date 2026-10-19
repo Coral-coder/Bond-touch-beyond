@@ -61,9 +61,10 @@ struct PartnerDeckHome: View {
                     }
                     .padding(.horizontal, 18).padding(.vertical, 2)
                 }
+                .noTabBarGap()
             }
         }
-        .padding(.bottom, 12)
+        .padding(.bottom, TabBarSpace.fixed)
         .modifier(HomeSheets(people: $people, partner: $partnerSheet, compose: $compose))
         .sheet(isPresented: $history) { TouchHistorySheet() }
     }
