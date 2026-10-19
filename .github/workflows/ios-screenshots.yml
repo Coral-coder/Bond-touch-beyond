@@ -90,8 +90,9 @@ jobs:
           done
 
       - name: Contact sheets
+        continue-on-error: true
         run: |
-          python3 -m pip install --quiet pillow
+          python3 -m pip install --quiet --break-system-packages pillow || python3 -m pip install --quiet --user pillow
           python3 - <<'EOF'
           import glob, os
           from PIL import Image, ImageDraw, ImageFont
@@ -118,6 +119,7 @@ jobs:
           EOF
 
       - name: Push to the screenshots branch
+        if: always()
         run: |
           cd shots
           git init -q -b screenshots
