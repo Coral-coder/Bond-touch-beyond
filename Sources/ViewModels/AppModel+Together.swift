@@ -150,10 +150,36 @@ extension AppModel {
         await pushPartner(bondID: bondID, title: "💞 Us", body: "\(me) \(text)", group: "u", sound: "default")
     }
 
+    /// Battleship: this phone answers the partner's shots at our fleet (which only this phone
+    /// knows), and reveals the fleet once the game is over.
+    func answerBattleship(_ bondID: String?) {
+        guard let bondID, let game = together.space(bondID).battleship,
+              let fleet = BattleshipGame.loadFleet(game.id) else { return }
+        let me = myRole(bondID), them = me == "A" ? "B" : "A"
+        let pending = game.unanswered(against: me)
+        guard !pending.isEmpty else { return }
+        var hit = Set(game.results(for: them).filter { $0.value != "m" }.keys)
+        var answers: [(Int, String)] = []
+        for cell in pending {
+            let a = BattleshipGame.answer(cell, fleet: fleet, alreadyHit: hit)
+            if a != "m" { hit.insert(cell) }
+            answers.append((cell, a))
+        }
+        let last = answers.last?.1 ?? "m"
+        let note = last == "m" ? "'s waters: 🌊 miss" : last.hasPrefix("s") ? "'s ship sank 💥🚢" : "'s ship was hit 💥"
+        together.edit(bondID, note: note) { s in
+            for (cell, a) in answers { s.battleship?.add("res:\(them):\(cell):\(a)") }
+            if s.battleship?.winner != nil {
+                s.battleship?.add("fleet:\(me):" + fleet.flatMap { $0 }.map(String.init).joined(separator: ","))
+            }
+        }
+    }
+
     /// Merges what the partner's phone sent (called from the iCloud poll).
     func receiveTogether(space: TogetherSpace?, board: Whiteboard?, bondID: String) {
         guard space != nil || board != nil else { return }
         if together.mergeRemote(space: space, board: board, bondID: bondID), space != nil { scheduleDateReminders() }
+        if space?.battleship != nil { answerBattleship(bondID) }
     }
 
     /// Local reminders for every special date with every partner: on the day at 9:00 and

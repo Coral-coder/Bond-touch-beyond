@@ -17,6 +17,7 @@ struct GamesView: View {
                 game("Chess", "♟️", chessStatus, [0xB58863, 0x6B4A2E]) { ChessView() }
                 game("Checkers", "🔴", checkersStatus, [0xB0182A, 0x5B3A29]) { CheckersView() }
                 game("Backgammon", "🎲", backgammonStatus, [0x2F6B45, 0x5B3A29]) { BackgammonView() }
+                game("Battleship", "🚢", battleshipStatus, [0x1E6FB8, 0x0E2A4A]) { BattleshipView() }
             }
             .padding(16).padding(.bottom, 90)
         }
@@ -65,6 +66,14 @@ struct GamesView: View {
         let p = BackgammonPosition.from(moves: g.moves)
         if let w = p.winner { return w == me ? "You won 🏆" : "They won" }
         return turn(p.aToMove)
+    }
+
+    private var battleshipStatus: String {
+        guard let g = space.battleship else { return "Place your fleet" }
+        if let w = g.winner { return w == me ? "You won 🏆" : "They won" }
+        if BattleshipGame.loadFleet(g.id) == nil { return "Place your fleet" }
+        if g.turn == nil { return "Waiting…" }
+        return g.turn == me ? "Your shot" : "Their shot"
     }
 
     private var poolStatus: String {

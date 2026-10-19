@@ -19,7 +19,9 @@ struct WeatherCard: View {
     var compact = false
 
     var body: some View {
-        if let w = model.weather(for: partner) {
+        if !Feature.weather.isOn {
+            EmptyView()
+        } else if let w = model.weather(for: partner) {
             if compact { compactView(w) } else { fullView(w) }
         } else {
             HStack(spacing: 10) {

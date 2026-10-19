@@ -4,10 +4,13 @@ extension AppModel {
     /// What partners see: your latest mood (from the last 12 hours) and battery.
     func myMoodShare() -> MoodShare? {
         let recent = battery.entries.last.flatMap { Date().timeIntervalSince($0.at) < 12 * 3600 ? $0 : nil }
-        guard let level = battery.battery else { return nil }
+        guard Feature.stress.isOn, let level = battery.battery else { return nil }
         let bodyLevel = level < 20 ? "low" : "ok"
-        return MoodShare(emoji: recent?.emoji ?? (level < 20 ? "🪫" : "🔋"), label: recent?.label ?? "Battery",
-                         battery: level, level: recent?.level ?? bodyLevel, at: recent?.at ?? Date())
+        let face = Stress.face(100 - level)
+        var share = MoodShare(emoji: recent?.emoji ?? face.emoji, label: recent?.label ?? face.label,
+                              battery: level, level: recent?.level ?? bodyLevel, at: recent?.at ?? Date())
+        share.series = battery.series.suffix(60).map { [$0.at.timeIntervalSince1970.rounded(), ($0.hrv * 10).rounded() / 10, $0.stress.rounded()] }
+        return share
     }
 
     /// Logs how you're feeling: shared quietly at once; if you're stressed or overwhelmed,
@@ -23,7 +26,7 @@ extension AppModel {
     /// Re-reads the body battery every 30 minutes; a sharp drop to very low tells partners
     /// (at most every 6 hours).
     func refreshBatteryIfDue() async {
-        guard Date().timeIntervalSince(lastBatteryRead) > 30 * 60 else { return }
+        guard Feature.stress.isOn, Date().timeIntervalSince(lastBatteryRead) > 30 * 60 else { return }
         lastBatteryRead = Date()
         await battery.refresh()
         if let b = battery.bodyBattery, b < 15 {
@@ -32,7 +35,7 @@ extension AppModel {
     }
 
     private func alertPartnersForCare(_ text: String) async {
-        guard UserDefaults.standard.object(forKey: "shareMood") as? Bool ?? true,
+        guard Feature.stress.isOn, UserDefaults.standard.object(forKey: "shareMood") as? Bool ?? true,
               Date().timeIntervalSince(lastCareAlert) > (text.contains("🪫") ? 6 * 3600 : 60) else { return }
         lastCareAlert = Date()
         let me = store.profile.name.isEmpty ? "Your partner" : store.profile.name

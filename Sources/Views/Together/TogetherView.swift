@@ -30,8 +30,8 @@ struct TogetherView: View {
                             .font(Theme.font(14)).foregroundStyle(Theme.subtitle).padding().glass(cornerRadius: 20)
                     } else {
                         header(partner)
-                        datesCard
-                        likesCard(partner)
+                        if Feature.dates.isOn { datesCard }
+                        if Feature.likes.isOn { likesCard(partner) }
                         tiles
                     }
                 } else {
@@ -135,12 +135,12 @@ struct TogetherView: View {
         let notes = space.notes.filter { !$0.deleted }.count
         let cols = [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)]
         return LazyVGrid(columns: cols, spacing: 12) {
-            tile("To-do", "checklist", open == 0 ? "All done" : "\(open) to do", Theme.lime) { TodoListView() }
-            tile("Notes", "note.text", notes == 0 ? "Write one" : "\(notes) note\(notes == 1 ? "" : "s")", Theme.amber) { SharedNotesView() }
-            tile("Whiteboard", "scribble.variable", "Draw together", Theme.magenta) { WhiteboardView() }
-            tile("Games", "gamecontroller.fill", "Pool, chess, checkers, backgammon", Theme.accent) { GamesView() }
-            tile("Battery & mood", "battery.75", batteryStatus, Theme.lime) { BatteryView() }
-            tile("R.A.D.A.R.", "dot.radiowaves.left.and.right", radarStatus, Theme.pink) { RadarView() }
+            if Feature.todos.isOn { tile("To-do", "checklist", open == 0 ? "All done" : "\(open) to do", Theme.lime) { TodoListView() } }
+            if Feature.notes.isOn { tile("Notes", "note.text", notes == 0 ? "Write one" : "\(notes) note\(notes == 1 ? "" : "s")", Theme.amber) { SharedNotesView() } }
+            if Feature.whiteboard.isOn { tile("Whiteboard", "scribble.variable", "Draw together", Theme.magenta) { WhiteboardView() } }
+            if Feature.games.isOn { tile("Games", "gamecontroller.fill", "Pool, chess, checkers, backgammon, Battleship", Theme.accent) { GamesView() } }
+            if Feature.stress.isOn { tile("Stress & mood", "face.smiling", batteryStatus, Theme.lime) { BatteryView() } }
+            if Feature.radar.isOn { tile("R.A.D.A.R.", "dot.radiowaves.left.and.right", radarStatus, Theme.pink) { RadarView() } }
         }
     }
 
@@ -156,7 +156,7 @@ struct TogetherView: View {
 
     private var batteryStatus: String {
         guard let m = model.selectedPartner?.presence?.mood else { return "How are you feeling?" }
-        return "\(model.selectedPartner?.displayName ?? "They"): \(m.emoji) \(m.label) · \(m.battery)%"
+        return "\(model.selectedPartner?.displayName ?? "They"): \(m.emoji) \(m.label) · \(Stress.face(m.stress).emoji)"
     }
 
     private var chessStatus: String {

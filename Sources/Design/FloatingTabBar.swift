@@ -29,10 +29,11 @@ enum AppTab: CaseIterable {
 /// The floating glass tab bar at the bottom of the app.
 struct FloatingTabBar: View {
     @Binding var selection: AppTab
+    @AppStorage("feature.us") private var usOn = true
 
     var body: some View {
         HStack(spacing: 2) {
-            ForEach(AppTab.allCases, id: \.self) { tab in
+            ForEach(AppTab.allCases.filter { $0 != .us || usOn }, id: \.self) { tab in
                 Button {
                     selection = tab
                 } label: {

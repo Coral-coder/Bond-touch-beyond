@@ -16,6 +16,7 @@ struct BatteryView: View {
         ScrollView {
             VStack(spacing: 14) {
                 myBattery
+                StressChart(battery: battery)
                 logCard
                 partnersCard
                 historyCard
@@ -30,15 +31,17 @@ struct BatteryView: View {
             }
             .padding(16).padding(.bottom, 90)
         }
-        .navigationTitle("Battery & mood")
+        .navigationTitle("Stress & mood")
         .task { await battery.refresh() }
     }
 
     private var myBattery: some View {
         let level = battery.battery
-        return VStack(spacing: 10) {
-            BatteryGauge(level: level, size: 120)
-            Text(level.map { "\($0)%" } ?? "—").font(Theme.font(34, .heavy)).foregroundStyle(Theme.title)
+        let face = level.map { Stress.face(100 - $0) }
+        return VStack(spacing: 8) {
+            Text(face?.emoji ?? "🫥").font(.system(size: 84))
+            Text(face?.label ?? "—").font(Theme.font(28, .heavy)).foregroundStyle(Theme.title)
+            Text(level.map { "Stress \(100 - $0) / 100 · energy \($0)%" } ?? "").font(Theme.font(13, .bold)).foregroundStyle(Theme.accent)
             Text(levelText(level)).font(Theme.font(14, .semibold)).foregroundStyle(Theme.subtitle)
             HStack(spacing: 14) {
                 stat("HRV", battery.hrv.map { "\(Int($0)) ms" }, battery.hrvBaseline.map { "usual \(Int($0))" })
@@ -59,7 +62,7 @@ struct BatteryView: View {
     }
 
     private func levelText(_ l: Int?) -> String {
-        guard let l else { return "Log how you feel, or allow Health access, to see your battery" }
+        guard let l else { return "Log how you feel, or allow Health access, to see your stress" }
         switch l {
         case ..<20: return "Running on empty — go gently"
         case ..<45: return "Low — take it easy"
@@ -155,7 +158,12 @@ struct PartnerMoodRow: View {
                 }
             }
             Spacer()
-            if let m = partner.presence?.mood { BatteryGauge(level: m.battery, size: 34) }
+            if let m = partner.presence?.mood {
+                VStack(spacing: 0) {
+                    Text(Stress.face(m.stress).emoji).font(.system(size: 30))
+                    Text(Stress.face(m.stress).label).font(Theme.font(9, .bold)).foregroundStyle(Theme.subtitle)
+                }
+            }
         }
     }
 }

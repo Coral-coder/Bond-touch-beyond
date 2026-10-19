@@ -17,6 +17,7 @@ struct TogetherSpace: Codable, Equatable {
     var checkers: ChessGame?
     var backgammon: ChessGame?
     var pool: ChessGame?
+    var battleship: BattleshipGame?
     /// R.A.D.A.R. check-ins: topics either of you adds, past check-ins, and how often.
     var radarTopics: [RadarTopic]?
     var radarSessions: [RadarSession]?
@@ -38,6 +39,7 @@ struct TogetherSpace: Codable, Equatable {
         checkers = ChessGame.merge(checkers, other.checkers)
         backgammon = ChessGame.merge(backgammon, other.backgammon)
         pool = ChessGame.merge(pool, other.pool)
+        battleship = BattleshipGame.merge(battleship, other.battleship)
         if other.radarTopics != nil { radarTopics = Self.mergeItems(radarTopics ?? [], other.radarTopics ?? []) }
         if other.radarSessions != nil { radarSessions = Self.mergeItems(radarSessions ?? [], other.radarSessions ?? []) }
         if (other.radarEdited ?? .distantPast) > (radarEdited ?? .distantPast) {

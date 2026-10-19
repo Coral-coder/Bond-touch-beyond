@@ -11,8 +11,23 @@ struct MoodShare: Codable, Equatable {
     /// "calm", "ok", "low", "stressed" or "overwhelmed".
     var level: String
     var at: Date
+    /// The last 24 hours: [time (s since 1970), HRV (ms), stress 0–100] per Health reading.
+    var series: [[Double]]? = nil
 
     var needsCare: Bool { level == "stressed" || level == "overwhelmed" }
+    var stress: Int { 100 - battery }
+}
+
+/// Stress as a face, from relaxed to overwhelmed (0–100).
+enum Stress {
+    static let faces: [(limit: Int, emoji: String, label: String)] = [
+        (15, "😌", "Relaxed"), (30, "🙂", "Calm"), (45, "😐", "Steady"), (60, "😕", "A bit tense"),
+        (75, "😟", "Stressed"), (90, "😣", "Very stressed"), (101, "😵‍💫", "Overwhelmed"),
+    ]
+    static func face(_ stress: Int) -> (emoji: String, label: String) {
+        let f = faces.first { stress < $0.limit } ?? faces[faces.count - 1]
+        return (f.emoji, f.label)
+    }
 }
 
 /// One mood you logged (kept on this phone; only the latest is shared, never the note).
@@ -48,6 +63,8 @@ final class BatteryService: ObservableObject {
     @Published private(set) var sleepHours: Double?
     @Published private(set) var restingHR: Double?
     @Published private(set) var entries: [MoodEntry] = []
+    /// HRV readings over the last 24 hours, with the stress each one suggests.
+    @Published private(set) var series: [(at: Date, hrv: Double, stress: Double)] = []
 
     private let store = HKHealthStore()
     private let hrvType = HKQuantityType.quantityType(forIdentifier: .heartRateVariabilitySDNN)!
@@ -90,6 +107,10 @@ final class BatteryService: ObservableObject {
 
         hrv = hrvRecent.isEmpty ? nil : hrvRecent.reduce(0, +) / Double(hrvRecent.count)
         hrvBaseline = Self.median(hrvMonth.map(\.1))
+        let dayStart = Date().addingTimeInterval(-24 * 3600)
+        if let base = hrvBaseline, base > 0 {
+            series = hrvMonth.filter { $0.0 > dayStart }.map { (at: $0.0, hrv: $0.1, stress: Self.stress(hrv: $0.1, baseline: base)) }
+        }
         restingHR = rhrMonth.last?.1
         sleepHours = sleep
 
@@ -124,6 +145,14 @@ final class BatteryService: ObservableObject {
             store.execute(q)
         }
     }
+
+    /// Lower HRV than your usual reads as more stress (50 = your usual).
+    static func stress(hrv: Double, baseline: Double) -> Double {
+        min(100, max(0, 50 - (hrv / baseline - 1) * 90))
+    }
+
+    /// Stress now (0–100): the inverse of the battery.
+    var stress: Int? { battery.map { 100 - $0 } }
 
     private static func median(_ v: [Double]) -> Double? {
         guard !v.isEmpty else { return nil }

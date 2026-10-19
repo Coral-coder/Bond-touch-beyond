@@ -437,7 +437,7 @@ struct HomeView: View {
         case .pair: pairCard.padding(.horizontal, 18)
         case .send: sendTouchButton.padding(.horizontal, 18)
         case .meanings: meaningChips.padding(.horizontal, 18)
-        case .weather: if let partner { WeatherButton(partner: partner).padding(.horizontal, 18) }
+        case .weather: if let partner, Feature.weather.isOn { WeatherButton(partner: partner).padding(.horizontal, 18) }
         case .together: TogetherHomeCard().padding(.horizontal, 18)
         case .feed: feed
         }

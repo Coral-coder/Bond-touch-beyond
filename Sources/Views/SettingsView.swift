@@ -28,6 +28,7 @@ struct SettingsView: View {
                 VStack(spacing: 12) {
                     ThemePickerCard()
                     LayoutPickerCard()
+                    FeaturesCard()
                     row("Personal details", "") { PersonalDetailsView() }
                     row("My Bond Touch Bracelet", "") { BraceletSettingsView() }
                     row("Bracelet firmware (recovery)", "") { FirmwareSettingsView() }
