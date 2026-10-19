@@ -27,8 +27,11 @@ struct BondTouchBeyondApp: App {
                     else if CloudRelay.code(fromURL: url) != nil { model.handleOpenURL(url) }
                     else { model.recovery.handleOpened(url) }
                 }
-                .task { await model.bootstrap() }
+                .task {
+                    if AppModel.isDemo { model.loadDemo() } else { await model.bootstrap() }
+                }
                 .onChange(of: scenePhase) { phase in
+                    if AppModel.isDemo { return }
                     // Brief `.inactive` moments (Control Centre, alerts) don't count as leaving.
                     if phase == .active { Task { await model.setActive(true) } }
                     if phase == .background { Task { await model.setActive(false) } }
@@ -55,6 +58,8 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         ])
         // Ask to show alert pushes (a partner's touch wakes the phone reliably as an alert);
         // register for a device token either way so pushes reach the app.
+        // Demo mode (screenshots): no permission prompts, no iCloud or Bluetooth.
+        if AppModel.isDemo { return true }
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in
             DispatchQueue.main.async { application.registerForRemoteNotifications() }
         }

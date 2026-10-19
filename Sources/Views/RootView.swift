@@ -4,7 +4,16 @@ struct RootView: View {
     @EnvironmentObject var model: AppModel
     @EnvironmentObject var store: LocalStore
     @EnvironmentObject var recovery: FirmwareRecovery
-    @State private var tab: AppTab = .home
+    @State private var tab: AppTab = {
+        switch AppModel.demoArgument("-demoTab") {
+        case "us": return .us
+        case "touches": return .touches
+        case "chat": return .chat
+        case "map": return .map
+        case "settings": return .settings
+        default: return .home
+        }
+    }()
     /// The theme (Settings → Theme). Every screen reads its colours from `Theme`, so a change
     /// rebuilds the whole tree.
     @AppStorage("appStyle") private var appStyle = AppStyle.aero.rawValue
@@ -55,6 +64,9 @@ struct RootView: View {
         } else {
             ZStack(alignment: .bottom) {
                 Group {
+                    if AppModel.isDemo, let screen = AppModel.demoArgument("-demoScreen") {
+                        DemoScreen(name: screen)
+                    } else {
                     switch tab {
                     case .home: HomeRouter()
                     case .us: NavigationStack { TogetherView().screenBackground() }
@@ -64,9 +76,40 @@ struct RootView: View {
                     case .chat: NavigationStack { PrivateSpaceView() }
                     case .settings: NavigationStack { SettingsView() }
                     }
+                    }
                 }
                 FloatingTabBar(selection: $tab).padding(.bottom, 6)
             }
+        }
+    }
+}
+
+/// One screen opened straight away in demo mode (`-demoScreen <name>`), for screenshots.
+private struct DemoScreen: View {
+    let name: String
+    @EnvironmentObject var model: AppModel
+
+    var body: some View {
+        NavigationStack {
+            Group {
+                switch name {
+                case "chess": ChessView()
+                case "whiteboard": WhiteboardView()
+                case "todo": TodoListView()
+                case "notes": SharedNotesView()
+                case "likes": LikesView()
+                case "dates": SpecialDatesView()
+                case "compose": ComposeTouchView()
+                case "draw": PatternDrawer(initial: AppModel.demoSlide, colorRGB: 0xEC5A89, endColorRGB: 0xB173DF) { _ in }
+                case "partner": if let p = model.selectedPartner { PartnerDetailView(partnerID: p.id) }
+                case "weather": if let p = model.selectedPartner { ScrollView { WeatherCard(partner: p).padding(16) } }
+                case "homeCards": HomeCardsEditor()
+                case "private": PrivateSpaceView()
+                case "people": PeopleView()
+                default: Text("Unknown screen \(name)")
+                }
+            }
+            .screenBackground()
         }
     }
 }

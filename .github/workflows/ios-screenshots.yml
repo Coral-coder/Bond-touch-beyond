@@ -1,0 +1,127 @@
+# Builds the app for the iPhone simulator, opens every screen in demo mode (sample data, no
+# accounts or permissions) across themes and home layouts, and screenshots each one. The
+# pictures, and contact sheets of them, are pushed to the `screenshots` branch.
+name: iOS screenshots
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/ios-screenshots.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  shots:
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Fetch libsignal_ffi
+        run: scripts/fetch-libsignal-ffi.sh
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Pick and boot a simulator
+        id: sim
+        run: |
+          UDID=$(xcrun simctl list devices available -j | python3 -c '
+          import json,sys
+          d=json.load(sys.stdin)["devices"]
+          best=None
+          for rt,devs in d.items():
+              if "iOS" not in rt: continue
+              for x in devs:
+                  if x["name"] in ("iPhone 16 Pro","iPhone 16","iPhone 15 Pro"):
+                      best=x["udid"]
+          print(best or "")')
+          echo "udid=$UDID" >> "$GITHUB_OUTPUT"
+          xcrun simctl boot "$UDID"
+          xcrun simctl bootstatus "$UDID" -b
+
+      - name: Build for the simulator
+        run: |
+          xcodebuild -project BondTouchBeyond.xcodeproj -scheme BondTouchBeyond \
+            -destination "id=${{ steps.sim.outputs.udid }}" -configuration Debug \
+            -derivedDataPath build CODE_SIGNING_ALLOWED=NO build | tail -5
+
+      - name: Screenshot every screen
+        env:
+          UDID: ${{ steps.sim.outputs.udid }}
+        run: |
+          APP=build/Build/Products/Debug-iphonesimulator/BondTouchBeyond.app
+          ID=com.lightwave.beyond
+          xcrun simctl install "$UDID" "$APP"
+          xcrun simctl status_bar "$UDID" override --time 9:41 --batteryState charged --batteryLevel 100 --wifiBars 3 --cellularBars 4
+          xcrun simctl privacy "$UDID" grant location-always "$ID" || true
+          xcrun simctl privacy "$UDID" grant photos "$ID" || true
+          mkdir -p shots
+          shot() {
+            name="$1"; shift
+            xcrun simctl terminate "$UDID" "$ID" 2>/dev/null || true
+            xcrun simctl launch "$UDID" "$ID" -demo "$@" >/dev/null
+            sleep 7
+            xcrun simctl io "$UDID" screenshot "shots/$name.png" >/dev/null 2>&1
+            sips -Z 1000 "shots/$name.png" >/dev/null
+            echo "shot $name"
+          }
+          for t in aero neon pastel mono aurora paper chalk bubble raindrop citrus; do
+            shot "theme-$t" -appStyle "$t" -homeLayout classic -classicCards ""
+          done
+          for l in focus conversation bento deck timeline orbit oneHand bubbles; do
+            shot "layout-$l" -appStyle aero -homeLayout "$l"
+          done
+          shot "layout-bubbles-bubble" -appStyle bubble -homeLayout bubbles
+          shot "layout-bento-citrus" -appStyle citrus -homeLayout bento
+          shot "classic-all-cards" -appStyle aero -homeLayout classic -classicCards "pair,weather,together,send,meanings,feed"
+          for tab in us touches chat map settings; do
+            shot "tab-$tab" -appStyle aero -demoTab "$tab"
+          done
+          shot "tab-settings-open" -appStyle aero -demoTab settings -themePickerOpen 1 -layoutPickerOpen 1
+          shot "tab-us-raindrop" -appStyle raindrop -demoTab us
+          for s in chess whiteboard todo notes likes dates compose draw partner weather homeCards people private; do
+            shot "screen-$s" -appStyle aero -demoScreen "$s"
+          done
+
+      - name: Contact sheets
+        run: |
+          python3 -m pip install --quiet pillow
+          python3 - <<'EOF'
+          import glob, os
+          from PIL import Image, ImageDraw, ImageFont
+          files = sorted(glob.glob("shots/*.png"))
+          groups = {}
+          for f in files:
+              groups.setdefault(os.path.basename(f).split("-")[0], []).append(f)
+          try:
+              font = ImageFont.truetype("/System/Library/Fonts/Supplemental/Arial Bold.ttf", 28)
+          except Exception:
+              font = ImageFont.load_default()
+          for g, fs in groups.items():
+              ims = [Image.open(f).convert("RGB") for f in fs]
+              w, h = 460, int(460 * ims[0].height / ims[0].width)
+              cols = 5
+              rows = (len(ims) + cols - 1) // cols
+              sheet = Image.new("RGB", (cols * (w + 20) + 20, rows * (h + 70) + 20), (233, 230, 225))
+              d = ImageDraw.Draw(sheet)
+              for i, (im, f) in enumerate(zip(ims, fs)):
+                  x = 20 + (i % cols) * (w + 20); y = 20 + (i // cols) * (h + 70)
+                  sheet.paste(im.resize((w, h)), (x, y))
+                  d.text((x, y + h + 10), os.path.basename(f)[:-4], fill=(20, 20, 20), font=font)
+              sheet.save(f"shots/sheet-{g}.jpg", quality=85)
+          EOF
+
+      - name: Push to the screenshots branch
+        run: |
+          cd shots
+          git init -q -b screenshots
+          git config user.name "screenshots-bot"
+          git config user.email "screenshots-bot@users.noreply.github.com"
+          git add . && git commit -qm "Screenshots of ${GITHUB_SHA::7}"
+          git push -q -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" screenshots
