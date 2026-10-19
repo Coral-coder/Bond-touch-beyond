@@ -13,6 +13,10 @@ struct TogetherSpace: Codable, Equatable {
     var todos: [TodoItem] = []
     var notes: [SharedNote] = []
     var chess: ChessGame?
+    /// The other games (same move-list shape as chess): checkers, backgammon, pool.
+    var checkers: ChessGame?
+    var backgammon: ChessGame?
+    var pool: ChessGame?
 
     /// Combines the partner's copy into ours.
     mutating func merge(_ other: TogetherSpace) {
@@ -25,6 +29,9 @@ struct TogetherSpace: Codable, Equatable {
         todos = Self.mergeItems(todos, other.todos)
         notes = Self.mergeItems(notes, other.notes)
         chess = ChessGame.merge(chess, other.chess)
+        checkers = ChessGame.merge(checkers, other.checkers)
+        backgammon = ChessGame.merge(backgammon, other.backgammon)
+        pool = ChessGame.merge(pool, other.pool)
     }
 
     static func mergeItems<T: SyncItem>(_ a: [T], _ b: [T]) -> [T] {

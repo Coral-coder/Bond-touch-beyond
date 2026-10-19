@@ -94,6 +94,10 @@ private struct DemoScreen: View {
             Group {
                 switch name {
                 case "chess": ChessView()
+                case "games": GamesView()
+                case "pool": PoolView()
+                case "checkers": CheckersView()
+                case "backgammon": BackgammonView()
                 case "whiteboard": WhiteboardView()
                 case "todo": TodoListView()
                 case "notes": SharedNotesView()
