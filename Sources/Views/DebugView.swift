@@ -40,6 +40,16 @@ struct DebugView: View {
                     }
 
                     section("Original Firebase / Bond API") {
+                        NavigationLink {
+                            LegacyLoginView().screenBackground().navigationBarTitleDisplayMode(.inline)
+                        } label: {
+                            HStack {
+                                Text(store.legacyEmail.isEmpty ? "Sign in to a Bond Touch account" : "Bond Touch account")
+                                    .font(.footnote.bold()).foregroundStyle(Theme.accent)
+                                Spacer()
+                                Image(systemName: "chevron.right").font(.caption).foregroundStyle(Theme.subtitle)
+                            }
+                        }
                         row("Signed in", store.legacyEmail.isEmpty ? "No" : store.legacyEmail)
                         row("ID token present", store.firebaseAuthToken.isEmpty ? "No" : "Yes")
                         row("Bridge enabled", store.useLegacyFirebase ? "Yes" : "No")
@@ -110,7 +120,7 @@ struct DebugView: View {
 
                     section("My database") {
                         if store.firebaseAuthToken.isEmpty {
-                            Text("Sign in under Settings → Bond Touch account to read your database.")
+                            Text("Sign in above (Bond Touch account) to read your database.")
                                 .font(.footnote).foregroundStyle(Theme.subtitle)
                         } else {
                             NavigationLink {

@@ -403,12 +403,8 @@ private struct HeartShared: View {
                     GlassCard {
                         VStack(alignment: .leading, spacing: 8) {
                             Text("Send & ask for a heartbeat").font(Theme.font(17, .heavy)).foregroundStyle(Theme.title)
-                            Text("Heartbeats are shared by email through the original Bond Touch servers. Sign in with your Bond Touch account in Settings → Bond Touch account to use it. You can still send a heartbeat to a partner's bracelet from the library.")
+                            Text("Heartbeat requests go through the original Bond Touch servers, which need a Bond Touch account (in the debug menu). You can still send a heartbeat to a partner's bracelet from the library.")
                                 .font(.footnote).foregroundStyle(Theme.subtitle)
-                            NavigationLink("Sign in") {
-                                LegacyLoginView().screenBackground().navigationBarTitleDisplayMode(.inline)
-                            }
-                            .foregroundStyle(Theme.accent)
                         }
                     }
                 } else {

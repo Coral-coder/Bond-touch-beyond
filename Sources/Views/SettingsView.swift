@@ -39,7 +39,6 @@ struct SettingsView: View {
                     row("Private Space", "") { PrivateSpaceView() }
                     row("Help & Support", "") { HelpView() }
                     row("Bracelet notifications", "") { BraceletNotificationsView() }
-                    row("Bond Touch account (beta)", "") { LegacyLoginView() }
                     languageRow
                     AppIconPicker()
                     ShareWeatherCard()
