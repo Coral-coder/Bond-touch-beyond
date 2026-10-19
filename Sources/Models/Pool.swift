@@ -44,7 +44,14 @@ enum Pool {
         var scratch: Bool
     }
 
-    static func encode(_ r: Rack) -> [[Double]?] { r.map { $0.map { [($0.x * 10000).rounded() / 10000, ($0.y * 10000).rounded() / 10000] } } }
+    static func encode(_ r: Rack) -> [[Double]?] {
+        r.map { p -> [Double]? in
+            guard let p else { return nil }
+            let x = (Double(p.x) * 10000).rounded() / 10000
+            let y = (Double(p.y) * 10000).rounded() / 10000
+            return [x, y]
+        }
+    }
     static func decode(_ r: [[Double]?]) -> Rack { r.map { $0.map { CGPoint(x: $0[0], y: $0[1]) } } }
 
     /// Runs a shot: returns frames (positions every 1/60 s) and what happened.
