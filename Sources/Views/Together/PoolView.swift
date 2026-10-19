@@ -39,7 +39,7 @@ struct PoolView: View {
                     guard myTurn, let cue = state.balls[0] else { return }
                     let origin = tableOrigin(geo.size, scale)
                     let tx = (v.location.x - origin.x) / scale, ty = (v.location.y - origin.y) / scale
-                    angle = atan2(ty - cue.y, tx - cue.x)
+                    angle = Double(atan2(ty - cue.y, tx - cue.x))
                 })
             }
             .aspectRatio((Pool.width + 0.16) / (Pool.height + 0.16), contentMode: .fit)
@@ -97,16 +97,17 @@ struct PoolView: View {
         }
         // Aim guide.
         if let aim, let cue = balls[0] {
+            let dx = CGFloat(cos(aim)), dy = CGFloat(sin(aim))
             var line = Path()
             line.move(to: pt(cue))
-            line.addLine(to: pt(CGPoint(x: cue.x + cos(aim) * 0.9, y: cue.y + sin(aim) * 0.9)))
+            line.addLine(to: pt(CGPoint(x: cue.x + dx * 0.9, y: cue.y + dy * 0.9)))
             ctx.stroke(line, with: .color(.white.opacity(0.55)), style: StrokeStyle(lineWidth: 1.5, dash: [6, 5]))
             var cueStick = Path()
-            let back = 0.06 + power * 0.18
-            cueStick.move(to: pt(CGPoint(x: cue.x - cos(aim) * back, y: cue.y - sin(aim) * back)))
-            cueStick.addLine(to: pt(CGPoint(x: cue.x - cos(aim) * (back + 0.75), y: cue.y - sin(aim) * (back + 0.75))))
+            let back = CGFloat(0.06 + power * 0.18)
+            cueStick.move(to: pt(CGPoint(x: cue.x - dx * back, y: cue.y - dy * back)))
+            cueStick.addLine(to: pt(CGPoint(x: cue.x - dx * (back + 0.75), y: cue.y - dy * (back + 0.75))))
             ctx.stroke(cueStick, with: .linearGradient(Gradient(colors: [Color(rgbInt: 0xF3E2C3), Color(rgbInt: 0x6B3E1F)]),
-                                                     startPoint: pt(cue), endPoint: pt(CGPoint(x: cue.x - cos(aim), y: cue.y - sin(aim)))),
+                                                     startPoint: pt(cue), endPoint: pt(CGPoint(x: cue.x - dx, y: cue.y - dy))),
                        style: StrokeStyle(lineWidth: 5, lineCap: .round))
         }
         for (i, b) in balls.enumerated() {
@@ -151,7 +152,7 @@ struct PoolView: View {
         guard let cue = s.balls[0],
               let target = s.balls.enumerated().dropFirst().compactMap({ $0.element }).min(by: { hypot($0.x - cue.x, $0.y - cue.y) < hypot($1.x - cue.x, $1.y - cue.y) })
         else { return }
-        angle = atan2(target.y - cue.y, target.x - cue.x)
+        angle = Double(atan2(target.y - cue.y, target.x - cue.x))
     }
 
     private func shoot(_ s: Pool.State) {
