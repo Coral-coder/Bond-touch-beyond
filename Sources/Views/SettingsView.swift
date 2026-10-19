@@ -41,6 +41,7 @@ struct SettingsView: View {
                     row("Bond Touch account (beta)", "") { LegacyLoginView() }
                     languageRow
                     AppIconPicker()
+                    ShareWeatherCard()
                     GlassCard(padding: 20) {
                         Toggle(isOn: Binding(get: { store.keepAliveInBackground },
                                              set: { store.keepAliveInBackground = $0; model.updateKeepAlive() })) {
@@ -593,6 +594,25 @@ struct MyPhotoPicker: View {
 }
 
 /// The neon touch lines' thickness and glow, with a live example of a slide and a tap rhythm.
+/// Whether partners see the weather where you are (your town, now and the forecast).
+private struct ShareWeatherCard: View {
+    @EnvironmentObject var model: AppModel
+    @AppStorage("shareWeather") private var share = true
+
+    var body: some View {
+        GlassCard(padding: 20) {
+            Toggle(isOn: Binding(get: { share }, set: { share = $0; Task { await model.publishPresence(force: true) } })) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Share my weather").foregroundStyle(Theme.title)
+                    Text("Partners see the weather where you are — your town, now and the next days. Looked up from Open-Meteo with your position rounded to about 10 km.")
+                        .font(.caption).foregroundStyle(Theme.subtitle)
+                }
+            }
+            .tint(Theme.accent)
+        }
+    }
+}
+
 /// Settings → Layout: how Home is arranged, folded away until tapped.
 private struct LayoutPickerCard: View {
     @AppStorage("homeLayout") private var layout = HomeLayout.classic.rawValue

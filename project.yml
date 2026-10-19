@@ -231,6 +231,7 @@ targets:
       - path: Widget
       - path: Sources/Shared/WidgetShared.swift
       - path: Sources/Shared/SendMeaningIntent.swift
+      - path: Sources/Models/Weather.swift
       - path: Sources/Design/Theme.swift
       - path: Sources/Design/TouchViz.swift
       - path: Sources/Models/TouchPattern.swift

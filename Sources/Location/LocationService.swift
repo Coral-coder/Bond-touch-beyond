@@ -38,6 +38,16 @@ final class LocationService: NSObject, ObservableObject {
         manager.startUpdatingLocation()
     }
 
+    /// A rough position for the weather when live updates are off: the system's last known
+    /// fix, and a one-off request for a fresh one (if location access was given).
+    var roughFix: CLLocation? {
+        if manager.authorizationStatus == .authorizedWhenInUse || manager.authorizationStatus == .authorizedAlways {
+            if !running { manager.requestLocation() }
+            return lastLocation ?? manager.location
+        }
+        return lastLocation
+    }
+
     func stop() {
         running = false
         manager.stopUpdatingLocation()
@@ -83,6 +93,8 @@ extension LocationService: CLLocationManagerDelegate {
             self.onUpdate?(location)
         }
     }
+
+    func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {}
 
     func locationManager(_ manager: CLLocationManager, didEnterRegion region: CLRegion) {
         guard region.identifier.hasPrefix(SavedPlace.prefix) else { return }

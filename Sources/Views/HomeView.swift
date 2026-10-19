@@ -21,6 +21,9 @@ struct HomeView: View {
     @State private var greetingDraft = ""
     @State private var meaningFromTouch: TouchMessage?
     @State private var meaningName = ""
+    @State private var editingCards = false
+    /// The cards on this home, in order (arranged from the cards button).
+    @AppStorage(HomeCard.key) private var cardsRaw = ""
 
     private var partner: Partner? { model.selectedPartner }
 
@@ -48,15 +51,13 @@ struct HomeView: View {
                     }
                 }
                 .animation(.easeOut(duration: 0.25), value: heartNote)
-            // Fixed above the feed; only Recent touches scrolls.
-            VStack(alignment: .leading, spacing: 14) {
-                pairCard
-                sendTouchButton
-                meaningChips
-            }
-            .padding(.horizontal, 18)
-            feed
+            // Your cards, in your order; only Recent touches scrolls (and takes the room left).
+            let cards = HomeCard.decode(cardsRaw)
+            ForEach(cards) { card($0) }
+            if !cards.contains(.feed) { Spacer(minLength: 0) }
         }
+        .padding(.bottom, 92)   // clear of the floating tab bar
+        .sheet(isPresented: $editingCards) { HomeCardsEditor() }
         .sheet(isPresented: $showHeart) {
             NavigationStack { HeartView().navigationTitle("Heartbeat") }
         }
@@ -105,6 +106,7 @@ struct HomeView: View {
             Spacer(minLength: 8)
             PartnerBar()
             Spacer(minLength: 8)
+            iconButton("square.grid.2x2.fill", label: "Arrange home cards") { editingCards = true }
             iconButton("person.2.fill", label: "People") { showPeople = true }
         }
         .padding(.horizontal, 18)
@@ -425,10 +427,20 @@ struct HomeView: View {
             }
         }
         .padding(.top, 14).padding(.bottom, 6)
-        .frame(maxWidth: .infinity, minHeight: 220, maxHeight: .infinity, alignment: .top)
+        .frame(maxWidth: .infinity, minHeight: 140, maxHeight: .infinity, alignment: .top)
         .glass(cornerRadius: 26)
         .padding(.horizontal, 12)
-        .padding(.bottom, 92)   // clear of the floating tab bar
+    }
+
+    @ViewBuilder private func card(_ c: HomeCard) -> some View {
+        switch c {
+        case .pair: pairCard.padding(.horizontal, 18)
+        case .send: sendTouchButton.padding(.horizontal, 18)
+        case .meanings: meaningChips.padding(.horizontal, 18)
+        case .weather: if let partner { WeatherButton(partner: partner).padding(.horizontal, 18) }
+        case .together: TogetherHomeCard().padding(.horizontal, 18)
+        case .feed: feed
+        }
     }
 
     /// "Last sent 5 min ago · Last received 2 hr ago", as the original's history header.

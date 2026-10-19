@@ -525,6 +525,8 @@ struct PresenceInfo: Codable, Equatable {
     /// The Apple Watch is standing in for the bracelet (it plays touches itself), so the
     /// partner's pushes can stay quiet too.
     var watchStandIn: Bool? = nil
+    /// The weather where this phone is (if it shares it): town, now, the next hours and days.
+    var weather: WeatherInfo? = nil
     /// When this snapshot was written — the phone's last check-in.
     var sentAt = Date()
 }

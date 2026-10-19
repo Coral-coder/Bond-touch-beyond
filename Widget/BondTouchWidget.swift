@@ -13,6 +13,7 @@ struct BondWidgets: WidgetBundle {
         BondTouchWidget()
         LastTouchWidget()
         TogetherWidget()
+        WeatherWidget()
     }
 }
 

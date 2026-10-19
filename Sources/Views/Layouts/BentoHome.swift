@@ -37,6 +37,7 @@ struct BentoHome: View {
                         }
                         .frame(height: 160)
                         togetherTile(p)
+                        WeatherButton(partner: p)
                         heartbeatTile(p)
                         lastTouchTile
                     }

@@ -208,6 +208,8 @@ final class AppModel: ObservableObject {
     let relay = CloudRelay()
     /// The shared Us space (dates, likes, to-dos, notes, whiteboard, chess) per partner.
     let together = TogetherStore()
+    /// The weather here, shared with partners in the status snapshot (Settings can turn it off).
+    @Published var myWeather: WeatherInfo?
 
     /// Location sharing — on unless the user turned it off. Kept in the Keychain, so it stays
     /// as set across updates and reinstalls.
@@ -555,7 +557,15 @@ final class AppModel: ObservableObject {
         info.braceletBattery = bracelet.batteryPercent
         info.braceletLastConnected = bracelet.isReady ? Date() : bracelet.lastConnectedAt
         info.watchStandIn = watchStandIn
+        if UserDefaults.standard.object(forKey: "shareWeather") as? Bool ?? true { info.weather = myWeather }
         return info
+    }
+
+    /// Looks up the weather here (every 30 minutes at most) for the status snapshot.
+    func refreshMyWeather() async {
+        guard UserDefaults.standard.object(forKey: "shareWeather") as? Bool ?? true, let fix = location.roughFix else { return }
+        if let w = myWeather, Date().timeIntervalSince(w.fetchedAt) < 30 * 60 { return }
+        if let w = await WeatherService.shared.weather(at: fix) { myWeather = w }
     }
 
     /// Writes the status snapshot to every iCloud partner. `force: false` (location updates)
@@ -566,6 +576,7 @@ final class AppModel: ObservableObject {
         let moving = (location.speed ?? 0) > 0.5 && Date().timeIntervalSince(location.lastLocation?.timestamp ?? .distantPast) < 60
         if !force, Date().timeIntervalSince(lastPresencePush) < (moving ? 15 : 120) { return }
         lastPresencePush = Date()
+        await refreshMyWeather()
         let info = currentPresence()
         lastPublished = info
         for partner in cloudPartners {

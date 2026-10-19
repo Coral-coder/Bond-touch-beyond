@@ -216,6 +216,38 @@ struct TogetherChip: View {
     }
 }
 
+/// The Together card for the Classic home: days together and the next special date.
+struct TogetherHomeCard: View {
+    @EnvironmentObject var model: AppModel
+    @EnvironmentObject var together: TogetherStore
+
+    var body: some View {
+        let space = together.space(model.selectedPartnerID)
+        let next = space.dates.filter { !$0.deleted }.min { $0.daysUntil() < $1.daysUntil() }
+        HStack(spacing: 12) {
+            Image(systemName: "heart.fill").font(.system(size: 22)).foregroundStyle(Theme.pink)
+            VStack(alignment: .leading, spacing: 2) {
+                if let since = space.togetherSince {
+                    Text("\(TogetherSpace.days(since: since).formatted()) days together").font(Theme.font(16, .heavy)).foregroundStyle(Theme.title)
+                    Text(TogetherSpace.durationText(since: since)).font(Theme.font(12)).foregroundStyle(Theme.subtitle)
+                } else {
+                    Text("Together").font(Theme.font(16, .heavy)).foregroundStyle(Theme.title)
+                    Text("Set when you got together in the Us tab").font(Theme.font(12)).foregroundStyle(Theme.subtitle)
+                }
+            }
+            Spacer(minLength: 4)
+            if let next {
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text(next.title).font(Theme.font(12, .bold)).foregroundStyle(Theme.title).lineLimit(1)
+                    Text(next.daysUntil() == 0 ? "today 🎉" : "in \(next.daysUntil()) days").font(Theme.font(12, .heavy)).foregroundStyle(Theme.accent)
+                }
+            }
+        }
+        .padding(14)
+        .glass(cornerRadius: Theme.cardCorner)
+    }
+}
+
 struct TogetherStartSheet: View {
     @EnvironmentObject var model: AppModel
     @EnvironmentObject var together: TogetherStore

@@ -204,6 +204,8 @@ struct WidgetSnapshot: Codable, Equatable {
     var meanings: [Meaning]
     var lastTouch: LastTouch? = nil
     var together: Together? = nil
+    /// The weather where the partner is.
+    var weather: WeatherInfo? = nil
 }
 
 enum WidgetSendState: String, Codable {
