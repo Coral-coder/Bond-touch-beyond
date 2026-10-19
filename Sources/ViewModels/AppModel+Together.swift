@@ -211,7 +211,7 @@ extension AppModel {
         }
         // R.A.D.A.R. check-ins: the day before and on the day, at 9:00.
         for (bondID, space) in together.spaces {
-            guard let next = space.radarNext else { continue }
+            guard Feature.radar.isOn, let next = space.radarNext else { continue }
             let name = names[bondID] ?? "your partner"
             for before in [1, 0] {
                 guard let day = Calendar.current.date(byAdding: .day, value: -before, to: next) else { continue }

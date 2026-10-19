@@ -254,6 +254,7 @@ final class AppModel: ObservableObject {
                 Task { @MainActor in
                     guard let self else { return }
                     self.bracelet.setPartnerMenu(self.partners.map { (id: $0.id, rgb: $0.colorRGB) })
+                    Poly.notePartnerCount(self.partners.count)
                 }
             }
             .store(in: &statusWatch)

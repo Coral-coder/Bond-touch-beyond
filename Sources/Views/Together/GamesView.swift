@@ -18,6 +18,10 @@ struct GamesView: View {
                 game("Checkers", "🔴", checkersStatus, [0xB0182A, 0x5B3A29]) { CheckersView() }
                 game("Backgammon", "🎲", backgammonStatus, [0x2F6B45, 0x5B3A29]) { BackgammonView() }
                 game("Battleship", "🚢", battleshipStatus, [0x1E6FB8, 0x0E2A4A]) { BattleshipView() }
+                if Feature.coop.isOn {
+                    game("Story together", "📖", storyStatus, [0x8E5BD6, 0x3F2A7A]) { StoryTogetherView() }
+                    game("Same wavelength", "🌊", wavelengthStatus, [0x18A5B8, 0x0E4A6A]) { WavelengthView() }
+                }
             }
             .padding(16).padding(.bottom, 90)
         }
@@ -74,6 +78,27 @@ struct GamesView: View {
         if BattleshipGame.loadFleet(g.id) == nil { return "Place your fleet" }
         if g.turn == nil { return "Waiting…" }
         return g.turn == me ? "Your shot" : "Their shot"
+    }
+
+    private var storyStatus: String {
+        let lines = syncLive(space.story).sorted { $0.created < $1.created }
+        guard let last = lines.last else { return "Write one, a line each" }
+        return last.by == me ? "Their line" : "Your line"
+    }
+
+    private var wavelengthStatus: String {
+        let them = me == "A" ? "B" : "A"
+        var mine: [Int: Int] = [:], theirs: [Int: Int] = [:]
+        for p in syncLive(space.wavelength) {
+            if p.by == me { mine[p.q] = p.pick } else if p.by == them { theirs[p.q] = p.pick }
+        }
+        var both = 0, matches = 0
+        for (q, pick) in mine {
+            guard let other = theirs[q] else { continue }
+            both += 1
+            if other == pick { matches += 1 }
+        }
+        return both == 0 ? "Co-op: think alike" : "\(matches) / \(both) in sync"
     }
 
     private var poolStatus: String {

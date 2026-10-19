@@ -24,6 +24,19 @@ struct TogetherSpace: Codable, Equatable {
     var radarEveryDays: Int?
     var radarNext: Date?
     var radarEdited: Date?
+    /// The relationship tools (see Relationship.swift).
+    var loveChecks: [LoveCheck]?
+    var appreciations: [Appreciation]?
+    var dateIdeas: [DateIdea]?
+    var answers: [QuestionAnswer]?
+    var events: [CalendarEvent]?
+    var agreements: [Agreement]?
+    var metamours: [Metamour]?
+    var compersion: [CompersionNote]?
+    var repairs: [RepairNote]?
+    var memories: [Memory]?
+    var story: [StoryLine]?
+    var wavelength: [WavelengthPick]?
 
     /// Combines the partner's copy into ours.
     mutating func merge(_ other: TogetherSpace) {
@@ -45,6 +58,23 @@ struct TogetherSpace: Codable, Equatable {
         if (other.radarEdited ?? .distantPast) > (radarEdited ?? .distantPast) {
             radarEveryDays = other.radarEveryDays; radarNext = other.radarNext; radarEdited = other.radarEdited
         }
+        loveChecks = Self.mergeOptional(loveChecks, other.loveChecks)
+        appreciations = Self.mergeOptional(appreciations, other.appreciations)
+        dateIdeas = Self.mergeOptional(dateIdeas, other.dateIdeas)
+        answers = Self.mergeOptional(answers, other.answers)
+        events = Self.mergeOptional(events, other.events)
+        agreements = Self.mergeOptional(agreements, other.agreements)
+        metamours = Self.mergeOptional(metamours, other.metamours)
+        compersion = Self.mergeOptional(compersion, other.compersion)
+        repairs = Self.mergeOptional(repairs, other.repairs)
+        memories = Self.mergeOptional(memories, other.memories)
+        story = Self.mergeOptional(story, other.story)
+        wavelength = Self.mergeOptional(wavelength, other.wavelength)
+    }
+
+    static func mergeOptional<T: SyncItem>(_ a: [T]?, _ b: [T]?) -> [T]? {
+        guard a != nil || b != nil else { return nil }
+        return mergeItems(a ?? [], b ?? [])
     }
 
     static func mergeItems<T: SyncItem>(_ a: [T], _ b: [T]) -> [T] {

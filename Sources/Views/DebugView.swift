@@ -8,6 +8,7 @@ struct DebugView: View {
     @EnvironmentObject var store: LocalStore
     @ObservedObject private var netLog = NetLog.shared
     @AppStorage("showKissButton") private var showKissButton = false
+    @AppStorage(Poly.modeKey) private var polyMode = Poly.Mode.auto.rawValue
     @Environment(\.dismiss) private var dismiss
 
     private var legacyActive: Bool { store.useLegacyFirebase && !store.firebaseAuthToken.isEmpty }
@@ -24,6 +25,12 @@ struct DebugView: View {
                     section("Experimental") {
                         Toggle("Kiss button (next to the heartbeat)", isOn: $showKissButton)
                             .font(.footnote).tint(Theme.accent)
+                        Picker("Polyamory features", selection: $polyMode) {
+                            ForEach(Poly.Mode.allCases, id: \.rawValue) { Text($0.title).tag($0.rawValue) }
+                        }
+                        .font(.footnote).tint(Theme.accent)
+                        Text("R.A.D.A.R., the poly calendar, and metamours & compersion. Automatic turns them on once you have two or more partners (now \(model.partners.count)) — currently \(Poly.isOn ? "on" : "off").")
+                            .font(.caption2).foregroundStyle(Theme.subtitle)
                     }
 
                     section("Active data backend") {

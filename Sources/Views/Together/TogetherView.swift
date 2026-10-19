@@ -138,10 +138,55 @@ struct TogetherView: View {
             if Feature.todos.isOn { tile("To-do", "checklist", open == 0 ? "All done" : "\(open) to do", Theme.lime) { TodoListView() } }
             if Feature.notes.isOn { tile("Notes", "note.text", notes == 0 ? "Write one" : "\(notes) note\(notes == 1 ? "" : "s")", Theme.amber) { SharedNotesView() } }
             if Feature.whiteboard.isOn { tile("Whiteboard", "scribble.variable", "Draw together", Theme.magenta) { WhiteboardView() } }
-            if Feature.games.isOn { tile("Games", "gamecontroller.fill", "Pool, chess, checkers, backgammon, Battleship", Theme.accent) { GamesView() } }
+            if Feature.games.isOn { tile("Games", "gamecontroller.fill", "Pool, chess, Battleship, co-op…", Theme.accent) { GamesView() } }
             if Feature.stress.isOn { tile("Stress & mood", "face.smiling", batteryStatus, Theme.lime) { BatteryView() } }
+            if Feature.question.isOn { tile("Question of the day", "questionmark.bubble.fill", questionStatus, Theme.accent) { QuestionOfDayView() } }
+            if Feature.appreciation.isOn { tile("Appreciation jar", "envelope.open.fill", jarStatus, Theme.pink) { AppreciationJarView() } }
+            if Feature.loveLanguages.isOn { tile("Love languages", "heart.text.square.fill", "Weekly check-in", Theme.magenta) { LoveLanguageView() } }
+            if Feature.dateRoulette.isOn { tile("Date roulette", "dice.fill", "Spin for a date idea", Theme.amber) { DateRouletteView() } }
+            if Feature.memories.isOn { tile("Memory lane", "photo.stack.fill", memoryStatus, Theme.lime) { MemoryLaneView() } }
+            if Feature.agreements.isOn { tile("Agreements", "hand.raised.fingers.spread.fill", agreementStatus, Theme.accent) { AgreementsView() } }
+            if Feature.repair.isOn { tile("Repair", "bandage.fill", repairStatus, Theme.pink) { RepairView() } }
             if Feature.radar.isOn { tile("R.A.D.A.R.", "dot.radiowaves.left.and.right", radarStatus, Theme.pink) { RadarView() } }
+            if Feature.polyCalendar.isOn { tile("Poly calendar", "calendar.badge.clock", "Plans with everyone", Theme.magenta) { PolyCalendarView() } }
+            if Feature.metamours.isOn { tile("Metamours", "person.3.fill", "& compersion", Theme.lime) { MetamoursView() } }
         }
+    }
+
+    private var questionStatus: String {
+        let me = model.myRole(model.selectedPartnerID), day = DailyQuestion.key()
+        let answers = syncLive(space.answers).filter { $0.day == day }
+        if answers.contains(where: { $0.by == me }) {
+            return answers.count > 1 ? "You both answered 💞" : "Waiting for them"
+        }
+        return answers.isEmpty ? "Today's is ready" : "They answered — your turn"
+    }
+
+    private var jarStatus: String {
+        let me = model.myRole(model.selectedPartnerID)
+        let n = syncLive(space.appreciations).filter { $0.by != me && !$0.opened }.count
+        return n == 0 ? "Leave a little note" : "\(n) note\(n == 1 ? "" : "s") for you 💌"
+    }
+
+    private var memoryStatus: String {
+        let n = syncLive(space.memories).count
+        return n == 0 ? "Keep a moment" : "\(n) memor\(n == 1 ? "y" : "ies")"
+    }
+
+    private var agreementStatus: String {
+        let me = model.myRole(model.selectedPartnerID)
+        let items = syncLive(space.agreements)
+        let waiting = items.filter { !$0.agreed(me) }.count
+        if waiting > 0 { return "\(waiting) waiting for you" }
+        return items.isEmpty ? "What you both agree" : "\(items.count) agreed"
+    }
+
+    private var repairStatus: String {
+        let me = model.myRole(model.selectedPartnerID)
+        if syncLive(space.repairs).contains(where: { $0.kind == .timeout && $0.by != me && ($0.until ?? .distantPast) > Date() }) {
+            return "They're taking a breather"
+        }
+        return "Time-outs & making up"
     }
 
     private var radarStatus: String {
