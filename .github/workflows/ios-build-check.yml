@@ -1,21 +1,18 @@
-# Compiles the iOS app for the simulator on every push and PR, with signing disabled,
-# so build breaks are caught without needing an Apple team or secrets. The separate
-# ios-testflight.yml workflow handles signed archives/uploads from main.
+# Full compile check (both simulator architectures), with signing disabled, for pull
+# requests and by hand. Everyday pushes get the faster ios-quick-build.yml instead, and main
+# needs neither: ios-testflight.yml archives (and so compiles) everything from main.
 name: iOS build check
 
 on:
-  push:
-    paths:
-      - "project.yml"
-      - "Sources/**"
-      - "ThirdParty/**"
-      - "scripts/**"
-      - "Watch/**"
-      - ".github/workflows/ios-build-check.yml"
+  workflow_dispatch:
   pull_request:
     paths:
       - "project.yml"
       - "Sources/**"
+
+concurrency:
+  group: ios-build-check-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:

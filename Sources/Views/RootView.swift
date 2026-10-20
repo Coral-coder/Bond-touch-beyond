@@ -20,6 +20,7 @@ struct RootView: View {
     @AppStorage("paperInk") private var paperInk = PaperInk.aqua.rawValue
     @AppStorage(ThemeTints.key) private var themeTints = ""
     @State private var keyboardUp = false
+    @State private var showWhatsNew = false
 
     var body: some View {
         ZStack {
@@ -55,6 +56,13 @@ struct RootView: View {
         }
         .preferredColorScheme(Theme.colorScheme)
         .tint(Theme.accent)
+        .onAppear { if WhatsNew.check(existingUser: store.profile.isComplete) { showWhatsNew = true } }
+        .sheet(isPresented: $showWhatsNew) {
+            NavigationStack {
+                WhatsNewView().screenBackground()
+                    .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { showWhatsNew = false } } }
+            }
+        }
     }
 
     @ViewBuilder private var content: some View {

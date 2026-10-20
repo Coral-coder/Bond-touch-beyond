@@ -4,11 +4,19 @@ name: iOS UI tests
 
 on:
   workflow_dispatch:
+  # Only when what it tests changes (the theme picker and the themes), and never on main —
+  # the change was already tested on its branch before it was shipped.
   push:
+    branches-ignore: [main, screenshots, uitest-shots]
     paths:
       - "UITests/**"
       - "uitests.yml"
+      - "Sources/Design/Theme.swift"
       - ".github/workflows/ios-ui-tests.yml"
+
+concurrency:
+  group: ios-ui-tests-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: write

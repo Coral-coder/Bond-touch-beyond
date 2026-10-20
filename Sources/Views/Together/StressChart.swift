@@ -1,8 +1,9 @@
 import Charts
 import SwiftUI
 
-/// Stress and HRV over the last 24 hours, with logged moods marked. Pinch to zoom in on a
-/// stretch of time, drag to move along it; double-tap to see the whole day again.
+/// Stress and HRV over the last 24 hours, with logged moods marked. Pick 24, 12, 6 or 3 hours;
+/// zoomed in, the charts slide sideways (iOS 17) to move along the day. No gestures sit on the
+/// card itself, so a finger on the charts still scrolls the page up and down.
 struct StressChart: View {
     struct Point: Identifiable { let at: Date; let hrv: Double; let stress: Double; var id: Date { at } }
     struct Mark: Identifiable { let at: Date; let emoji: String; var id: Date { at } }
@@ -16,14 +17,16 @@ struct StressChart: View {
         stress < 35 ? Theme.lime : stress < 65 ? Theme.amber : Theme.danger
     }
 
-    /// Hours shown (1…24) and where the window ends (hours before now).
+    /// Hours shown at once.
     @State private var span: Double = 24
-    @State private var endOffset: Double = 0
-    @State private var pinchBase: Double?
-    @State private var dragBase: Double?
+    /// Where the zoomed-in charts have slid to (the left edge), shared by both charts.
+    @State private var scrollX = Date().addingTimeInterval(-24 * 3600)
 
+    /// The whole day, which the charts slide along `span` hours at a time (iOS 17); on iOS 16,
+    /// just the newest `span` hours.
     private var domain: ClosedRange<Date> {
-        let end = Date().addingTimeInterval(-endOffset * 3600)
+        let end = Date()
+        if #available(iOS 17.0, *) { return end.addingTimeInterval(-24 * 3600)...end }
         return end.addingTimeInterval(-span * 3600)...end
     }
 
@@ -32,8 +35,17 @@ struct StressChart: View {
             HStack {
                 Text("Last 24 hours").font(Theme.font(16, .heavy)).foregroundStyle(Theme.title)
                 Spacer()
-                Text(span >= 23.5 ? "Pinch to zoom" : "\(Int(span.rounded())) h · double-tap for 24 h")
-                    .font(Theme.font(11)).foregroundStyle(Theme.subtitle)
+                if !points.isEmpty {
+                    Picker("Hours shown", selection: Binding(get: { span }, set: { new in
+                        span = new
+                        // Zooming in starts at the newest readings.
+                        scrollX = Date().addingTimeInterval(-new * 3600)
+                    })) {
+                        ForEach([24.0, 12, 6, 3], id: \.self) { Text("\(Int($0)) h").tag($0) }
+                    }
+                    .pickerStyle(.segmented)
+                    .frame(width: 180)
+                }
             }
             if points.isEmpty {
                 Text(emptyText)
@@ -53,6 +65,7 @@ struct StressChart: View {
                     }
                 }
                 .chartXScale(domain: domain)
+                .modifier(SlideAlong(span: span, scrollX: $scrollX))
                 .chartYScale(domain: 0...100)
                 .chartYAxis { AxisMarks(values: [0, 50, 100]) { v in
                     AxisGridLine().foregroundStyle(Theme.ink.opacity(0.1))
@@ -72,6 +85,7 @@ struct StressChart: View {
                         .foregroundStyle(Theme.accent).symbolSize(18)
                 }
                 .chartXScale(domain: domain)
+                .modifier(SlideAlong(span: span, scrollX: $scrollX))
                 .chartXAxis { AxisMarks(values: .automatic(desiredCount: 5)) { _ in
                     AxisGridLine().foregroundStyle(Theme.ink.opacity(0.1))
                     AxisValueLabel(format: .dateTime.hour())
@@ -81,23 +95,26 @@ struct StressChart: View {
         }
         .padding(16)
         .glass(cornerRadius: Theme.cardCorner)
-        .contentShape(Rectangle())
-        .gesture(MagnificationGesture()
-            .onChanged { scale in
-                let base = pinchBase ?? span
-                pinchBase = base
-                span = min(24, max(1, base / scale))
-                endOffset = min(endOffset, 24 - span)
-            }
-            .onEnded { _ in pinchBase = nil })
-        .simultaneousGesture(DragGesture(minimumDistance: 10)
-            .onChanged { v in
-                let base = dragBase ?? endOffset
-                dragBase = base
-                endOffset = min(24 - span, max(0, base + Double(v.translation.width) / 300 * span))
-            }
-            .onEnded { _ in dragBase = nil })
-        .onTapGesture(count: 2) { withAnimation { span = 24; endOffset = 0 } }
+    }
+}
+
+/// Zoomed in: the chart shows `span` hours and slides sideways with the system's own chart
+/// scrolling (iOS 17), which hands vertical swipes on to the page.
+private struct SlideAlong: ViewModifier {
+    let span: Double
+    @Binding var scrollX: Date
+
+    func body(content: Content) -> some View {
+        if span >= 24 {
+            content
+        } else if #available(iOS 17.0, *) {
+            content
+                .chartScrollableAxes(.horizontal)
+                .chartXVisibleDomain(length: span * 3600)
+                .chartScrollPosition(x: $scrollX)
+        } else {
+            content
+        }
     }
 }
 

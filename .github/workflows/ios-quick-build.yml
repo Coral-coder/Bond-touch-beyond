@@ -1,0 +1,56 @@
+# Quick compile check for bug fixes: builds the app (with its watch app and extensions) for
+# the simulator on Apple silicon only — one architecture instead of two, no index store — so
+# it finishes in about half the time of the full check. A newer push to the same branch
+# cancels the run in progress. Not run on main: the TestFlight archive compiles everything.
+name: iOS quick build
+
+on:
+  push:
+    branches-ignore: [main, screenshots, uitest-shots]
+    paths:
+      - "project.yml"
+      - "Sources/**"
+      - "Watch/**"
+      - "Widget/**"
+      - "WatchWidget/**"
+      - "NotificationService/**"
+      - "NotificationContent/**"
+      - "ThirdParty/**"
+      - "scripts/**"
+      - ".github/workflows/ios-quick-build.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ios-quick-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Fetch libsignal_ffi (Signal protocol core)
+        run: scripts/fetch-libsignal-ffi.sh
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Build for simulator (arm64 only, no signing)
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project BondTouchBeyond.xcodeproj \
+            -scheme BondTouchBeyond \
+            -destination 'generic/platform=iOS Simulator' \
+            -configuration Debug \
+            ARCHS=arm64 ONLY_ACTIVE_ARCH=YES \
+            COMPILER_INDEX_STORE_ENABLE=NO \
+            DEBUG_INFORMATION_FORMAT=dwarf \
+            CODE_SIGNING_ALLOWED=NO \
+            build 2>&1 | tee build.log | grep -E ': (error|warning: unreachable)|BUILD (SUCCEEDED|FAILED)' || true
+          grep -q "BUILD SUCCEEDED" build.log || { grep -E ': error: ' build.log | sort -u | head -40; exit 1; }

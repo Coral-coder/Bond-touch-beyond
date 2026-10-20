@@ -11,6 +11,7 @@ struct HomeView: View {
     /// The kiss button ("Thinking of you") — off unless enabled in the debug panel.
     @AppStorage("showKissButton") private var showKissButton = false
     @State private var kissSent = false
+    @State private var showMoodCheckIn = false
     /// A heartbeat send's problem (no heart rate, no partner…), shown briefly under the top bar.
     @State private var heartNote: String?
     @State private var showPeople = false
@@ -58,6 +59,7 @@ struct HomeView: View {
         }
         .padding(.bottom, TabBarSpace.fixed)
         .sheet(isPresented: $editingCards) { HomeCardsEditor() }
+        .sheet(isPresented: $showMoodCheckIn) { MoodCheckInSheet() }
         .sheet(isPresented: $showHeart) {
             NavigationStack { HeartView().navigationTitle("Heartbeat") }
         }
@@ -102,6 +104,9 @@ struct HomeView: View {
     private var topBar: some View {
         HStack(spacing: 10) {
             heartButton
+            if Feature.stress.isOn {
+                iconButton("face.smiling", label: "Mood check-in") { showMoodCheckIn = true }
+            }
             if showKissButton { kissButton }
             Spacer(minLength: 8)
             PartnerBar()
