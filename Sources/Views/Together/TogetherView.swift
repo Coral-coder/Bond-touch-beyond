@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// Us: the space the two of you share — how long you've been together (counting live),
 /// anniversaries and birthdays (with reminders), what each of you likes, and shared to-dos,
@@ -10,6 +11,10 @@ struct TogetherView: View {
     @State private var pickingStart = false
     @State private var addingDate = false
     @State private var editingDate: SpecialDate?
+    /// The order of the tiles (ids, comma-separated), rearranged by dragging.
+    @AppStorage("usTileOrder") private var tileOrder = ""
+    @State private var arranging = false
+    @State private var dragging: String?
 
     private var partner: Partner? { model.selectedPartner }
     private var space: TogetherSpace { together.space(model.selectedPartnerID) }
@@ -38,7 +43,8 @@ struct TogetherView: View {
                     Text("Add a partner to start your Us space.")
                         .font(Theme.font(15)).foregroundStyle(Theme.subtitle).padding(.top, 40)
                 }
-                Color.clear.frame(height: 12)
+                // Room to scroll the last tiles clear of the tab bar.
+                Color.clear.frame(height: TabBarSpace.scrollGap)
             }
             .padding(.horizontal, 16)
         }
@@ -130,27 +136,120 @@ struct TogetherView: View {
 
     // MARK: Shared things
 
-    private var tiles: some View {
+    /// One tile on the Us screen.
+    private struct Tile: Identifiable {
+        let id: String
+        let title: String
+        let icon: String
+        let sub: String
+        let tint: Color
+        let destination: () -> AnyView
+    }
+
+    private var allTiles: [Tile] {
         let open = space.todos.filter { !$0.deleted && !$0.done }.count
         let notes = space.notes.filter { !$0.deleted }.count
-        let cols = [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)]
-        return LazyVGrid(columns: cols, spacing: 12) {
-            if Feature.todos.isOn { tile("To-do", "checklist", open == 0 ? "All done" : "\(open) to do", Theme.lime) { TodoListView() } }
-            if Feature.notes.isOn { tile("Notes", "note.text", notes == 0 ? "Write one" : "\(notes) note\(notes == 1 ? "" : "s")", Theme.amber) { SharedNotesView() } }
-            if Feature.whiteboard.isOn { tile("Whiteboard", "scribble.variable", "Draw together", Theme.magenta) { WhiteboardView() } }
-            if Feature.games.isOn { tile("Games", "gamecontroller.fill", "Pool, chess, Battleship, co-op…", Theme.accent) { GamesView() } }
-            if Feature.stress.isOn { tile("Stress & mood", "face.smiling", batteryStatus, Theme.lime) { BatteryView() } }
-            if Feature.question.isOn { tile("Question of the day", "questionmark.bubble.fill", questionStatus, Theme.accent) { QuestionOfDayView() } }
-            if Feature.appreciation.isOn { tile("Appreciation jar", "envelope.open.fill", jarStatus, Theme.pink) { AppreciationJarView() } }
-            if Feature.loveLanguages.isOn { tile("Love languages", "heart.text.square.fill", "Weekly check-in", Theme.magenta) { LoveLanguageView() } }
-            if Feature.dateRoulette.isOn { tile("Date roulette", "dice.fill", "Spin for a date idea", Theme.amber) { DateRouletteView() } }
-            if Feature.memories.isOn { tile("Memory lane", "photo.stack.fill", memoryStatus, Theme.lime) { MemoryLaneView() } }
-            if Feature.agreements.isOn { tile("Agreements", "hand.raised.fingers.spread.fill", agreementStatus, Theme.accent) { AgreementsView() } }
-            if Feature.repair.isOn { tile("Repair", "bandage.fill", repairStatus, Theme.pink) { RepairView() } }
-            if Feature.radar.isOn { tile("R.A.D.A.R.", "dot.radiowaves.left.and.right", radarStatus, Theme.pink) { RadarView() } }
-            if Feature.polyCalendar.isOn { tile("Poly calendar", "calendar.badge.clock", "Plans with everyone", Theme.magenta) { PolyCalendarView() } }
-            if Feature.metamours.isOn { tile("Metamours", "person.3.fill", "& compersion", Theme.lime) { MetamoursView() } }
+        var t: [Tile] = []
+        func add<V: View>(_ on: Bool, _ id: String, _ title: String, _ icon: String, _ sub: String, _ tint: Color,
+                          _ dest: @escaping () -> V) {
+            if on { t.append(Tile(id: id, title: title, icon: icon, sub: sub, tint: tint, destination: { AnyView(dest()) })) }
         }
+        let touches = model.currentMeanings.count
+        add(true, "language", "Touch Language", "hand.tap.fill", touches == 0 ? "Save your touches" : "\(touches) touch\(touches == 1 ? "" : "es")", Theme.accent) { MeaningsView() }
+        add(Feature.todos.isOn, "todos", "To-do", "checklist", open == 0 ? "All done" : "\(open) to do", Theme.lime) { TodoListView() }
+        add(Feature.notes.isOn, "notes", "Notes", "note.text", notes == 0 ? "Write one" : "\(notes) note\(notes == 1 ? "" : "s")", Theme.amber) { SharedNotesView() }
+        add(Feature.whiteboard.isOn, "whiteboard", "Whiteboard", "scribble.variable", "Draw together", Theme.magenta) { WhiteboardView() }
+        add(Feature.games.isOn, "games", "Games", "gamecontroller.fill", "Pool, chess, Battleship, co-op…", Theme.accent) { GamesView() }
+        add(Feature.stress.isOn, "stress", "Stress & mood", "face.smiling", batteryStatus, Theme.lime) { BatteryView() }
+        add(Feature.question.isOn, "question", "Question of the day", "questionmark.bubble.fill", questionStatus, Theme.accent) { QuestionOfDayView() }
+        add(Feature.appreciation.isOn, "jar", "Appreciation jar", "envelope.open.fill", jarStatus, Theme.pink) { AppreciationJarView() }
+        add(Feature.loveLanguages.isOn, "love", "Love languages", "heart.text.square.fill", "Weekly check-in", Theme.magenta) { LoveLanguageView() }
+        add(Feature.dateRoulette.isOn, "roulette", "Date roulette", "dice.fill", "Spin for a date idea", Theme.amber) { DateRouletteView() }
+        add(Feature.memories.isOn, "memories", "Memory lane", "photo.stack.fill", memoryStatus, Theme.lime) { MemoryLaneView() }
+        add(Feature.agreements.isOn, "agreements", "Agreements", "hand.raised.fingers.spread.fill", agreementStatus, Theme.accent) { AgreementsView() }
+        add(Feature.repair.isOn, "repair", "Repair", "bandage.fill", repairStatus, Theme.pink) { RepairView() }
+        add(Feature.radar.isOn, "radar", "R.A.D.A.R.", "dot.radiowaves.left.and.right", radarStatus, Theme.pink) { RadarView() }
+        add(Feature.polyCalendar.isOn, "polycal", "Poly calendar", "calendar.badge.clock", "Plans with everyone", Theme.magenta) { PolyCalendarView() }
+        add(Feature.metamours.isOn, "metamours", "Metamours", "person.3.fill", "& compersion", Theme.lime) { MetamoursView() }
+        return t
+    }
+
+    /// The tiles in your order; ones you haven't placed yet keep their default place.
+    private var orderedTiles: [Tile] {
+        let order = tileOrder.split(separator: ",").map(String.init)
+        return allTiles.enumerated().sorted { a, b in
+            let ia = order.firstIndex(of: a.element.id) ?? order.count + a.offset
+            let ib = order.firstIndex(of: b.element.id) ?? order.count + b.offset
+            return ia < ib
+        }.map(\.element)
+    }
+
+    private var tiles: some View {
+        let cols = [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)]
+        let list = orderedTiles
+        return VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text(arranging ? "Drag the tiles into the order you like" : "")
+                    .font(Theme.font(12)).foregroundStyle(Theme.subtitle)
+                Spacer()
+                Button(arranging ? "Done" : "Arrange") {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) { arranging.toggle() }
+                }
+                .font(Theme.font(13, .bold)).foregroundStyle(Theme.accent)
+            }
+            LazyVGrid(columns: cols, spacing: 12) {
+                ForEach(list) { t in
+                    if arranging {
+                        tileFace(t)
+                            .overlay(alignment: .topTrailing) {
+                                Image(systemName: "line.3.horizontal").font(.system(size: 14, weight: .bold))
+                                    .foregroundStyle(Theme.subtitle).padding(10)
+                            }
+                            .opacity(dragging == t.id ? 0.4 : 1)
+                            .onDrag {
+                                dragging = t.id
+                                return NSItemProvider(object: t.id as NSString)
+                            }
+                            .onDrop(of: [UTType.text], delegate: TileDrop(target: t.id, ids: list.map(\.id),
+                                                                        dragging: $dragging, order: $tileOrder))
+                    } else {
+                        NavigationLink { t.destination().screenBackground() } label: { tileFace(t) }
+                            .buttonStyle(.plain)
+                    }
+                }
+            }
+        }
+    }
+
+    private func tileFace(_ t: Tile) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Image(systemName: t.icon).font(.system(size: 24, weight: .semibold)).foregroundStyle(t.tint)
+            Spacer(minLength: 0)
+            Text(t.title).font(Theme.font(17, .heavy)).foregroundStyle(Theme.title)
+            Text(t.sub).font(Theme.font(12)).foregroundStyle(Theme.subtitle).lineLimit(2)
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, minHeight: 120, alignment: .leading)
+        .glass(cornerRadius: Theme.cardCorner)
+    }
+
+    /// Moves the dragged tile to where it's hovering, live, and saves the order.
+    private struct TileDrop: DropDelegate {
+        let target: String
+        let ids: [String]
+        @Binding var dragging: String?
+        @Binding var order: String
+
+        func dropEntered(info: DropInfo) {
+            var list = ids
+            guard let d = dragging, d != target,
+                  let from = list.firstIndex(of: d), let to = list.firstIndex(of: target) else { return }
+            list.move(fromOffsets: IndexSet(integer: from), toOffset: to > from ? to + 1 : to)
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) { order = list.joined(separator: ",") }
+            UISelectionFeedbackGenerator().selectionChanged()
+        }
+        func dropUpdated(info: DropInfo) -> DropProposal? { DropProposal(operation: .move) }
+        func performDrop(info: DropInfo) -> Bool { dragging = nil; return true }
     }
 
     private var questionStatus: String {
@@ -217,21 +316,6 @@ struct TogetherView: View {
         }
     }
 
-    private func tile<D: View>(_ title: String, _ icon: String, _ sub: String, _ tint: Color,
-                               @ViewBuilder destination: @escaping () -> D) -> some View {
-        NavigationLink { destination().screenBackground() } label: {
-            VStack(alignment: .leading, spacing: 8) {
-                Image(systemName: icon).font(.system(size: 24, weight: .semibold)).foregroundStyle(tint)
-                Spacer(minLength: 0)
-                Text(title).font(Theme.font(17, .heavy)).foregroundStyle(Theme.title)
-                Text(sub).font(Theme.font(12)).foregroundStyle(Theme.subtitle)
-            }
-            .padding(16)
-            .frame(maxWidth: .infinity, minHeight: 120, alignment: .leading)
-            .glass(cornerRadius: Theme.cardCorner)
-        }
-        .buttonStyle(.plain)
-    }
 }
 
 /// "Together for 1 year, 3 months, 12 days", with a live hours:minutes:seconds counter.

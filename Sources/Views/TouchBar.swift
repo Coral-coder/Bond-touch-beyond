@@ -23,6 +23,8 @@ final class TouchBarRecorder: ObservableObject {
     let fingers = Fingers()
 
     var windowSeconds: Double = 5
+    /// While true the bar ignores fingers (a held touch is waiting to be sent or cleared).
+    var locked = false
     /// Called with the finished samples (trimmed) when the window ends or on `finish()`.
     var onFinish: (([Int]) -> Void)?
 
@@ -41,6 +43,7 @@ final class TouchBarRecorder: ObservableObject {
     /// The surface reports the fingers (0…1 along the bar) and the event's timestamp
     /// (system uptime, as UITouch reports it).
     func update(_ positions: [CGFloat], at time: TimeInterval) {
+        if locked && !recording { fingers.positions = []; return }
         let wasEmpty = fingers.positions.isEmpty
         fingers.positions = positions
         if !positions.isEmpty, wasEmpty { haptic.impactOccurred(intensity: 0.6); stepHaptic.prepare() }
@@ -331,9 +334,17 @@ struct ComposeTouchView: View {
     private var statusText: String {
         if recorder.recording { return "Recording…" }
         if mode == .createMeaning { return lastTouch.isEmpty ? "Touch the bar to start" : "Recorded — save it below" }
-        if !pending.isEmpty { return "Ready — tap Send" }
+        if !pending.isEmpty { return "Held — tap Send, or Clear to redo it" }
         if let sentAt { return "Sent ✓ \(sentAt.formatted(date: .omitted, time: .shortened))" }
         return "Touch the bar to start"
+    }
+
+    /// Auto-send: the touch window from Settings, then it sends. Off: the bar records for as
+    /// long as a touch can be (10 s) and the touch is held until you tap Send.
+    private func applyWindow() {
+        recorder.windowSeconds = (mode == .send && !autoSend)
+            ? Double(TouchPattern.maxSamples * TouchPattern.sampleMs) / 1000
+            : store.touchWindowSeconds
     }
 
     private var canClear: Bool { recorder.recording || !pending.isEmpty || !lastTouch.isEmpty }
@@ -356,7 +367,7 @@ struct ComposeTouchView: View {
     var body: some View {
         VStack(spacing: 16) {
             HStack {
-                Button("Close") { recorder.cancel(); dismiss() }
+                Button("Cancel") { recorder.cancel(); dismiss() }
                     .font(Theme.font(16, .bold)).foregroundStyle(Theme.title)
                     .padding(.horizontal, 16).frame(height: 40).glass(Capsule())
                 Spacer()
@@ -377,19 +388,6 @@ struct ComposeTouchView: View {
             }
             .padding(16)
             .glass(cornerRadius: 28)
-            .overlay(alignment: .topTrailing) {
-                Button { clear() } label: {
-                    Label("Clear", systemImage: "xmark.circle.fill")
-                        .font(Theme.font(12, .bold)).foregroundStyle(Theme.title)
-                        .padding(.horizontal, 10).frame(height: 28)
-                        .background(Capsule().fill(Theme.ink.opacity(0.12)))
-                }
-                .buttonStyle(.plain)
-                .padding(10)
-                .opacity(canClear ? 1 : 0.35)
-                .disabled(!canClear)
-                .accessibilityLabel("Clear the touch")
-            }
 
             HStack(alignment: .center, spacing: 24) {
                 TouchBarSurface(recorder: recorder, vertical: true,
@@ -397,7 +395,7 @@ struct ComposeTouchView: View {
                     .frame(width: 110)
                 VStack(spacing: 8) {
                     CountdownRing(progress: recorder.progress,
-                                  remaining: recorder.recording ? recorder.remaining : store.touchWindowSeconds)
+                                  remaining: recorder.recording ? recorder.remaining : (mode == .send && !autoSend ? 10 : store.touchWindowSeconds))
                     Text(mode == .send && !autoSend ? "Pauses are fine —\ntap Send when ready" : "Pauses are fine —\nsends at 0")
                         .multilineTextAlignment(.center)
                         .font(Theme.font(12)).foregroundStyle(Theme.subtitle)
@@ -405,6 +403,16 @@ struct ComposeTouchView: View {
                         Toggle("Auto-send", isOn: $autoSend)
                             .font(Theme.font(12, .bold)).foregroundStyle(Theme.title)
                             .tint(Theme.accent).fixedSize()
+                        Button { clear() } label: {
+                            Label("Clear", systemImage: "xmark.circle.fill")
+                                .font(Theme.font(13, .bold)).foregroundStyle(Theme.title)
+                                .padding(.horizontal, 14).frame(height: 34)
+                                .glass(Capsule())
+                        }
+                        .buttonStyle(.plain)
+                        .opacity(canClear ? 1 : 0.4)
+                        .disabled(!canClear)
+                        .accessibilityLabel("Clear the touch")
                     }
                 }
             }
@@ -447,7 +455,7 @@ struct ComposeTouchView: View {
             // Default to your own colour (single colour), not a fixed pink/violet.
             startColor = Color(rgbInt: store.profile.colorRGB)
             endColor = Color(rgbInt: store.profile.colorRGB)
-            recorder.windowSeconds = store.touchWindowSeconds
+            applyWindow()
             recorder.onFinish = { samples in
                 lastTouch = samples
                 if mode == .createMeaning { saving = true; return }
@@ -456,6 +464,8 @@ struct ComposeTouchView: View {
                 if now { send(samples) } else { pending = samples }
             }
         }
+        .onChange(of: autoSend) { _ in applyWindow() }
+        .onChange(of: pending) { held in recorder.locked = !held.isEmpty }
         .onChange(of: recorder.recording) { recording in
             // Touching the bar again starts over: a touch waiting to be sent is replaced.
             if recording { pending = [] }

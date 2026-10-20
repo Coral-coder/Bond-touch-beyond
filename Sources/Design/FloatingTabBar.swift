@@ -33,7 +33,8 @@ struct FloatingTabBar: View {
 
     var body: some View {
         HStack(spacing: 2) {
-            ForEach(AppTab.allCases.filter { $0 != .us || usOn }, id: \.self) { tab in
+            // Touch Language lives on the Us screen; it's its own tab only when Us is off.
+            ForEach(AppTab.allCases.filter { usOn ? $0 != .touches : $0 != .us }, id: \.self) { tab in
                 Button {
                     selection = tab
                 } label: {
