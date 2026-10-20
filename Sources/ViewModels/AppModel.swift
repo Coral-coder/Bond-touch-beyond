@@ -774,7 +774,7 @@ final class AppModel: ObservableObject {
     @discardableResult
     func sendTouch(pattern: [Int], generation: Int = 2, colorRGB: Int, endColorRGB: Int? = nil,
                    toBondID: String? = nil, meaning given: TouchMeaning? = nil, matchMeaning: Bool = true,
-                   heartbeatBPM: Int? = nil) async -> Bool {
+                   heartbeatBPM: Int? = nil, effect: String? = nil) async -> Bool {
         guard let bond = bond(for: toBondID) else { return false }
         // Finish sending even if the app goes to the background meanwhile (e.g. a touch
         // made on the bracelet while the phone is locked).
@@ -793,7 +793,7 @@ final class AppModel: ObservableObject {
                                  colorRGB: meaning?.colorRGB ?? colorRGB,
                                  endColorRGB: meaning?.endColorRGB ?? endColorRGB,
                                  meaningLabel: meaning?.label, meaningEmoji: meaning?.emoji,
-                                 heartbeatBPM: heartbeatBPM)
+                                 heartbeatBPM: heartbeatBPM, effect: effect)
         touch.delivery = .sending
         // Felt leaving: a firm double knock (heartbeats have their own beat).
         if heartbeatBPM == nil { haptics.sent() }
@@ -899,6 +899,26 @@ final class AppModel: ObservableObject {
     /// Sends a saved meaning (Touch Language) — by id to an original-app partner, as a
     /// labelled touch over iCloud. Returns whether it was sent.
     @discardableResult
+    /// The rainbow wave: a light running up and down the bar six times (one bar LED per 50 ms
+    /// on a Bond Touch More), going through the whole rainbow as it does.
+    static let rainbowWave: [Int] = {
+        let up = Array(0..<TouchPattern.positions), down = Array(up.reversed().dropFirst().dropLast())
+        return Array(repeating: up + down, count: 6).flatMap { $0 }.map { TouchPattern.sample([$0]) }
+    }()
+
+    func rainbowWaveTouch() -> TouchMessage {
+        TouchMessage(senderID: myUserID, pattern: Self.rainbowWave, generation: 3, colorRGB: 0xFF0000,
+                     endColorRGB: 0xB000FF, meaningLabel: "Rainbow wave", meaningEmoji: "🌈", effect: "rainbow")
+    }
+
+    /// Sends the rainbow wave (partners on older builds get a red → violet wave).
+    @discardableResult
+    func sendRainbowWave(toBondID: String? = nil) async -> Bool {
+        let t = rainbowWaveTouch()
+        return await sendTouch(pattern: t.pattern, generation: 3, colorRGB: t.colorRGB, endColorRGB: t.endColorRGB,
+                               toBondID: toBondID, matchMeaning: false, effect: "rainbow")
+    }
+
     func sendMeaning(_ meaning: TouchMeaning, toBondID: String? = nil) async -> Bool {
         await sendTouch(pattern: meaning.pattern, generation: meaning.touchGeneration,
                         colorRGB: meaning.colorRGB, endColorRGB: meaning.endColorRGB,

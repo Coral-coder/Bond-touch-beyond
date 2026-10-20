@@ -722,6 +722,64 @@ enum BondGATT {
         }
     }
 
+    // MARK: - Rainbow
+
+    /// A colour around the rainbow: 0 red → 1/6 yellow → 1/3 green → 1/2 cyan → 2/3 blue →
+    /// 5/6 magenta → 1 red, at full saturation.
+    static func rainbow(_ x: Double) -> Int {
+        let h = (x - x.rounded(.down)) * 6
+        let i = Int(h), f = h - Double(i)
+        let (r, g, b): (Double, Double, Double)
+        switch i {
+        case 0: (r, g, b) = (1, f, 0)
+        case 1: (r, g, b) = (1 - f, 1, 0)
+        case 2: (r, g, b) = (0, 1, f)
+        case 3: (r, g, b) = (0, 1 - f, 1)
+        case 4: (r, g, b) = (f, 0, 1)
+        default: (r, g, b) = (1, 0, 1 - f)
+        }
+        return Int(r * 255) << 16 | Int(g * 255) << 8 | Int(b * 255)
+    }
+
+    /// Bond Touch More: the bracelet blends only two colours across a touch, so a rainbow is
+    /// the touch cut into short pieces (`piece` samples, 50 ms each), each blending to the
+    /// next hue — played one after another, each starting as the last ends.
+    static func v3RainbowPieces(samples raw: [Int], slot: Int = 1, piece: Int = 9) -> [(at: Double, writes: [(CBUUID, Data)])] {
+        let samples = TouchPattern.trimmed(raw)
+        guard !samples.isEmpty else { return [] }
+        let count = (samples.count + piece - 1) / piece
+        return (0..<count).map { k in
+            let part = Array(samples[(k * piece)..<min(samples.count, (k + 1) * piece)])
+            let from = rainbow(Double(k) / Double(count) * 0.85), to = rainbow(Double(k + 1) / Double(count) * 0.85)
+            return (Double(k * piece) * Double(TouchPattern.sampleMs) / 1000,
+                    v3TouchFrames(samples: part, startRGB: from, endRGB: to, slot: slot))
+        }
+    }
+
+    /// Bond Touch / Touch 4 / Mini: the rhythm as 0x33 steps — every 50 ms of a press its own
+    /// hue, sweeping the rainbow over the touch (all three LEDs), the motor at `strength`;
+    /// gaps dark and still. Then `[32 00 22]` plays it (up to 256 steps).
+    static func v2RainbowSteps(onOff raw: [Int], strength: UInt8) -> [(CBUUID, Data)] {
+        let list = raw.map { max(0, $0) }
+        let total = Double(max(1, list.reduce(0, +)))
+        var elapsed = 0.0
+        var out: [(CBUUID, Data)] = []
+        for (i, ms) in list.enumerated() where out.count < 255 {
+            if i % 2 == 0 {
+                var left = ms
+                while left > 0, out.count < 255 {
+                    let step = min(50, left)
+                    out.append(messageStep(rainbow(elapsed / total * 0.85), strength: strength, brightness: 80, ms: max(5, step)))
+                    elapsed += Double(step); left -= step
+                }
+            } else if ms > 0 {
+                out.append(messageStep(0, strength: 0, brightness: 0, ms: ms))
+                elapsed += Double(ms)
+            }
+        }
+        return out + [queueMarker(gradient: true)]
+    }
+
     /// FFB2 playback (BleBondManagerV3.g): header `[partner slot 1…3, n, ceil(n/20), colour1
     /// RGB, colour2 RGB, reply 0]` padded with 0xFF, then the sample bytes 20 per packet,
     /// padded with 0xFF. Colours go as is (no colour mapping on v3); the reply flag is 0 for

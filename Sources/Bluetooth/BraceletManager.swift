@@ -532,6 +532,18 @@ final class BraceletManager: NSObject, ObservableObject {
         let slot = slotBondIDs.firstIndex(of: touch.bondID).map { $0 + 1 } ?? 1
         if gen == .v1 {
             enqueue(v1.touch(onOff: touch.onOffMs.isEmpty ? BondGATT.miniPattern : touch.onOffMs, rgb: touch.colorRGB))
+        } else if touch.isRainbow, gen == .v3 {
+            // A rainbow on the Bond Touch More: short pieces back to back, each its next hue.
+            for piece in BondGATT.v3RainbowPieces(samples: touch.samples, slot: slot) {
+                if piece.at == 0 { enqueue(piece.writes); continue }
+                DispatchQueue.main.asyncAfter(deadline: .now() + piece.at) { [weak self] in
+                    guard let self, self.gen == .v3 else { return }
+                    self.enqueue(piece.writes)
+                }
+            }
+        } else if touch.isRainbow, gen != .mini {
+            enqueue(BondGATT.v2RainbowSteps(onOff: touch.onOffMs, strength: UInt8(clamping: vibrationLevel ?? 80)))
+            if gen == .v4 { enqueue(v4SelectWrites(slot)) }
         } else {
             // v2-base plays it at the user's vibration strength (80 when unset, as the original).
             enqueue(BondGATT.touchSend(gen, touch: touch, slot: slot, strength: vibrationLevel ?? 80))

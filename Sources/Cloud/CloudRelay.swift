@@ -314,7 +314,7 @@ actor CloudRelay {
         let body = TouchPayload(id: touch.id, sentAt: touch.sentAt, pattern: touch.pattern, generation: touch.generation,
                                 colorRGB: touch.colorRGB, endColorRGB: touch.endColorRGB,
                                 meaningLabel: touch.meaningLabel, meaningEmoji: touch.meaningEmoji,
-                                heartbeatBPM: touch.heartbeatBPM)
+                                heartbeatBPM: touch.heartbeatBPM, effect: touch.effect)
         return try await sendEvent(.touch, bond: bond) { (seq: Int) -> TouchPayload in var b = body; b.seq = seq; return b }
     }
 
@@ -484,7 +484,7 @@ actor CloudRelay {
                                                    generation: t.generation, colorRGB: t.colorRGB,
                                                    endColorRGB: t.endColorRGB, sentAt: t.sentAt,
                                                    meaningLabel: t.meaningLabel, meaningEmoji: t.meaningEmoji,
-                                                   heartbeatBPM: t.heartbeatBPM))
+                                                   heartbeatBPM: t.heartbeatBPM, effect: t.effect))
             }
             for (seq, r) in messageRefs {
                 guard let m = open(MessagePayload.self, records[r.id], code), m.seq == seq else { continue }
@@ -567,6 +567,8 @@ private struct TouchPayload: Codable {
     var meaningEmoji: String? = nil
     /// Set when it's a heartbeat (the pattern is then the EKG).
     var heartbeatBPM: Int? = nil
+    /// A light show ("rainbow"); older builds ignore it.
+    var effect: String? = nil
 }
 private struct MessagePayload: Codable {
     var seq = 0

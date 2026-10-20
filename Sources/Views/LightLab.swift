@@ -62,6 +62,8 @@ struct LightLabView: View {
                 }
                 Button("Light only — no vibration (1 s)") { lightOnly() }
                     .disabled(gen == nil || gen == .v1)
+                Button("Rainbow wave") { model.feel(model.rainbowWaveTouch()) }
+                    .disabled(gen == nil || gen == .v1)
             }
             Section {
                 Picker("Pattern", selection: $mode) {

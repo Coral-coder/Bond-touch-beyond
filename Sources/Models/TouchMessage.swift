@@ -28,6 +28,9 @@ struct TouchMessage: Identifiable, Codable, Equatable {
     /// Set when this is a heartbeat (beats per minute): `pattern` then holds the EKG, and
     /// it plays, shows and is listed as a heartbeat.
     var heartbeatBPM: Int?
+    /// A light show on top of the pattern: "rainbow" plays it through the whole spectrum on
+    /// the bracelet. Older builds ignore it and play the start → end colours.
+    var effect: String?
 
     /// For the user's own touches: where it got to, as the original's Sending / Sent / Seen /
     /// Failed. Seen = the partner's phone received it (iCloud partners only).
@@ -40,7 +43,7 @@ struct TouchMessage: Identifiable, Codable, Equatable {
 
     init(id: UUID = UUID(), bondID: String = "", senderID: String, pattern: [Int], generation: Int = 2,
          colorRGB: Int, endColorRGB: Int? = nil, sentAt: Date = Date(),
-         meaningLabel: String? = nil, meaningEmoji: String? = nil, heartbeatBPM: Int? = nil) {
+         meaningLabel: String? = nil, meaningEmoji: String? = nil, heartbeatBPM: Int? = nil, effect: String? = nil) {
         self.id = id
         self.bondID = bondID
         self.senderID = senderID
@@ -52,10 +55,13 @@ struct TouchMessage: Identifiable, Codable, Equatable {
         self.meaningLabel = meaningLabel
         self.meaningEmoji = meaningEmoji
         self.heartbeatBPM = heartbeatBPM
+        self.effect = effect
     }
 
+    var isRainbow: Bool { effect == "rainbow" }
+
     private enum CodingKeys: String, CodingKey {
-        case id, bondID, senderID, pattern, generation, colorRGB, endColorRGB, sentAt, meaningLabel, meaningEmoji, heartbeatBPM, delivery, ringSeq, missed
+        case id, bondID, senderID, pattern, generation, colorRGB, endColorRGB, sentAt, meaningLabel, meaningEmoji, heartbeatBPM, effect, delivery, ringSeq, missed
     }
 
     init(from decoder: Decoder) throws {
@@ -71,6 +77,7 @@ struct TouchMessage: Identifiable, Codable, Equatable {
         meaningLabel = try c.decodeIfPresent(String.self, forKey: .meaningLabel)
         meaningEmoji = try c.decodeIfPresent(String.self, forKey: .meaningEmoji)
         heartbeatBPM = try c.decodeIfPresent(Int.self, forKey: .heartbeatBPM)
+        effect = try c.decodeIfPresent(String.self, forKey: .effect)
         delivery = try c.decodeIfPresent(Delivery.self, forKey: .delivery)
         ringSeq = try c.decodeIfPresent(Int.self, forKey: .ringSeq)
         missed = try c.decodeIfPresent(Bool.self, forKey: .missed)
