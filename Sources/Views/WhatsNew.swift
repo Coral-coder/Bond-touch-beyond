@@ -136,6 +136,7 @@ struct WhatsNewView: View {
 
 /// When to show What's new by itself: once for each new build, not on a first install (there's
 /// nothing to compare with yet), never in demo mode.
+@MainActor
 enum WhatsNew {
     private static let key = "whatsNew.lastBuild"
     private static var build: String { Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "" }
