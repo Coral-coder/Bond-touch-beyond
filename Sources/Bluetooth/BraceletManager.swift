@@ -644,6 +644,33 @@ final class BraceletManager: NSObject, ObservableObject {
     /// Writes raw frames in order (the debug Light lab).
     func send(_ writes: [(CBUUID, Data)]) { enqueue(writes) }
 
+    /// Bond Touch More, experimental: vibration level 0 so touch playback lights the bar
+    /// without the motors (docs/FIRMWARE_LED_VIBE.md §8), then the user's level back.
+    private(set) var motorSilenced = false
+    func silenceMotor(_ on: Bool) {
+        guard gen == .v3 else { return }
+        motorSilenced = on
+        enqueue([BondGATT.v3Vibration(level: on ? 0 : UInt8(clamping: vibrationLevel ?? 80),
+                                      balance: UInt8(clamping: vibrationBalance))])
+    }
+
+    /// Bond Touch More: samples played as a touch in `rgb` (several touches back to back when
+    /// longer than one touch holds), into slot 1.
+    func playSamples(_ samples: [Int], rgb: Int) -> Double {
+        guard gen == .v3 else { return 0 }
+        let chunk = TouchPattern.maxSamples
+        var at = 0.0
+        for start in stride(from: 0, to: samples.count, by: chunk) {
+            let part = Array(samples[start..<min(samples.count, start + chunk)])
+            let writes = BondGATT.v3Samples(part, rgb: rgb)
+            if at == 0 { enqueue(writes) } else {
+                DispatchQueue.main.asyncAfter(deadline: .now() + at) { [weak self] in self?.enqueue(writes) }
+            }
+            at += Double(part.count) * Double(TouchPattern.sampleMs) / 1000
+        }
+        return at
+    }
+
     // MARK: - Write queue
 
     private func enqueue(_ writes: [(CBUUID, Data)]) {
@@ -1059,7 +1086,7 @@ final class BraceletManager: NSObject, ObservableObject {
                 if let current = BondGATT.v3UserColors(fromAck: b) { reconcileSlots(current) }
             case 0x48 where b.count >= 4:
                 // As the original: if the bracelet's vibration isn't the user's, send it again.
-                if let level = vibrationLevel, Int(b[2]) != level || Int(b[3]) != vibrationBalance {
+                if !motorSilenced, let level = vibrationLevel, Int(b[2]) != level || Int(b[3]) != vibrationBalance {
                     enqueue([BondGATT.v3Vibration(level: UInt8(level), balance: UInt8(vibrationBalance))])
                 }
             case 0x49:

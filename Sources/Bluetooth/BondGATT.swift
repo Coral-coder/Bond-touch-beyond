@@ -780,6 +780,12 @@ enum BondGATT {
         return out + [queueMarker(gradient: true)]
     }
 
+    /// Bond Touch More: raw samples as a one-colour touch (no trimming — a POV message's
+    /// blank columns are kept, except at the very ends).
+    static func v3Samples(_ samples: [Int], rgb: Int, slot: Int = 1) -> [(CBUUID, Data)] {
+        v3TouchFrames(samples: samples, startRGB: rgb, endRGB: rgb, slot: slot)
+    }
+
     /// FFB2 playback (BleBondManagerV3.g): header `[partner slot 1…3, n, ceil(n/20), colour1
     /// RGB, colour2 RGB, reply 0]` padded with 0xFF, then the sample bytes 20 per packet,
     /// padded with 0xFF. Colours go as is (no colour mapping on v3); the reply flag is 0 for
