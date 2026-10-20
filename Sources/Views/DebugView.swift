@@ -7,7 +7,6 @@ struct DebugView: View {
     @EnvironmentObject var model: AppModel
     @EnvironmentObject var store: LocalStore
     @ObservedObject private var netLog = NetLog.shared
-    @AppStorage("showKissButton") private var showKissButton = false
     @AppStorage(Poly.modeKey) private var polyMode = Poly.Mode.auto.rawValue
     @Environment(\.dismiss) private var dismiss
 
@@ -23,8 +22,6 @@ struct DebugView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
                     section("Experimental") {
-                        Toggle("Kiss button (next to the heartbeat)", isOn: $showKissButton)
-                            .font(.footnote).tint(Theme.accent)
                         Picker("Polyamory features", selection: $polyMode) {
                             ForEach(Poly.Mode.allCases, id: \.rawValue) { Text($0.title).tag($0.rawValue) }
                         }

@@ -8,8 +8,6 @@ struct HomeView: View {
     @EnvironmentObject var model: AppModel
     @EnvironmentObject var store: LocalStore
     @State private var showHeart = false
-    /// The kiss button ("Thinking of you") — off unless enabled in the debug panel.
-    @AppStorage("showKissButton") private var showKissButton = false
     @State private var kissSent = false
     @State private var showMoodCheckIn = false
     /// A heartbeat send's problem (no heart rate, no partner…), shown briefly under the top bar.
@@ -107,7 +105,7 @@ struct HomeView: View {
             if Feature.stress.isOn {
                 iconButton("face.smiling", label: "Mood check-in") { showMoodCheckIn = true }
             }
-            if showKissButton { kissButton }
+            kissButton
             Spacer(minLength: 8)
             PartnerBar()
             Spacer(minLength: 8)

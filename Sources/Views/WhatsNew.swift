@@ -21,6 +21,8 @@ struct WhatsNewView: View {
     /// Newest first. Add to the top for each build; trim when it no longer needs to go back to 40.
     static let sections: [Section] = [
         Section(title: "This update", items: [
+            Item(icon: "heart.circle", title: "The kiss button",
+                 detail: "On Home next to the heartbeat: one tap sends a kiss — your partner hears it, \"Thinking of you\"."),
             Item(icon: "face.smiling", title: "Mood check-in on Home",
                  detail: "A button next to the heartbeat: pick how you feel, set your energy and send it to your partners in two taps."),
             Item(icon: "chart.bar.xaxis", title: "Stress charts scroll with the page",
