@@ -21,6 +21,8 @@ struct RootView: View {
     @AppStorage(ThemeTints.key) private var themeTints = ""
     @State private var keyboardUp = false
     @State private var showWhatsNew = false
+    /// What's new has been checked for this launch, so the tour knows whether to wait for it.
+    @State private var launchChecked = false
     /// The feature tour has been seen (or skipped); until then it opens once the profile is set
     /// up, after What's new is closed.
     @AppStorage(FeatureTour.seenKey) private var walkthroughSeen = false
@@ -57,13 +59,16 @@ struct RootView: View {
                 }
             }
         }
-        .fullScreenCover(isPresented: Binding(get: { store.profile.isComplete && !walkthroughSeen && !showWhatsNew && !AppModel.isDemo },
+        .fullScreenCover(isPresented: Binding(get: { launchChecked && store.profile.isComplete && !walkthroughSeen && !showWhatsNew && !AppModel.isDemo },
                                               set: { if !$0 { walkthroughSeen = true } })) {
             FeatureTour { walkthroughSeen = true }
         }
         .preferredColorScheme(Theme.colorScheme)
         .tint(Theme.accent)
-        .onAppear { if WhatsNew.check(existingUser: store.profile.isComplete) { showWhatsNew = true } }
+        .onAppear {
+            if WhatsNew.check(existingUser: store.profile.isComplete) { showWhatsNew = true }
+            launchChecked = true
+        }
         .sheet(isPresented: $showWhatsNew) {
             NavigationStack {
                 WhatsNewView().screenBackground()

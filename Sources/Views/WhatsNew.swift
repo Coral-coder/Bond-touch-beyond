@@ -29,6 +29,8 @@ struct WhatsNewView: View {
                  detail: "Bubbles and raindrops are drawn once and slid by the system, and photo backgrounds are blurred once, so screens no longer lag."),
             Item(icon: "waveform.path.ecg", title: "Partner heart data is back",
                  detail: "Busy Apple Watches could push the last day's readings out of what was shared. Both phones need this update."),
+            Item(icon: "map.fill", title: "Feature tour",
+                 detail: "A quick swipe through what the app can do. It opens once, and any time from Settings → Feature tour."),
             Item(icon: "sparkles", title: "What's new",
                  detail: "This screen, after every update, and any time from Settings."),
         ]),
