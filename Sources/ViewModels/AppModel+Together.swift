@@ -147,7 +147,8 @@ extension AppModel {
     func notifyPartner(_ bondID: String?, _ text: String) async {
         guard let bondID else { return }
         let me = store.profile.name.isEmpty ? "Your partner" : store.profile.name
-        await pushPartner(bondID: bondID, title: "💞 Us", body: "\(me) \(text)", group: "u", sound: "default")
+        let group = NotificationKind.us(for: text).pushGroup ?? "u.other"
+        await pushPartner(bondID: bondID, title: "Us", body: "\(me) \(text)", group: group, sound: "default")
     }
 
     /// Battleship: this phone answers the partner's shots at our fleet (which only this phone
