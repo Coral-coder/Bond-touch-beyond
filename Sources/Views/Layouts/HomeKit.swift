@@ -6,12 +6,13 @@ import UIKit
 /// things — partners, sending a touch, meanings, the heartbeat, recent touches — arranged
 /// differently. Themes and colours apply to all of them.
 enum HomeLayout: String, CaseIterable, Identifiable {
-    case classic, focus, conversation, bento, deck, timeline, orbit, oneHand, bubbles
+    case classic, minimal, focus, conversation, bento, deck, timeline, orbit, oneHand, bubbles
     var id: String { rawValue }
 
     var title: String {
         switch self {
         case .classic: return "Classic"
+        case .minimal: return "Minimal"
         case .focus: return "Focus Pad"
         case .conversation: return "Conversation"
         case .bento: return "Bento"
@@ -26,6 +27,7 @@ enum HomeLayout: String, CaseIterable, Identifiable {
     var blurb: String {
         switch self {
         case .classic: return "Pair card, touch bar, meanings, history"
+        case .minimal: return "Your partner, the last touch, one button"
         case .focus: return "One big ring you touch directly"
         case .conversation: return "Touches as a message thread"
         case .bento: return "A dashboard of tiles"
@@ -40,6 +42,7 @@ enum HomeLayout: String, CaseIterable, Identifiable {
     var icon: String {
         switch self {
         case .classic: return "rectangle.grid.1x2"
+        case .minimal: return "circle"
         case .focus: return "circle.circle"
         case .conversation: return "bubble.left.and.bubble.right"
         case .bento: return "square.grid.2x2"
@@ -59,6 +62,7 @@ struct HomeRouter: View {
     var body: some View {
         switch HomeLayout(rawValue: layout) ?? .classic {
         case .classic: HomeView()
+        case .minimal: MinimalHome()
         case .focus: FocusPadHome()
         case .conversation: ConversationHome()
         case .bento: BentoHome()
