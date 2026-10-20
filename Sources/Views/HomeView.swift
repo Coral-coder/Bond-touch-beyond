@@ -747,6 +747,8 @@ private struct SurfaceBubble: ViewModifier {
 
     @State private var risen = false
     @State private var rippling = false
+    /// The rings exist only while a new touch ripples in (they used to stay behind as an oval).
+    @State private var showRipples = false
     private static var played: Set<UUID> = []
 
     private var fresh: Bool { active && Date().timeIntervalSince(sentAt) < 15 && !Self.played.contains(id) }
@@ -758,6 +760,7 @@ private struct SurfaceBubble: ViewModifier {
             .opacity(risen ? 1 : 0)
             .background {
                 // Ripples: three rings spreading out from the card, one after another.
+                if showRipples {
                 ZStack {
                     ForEach(0..<3, id: \.self) { i in
                         Capsule()
@@ -767,10 +770,13 @@ private struct SurfaceBubble: ViewModifier {
                     }
                 }
                 .allowsHitTesting(false)
+                }
             }
             .onAppear {
                 guard fresh else { risen = true; return }
                 Self.played.insert(id)
+                showRipples = true
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2.4) { showRipples = false }
                 withAnimation(.spring(response: 0.7, dampingFraction: 0.62)) { risen = true }
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { rippling = true }
             }
