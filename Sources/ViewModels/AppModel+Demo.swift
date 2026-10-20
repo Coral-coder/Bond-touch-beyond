@@ -18,7 +18,7 @@ extension AppModel {
     /// screenshots show what the last row looks like above the tab bar.
     static func scrollEverythingToBottomForDemo() {
         guard demoArgument("-demoScrollBottom") != nil else { return }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+        for delay in [3.0, 5.5] { DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
             func walk(_ v: UIView) {
                 if let s = v as? UIScrollView, s.contentSize.height > s.bounds.height {
                     let bottom = s.contentSize.height + s.adjustedContentInset.bottom - s.bounds.height
@@ -29,7 +29,7 @@ extension AppModel {
             for scene in UIApplication.shared.connectedScenes {
                 (scene as? UIWindowScene)?.windows.forEach(walk)
             }
-        }
+        } }
     }
 
     func loadDemo() {
