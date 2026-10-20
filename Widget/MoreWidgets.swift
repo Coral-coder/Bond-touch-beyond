@@ -290,3 +290,94 @@ struct WeatherWidgetView: View {
         }
     }
 }
+
+// MARK: - Mood & energy
+
+/// How your partner's feeling: their mood emoji and an energy meter (from what they share in
+/// Stress & mood). Home screen and Lock Screen.
+struct MoodWidget: Widget {
+    var body: some WidgetConfiguration {
+        StaticConfiguration(kind: WidgetShared.moodKind, provider: SnapshotProvider()) { entry in
+            MoodWidgetView(entry: entry)
+        }
+        .configurationDisplayName("Their mood")
+        .description("Your partner's mood and energy, as they share it.")
+        .supportedFamilies([.systemSmall, .accessoryCircular, .accessoryRectangular, .accessoryInline])
+    }
+}
+
+struct MoodWidgetView: View {
+    @Environment(\.widgetFamily) private var family
+    let entry: SnapshotEntry
+
+    private func ago(_ d: Date) -> String {
+        let mins = Int(entry.date.timeIntervalSince(d) / 60)
+        if mins < 60 { return mins <= 1 ? "just now" : "\(mins)m ago" }
+        if mins < 60 * 24 { return "\(mins / 60)h ago" }
+        return "\(mins / (60 * 24))d ago"
+    }
+
+    private func energyColor(_ e: Int) -> Color { e >= 60 ? Theme.lime : e >= 30 ? Theme.amber : Theme.danger }
+
+    var body: some View {
+        let m = entry.snapshot?.mood
+        let name = entry.snapshot?.partner?.name ?? "Partner"
+        switch family {
+        case .accessoryInline:
+            if let m { Text("\(m.emoji) \(name) · \(m.energy)% energy") } else { Text("\(name) · no mood shared") }
+        case .accessoryCircular:
+            if let m {
+                Gauge(value: Double(m.energy), in: 0...100) {
+                    Text("Energy")
+                } currentValueLabel: {
+                    Text(m.emoji).font(.system(size: 18))
+                }
+                .gaugeStyle(.accessoryCircular)
+                .accessoryBackground()
+            } else {
+                ZStack { AccessoryWidgetBackground(); Image(systemName: "face.smiling") }.accessoryBackground()
+            }
+        case .accessoryRectangular:
+            VStack(alignment: .leading, spacing: 2) {
+                Text(m.map { "\($0.emoji) \(name) · \($0.label)" } ?? name).font(.headline).lineLimit(1)
+                if let m {
+                    Gauge(value: Double(m.energy), in: 0...100) { Text("Energy") }
+                        .gaugeStyle(.accessoryLinearCapacity)
+                    Text("\(m.energy)% energy · \(ago(m.at))").font(.caption2).lineLimit(1)
+                } else {
+                    Text("Not sharing their mood").font(.caption).lineLimit(1)
+                }
+            }
+            .accessoryBackground()
+        default:
+            VStack(alignment: .leading, spacing: 6) {
+                Text(name).font(Theme.font(13, .bold)).foregroundStyle(Theme.subtitle).lineLimit(1)
+                if let m {
+                    HStack(alignment: .center, spacing: 8) {
+                        Text(m.emoji).font(.system(size: 40))
+                        Text(m.label).font(Theme.font(15, .heavy)).foregroundStyle(Theme.title)
+                            .lineLimit(2).minimumScaleFactor(0.7)
+                    }
+                    Spacer(minLength: 0)
+                    Text("Energy \(m.energy)%").font(Theme.font(12, .bold)).foregroundStyle(Theme.title)
+                    GeometryReader { g in
+                        ZStack(alignment: .leading) {
+                            Capsule().fill(Theme.ink.opacity(0.15))
+                            Capsule().fill(energyColor(m.energy))
+                                .frame(width: max(8, g.size.width * CGFloat(m.energy) / 100))
+                        }
+                    }
+                    .frame(height: 10)
+                    Text(ago(m.at)).font(Theme.font(10)).foregroundStyle(Theme.subtitle)
+                } else {
+                    Spacer(minLength: 0)
+                    Image(systemName: "face.smiling").font(.system(size: 30)).foregroundStyle(Theme.subtitle)
+                    Text("\(name) isn't sharing their mood yet").font(Theme.font(12)).foregroundStyle(Theme.subtitle)
+                    Spacer(minLength: 0)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .widgetBackground(WidgetSky())
+        }
+    }
+}

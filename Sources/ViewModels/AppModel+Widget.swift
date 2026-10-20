@@ -48,6 +48,11 @@ extension AppModel {
                                            label: t.meaningLabel, emoji: t.meaningEmoji, bpm: t.heartbeatBPM, at: t.sentAt)
             }
             snapshot.weather = weather(for: partner)
+            if Feature.stress.isOn, let m = partner.presence?.mood {
+                snapshot.mood = .init(emoji: m.emoji.isEmpty ? Stress.face(m.stress).emoji : m.emoji,
+                                      label: m.label.isEmpty ? Stress.face(m.stress).label : m.label,
+                                      energy: m.battery, stress: m.stress, at: m.at)
+            }
             let space = together.space(partner.id)
             let next = space.dates.filter { !$0.deleted }.min { $0.daysUntil() < $1.daysUntil() }
             if space.togetherSince != nil || next != nil {

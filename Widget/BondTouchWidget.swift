@@ -14,6 +14,7 @@ struct BondWidgets: WidgetBundle {
         LastTouchWidget()
         TogetherWidget()
         WeatherWidget()
+        MoodWidget()
     }
 }
 

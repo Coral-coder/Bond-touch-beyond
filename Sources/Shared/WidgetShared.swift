@@ -15,6 +15,7 @@ enum WidgetShared {
     static let kind = "BondTouchBeyondWidget"
     static let lastTouchKind = "BondTouchBeyondLastTouch"
     static let togetherKind = "BondTouchBeyondTogether"
+    static let moodKind = "BondTouchBeyondMood"
     /// The original's widget has up to 10 meaning slots.
     static let maxMeanings = 10
     /// How long Sent / Failed shows on a meaning.
@@ -200,8 +201,20 @@ struct WidgetSnapshot: Codable, Equatable {
         var imageFile: String? = nil
     }
 
+    /// How the partner's feeling (what they share in Stress & mood).
+    struct Mood: Codable, Equatable {
+        var emoji: String
+        var label: String
+        /// 0–100: their energy (personal battery).
+        var energy: Int
+        /// 0–100.
+        var stress: Int
+        var at: Date
+    }
+
     var partner: Partner?
     var meanings: [Meaning]
+    var mood: Mood? = nil
     var lastTouch: LastTouch? = nil
     var together: Together? = nil
     /// The weather where the partner is.
