@@ -59,7 +59,10 @@ actor CloudRelay {
         case heartbeat = "Heartbeat", cursor = "Cursor", touch = "Touch", message = "Message"
     }
 
-    private let container: CKContainer
+    private let containerIdentifier: String
+    /// Made on first use, not at launch: demo mode (an unsigned simulator build with no iCloud
+    /// entitlement) never touches iCloud, and creating the container there stops the app.
+    private lazy var container = CKContainer(identifier: containerIdentifier)
     private var db: CKDatabase { container.publicCloudDatabase }
     /// Change tag last seen per record, so an unchanged heartbeat/profile isn't re-reported.
     private var seenTags: [String: String] = [:]
@@ -71,7 +74,7 @@ actor CloudRelay {
     private var lastLoggedError = ""
 
     init(containerIdentifier: String = AppConfig.cloudContainerID) {
-        container = CKContainer(identifier: containerIdentifier)
+        self.containerIdentifier = containerIdentifier
     }
 
     private func log(_ kind: NetLog.Entry.Kind, _ title: String, _ detail: String = "") {
