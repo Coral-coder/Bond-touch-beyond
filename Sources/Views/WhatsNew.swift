@@ -24,7 +24,7 @@ struct WhatsNewView: View {
             Item(icon: "hand.tap.fill", title: "Feel what you send",
                  detail: "The phone buzzes under your finger while you draw a touch — sharper toward the end of the bar — and knocks twice when it's sent."),
             Item(icon: "applewatch.radiowaves.left.and.right", title: "Watch notifications you notice",
-                 detail: "The chime and a medium-strong buzz, then the touch itself in its own rhythm, driven by the app."),
+                 detail: "The chime, then the touch itself — the watch's motor driven directly in the touch's exact rhythm."),
             Item(icon: "waveform.path.ecg", title: "Heartbeats you feel, not hear",
                  detail: "No more beep: heartbeats are haptics only, and draw like a heart monitor as they play — on the card too."),
             Item(icon: "scope", title: "Touch Language recognises your touches",

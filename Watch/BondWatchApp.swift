@@ -87,8 +87,8 @@ enum WatchHaptics {
         WatchVibration.play(t)   // silent vibration first; Apple's taps only as a last resort
     }
 
-    /// A touch notification on the wrist: the chime and a medium-strong buzz, then the touch
-    /// itself in its exact rhythm and strength. Nothing if the touch already played here.
+    /// A touch notification on the wrist: the chime, then the touch itself in its exact rhythm
+    /// and strength. Nothing if the touch already played here.
     static func alert(_ t: WatchTouch) {
         guard firstTime(t) else { return }
         WatchVibration.notify(t)

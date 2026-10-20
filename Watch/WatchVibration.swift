@@ -202,22 +202,12 @@ enum WatchVibration {
         playWithVibration(vibrateID, nil, ["VibePattern": [true, 30] as [Any], "Intensity": 0.6] as NSDictionary)
     }
 
-    /// A notification arriving on the wrist: the app's chime out loud (not for heartbeats) and a
-    /// medium-strong buzz (300 ms at 0.8), then — after a short breath — the touch itself in its own rhythm.
-    /// Driven here, not left to the system, so it's the same every time.
+    /// A notification arriving on the wrist: the app's chime (not for heartbeats), then the
+    /// touch itself, the motor driven directly in its exact rhythm and strength — nothing else.
     static func notify(_ t: WatchTouch?) {
-        // Heartbeats are felt, never heard.
-        if t?.bpm == nil { Chime.shared.play() }
-        if let playWithVibration {
-            stopSound?(vibrateID)
-            playWithVibration(vibrateID, nil, ["VibePattern": [true, 300] as [Any], "Intensity": 0.8] as NSDictionary)
-        } else if let playSound {
-            playSound(vibrateID)
-        } else {
-            WKInterfaceDevice.current().play(.notification)
-        }
         guard let t else { return }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.75) { play(t) }
+        if t.bpm == nil { Chime.shared.play() }
+        play(t)
     }
 
     /// One firm silent buzz (a touch notification arriving): 180 ms at full intensity, or the
