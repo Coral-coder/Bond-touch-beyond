@@ -95,7 +95,7 @@ jobs:
           for t in aero neon pastel mono aurora paper chalk bubble raindrop citrus; do
             shot "theme-$t" -appStyle "$t" -homeLayout classic -classicCards ""
           done
-          for l in minimal focus conversation bento deck timeline orbit oneHand bubbles; do
+          for l in minimal minimal2 focus conversation bento deck timeline orbit oneHand bubbles; do
             shot "layout-$l" -appStyle aero -homeLayout "$l"
           done
           shot "layout-bubbles-bubble" -appStyle bubble -homeLayout bubbles
