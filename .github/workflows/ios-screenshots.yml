@@ -62,15 +62,24 @@ jobs:
           xcrun simctl privacy "$UDID" grant location-always "$ID" || true
           xcrun simctl privacy "$UDID" grant photos "$ID" || true
           mkdir -p shots
-          # One launch with the app's console attached: if it stops on launch, the reason
-          # (a Swift fatal error, an exception) is printed here and saved with the shots.
+          # One launch, watched: what simctl says, the app's own output, and the system log
+          # for it, so a launch that fails or stops is explained in the run log.
           xcrun simctl terminate "$UDID" "$ID" 2>/dev/null || true
-          ( timeout 25 xcrun simctl launch --console-pty "$UDID" "$ID" -demo -appStyle aero > shots/launch-console.txt 2>&1 || true )
-          echo "----- launch console -----"; tail -60 shots/launch-console.txt || true
-          sleep 2
-          for f in ~/Library/Logs/DiagnosticReports/*.ips; do
+          echo "----- launch -----"
+          xcrun simctl launch --console-pty "$UDID" "$ID" -demo -appStyle aero > shots/launch-console.txt 2>&1 &
+          LPID=$!
+          sleep 12
+          kill $LPID 2>/dev/null || true
+          cat shots/launch-console.txt | tail -80
+          echo "----- running? -----"
+          xcrun simctl spawn "$UDID" launchctl list | grep -i lightwave || echo "not running"
+          echo "----- system log -----"
+          xcrun simctl spawn "$UDID" log show --last 1m --style compact \
+            --predicate 'process == "BondTouchBeyond" OR (eventMessage CONTAINS[c] "lightwave") OR (eventMessage CONTAINS[c] "BondTouchBeyond")' \
+            2>/dev/null | grep -iE "error|fault|crash|terminat|exception|fatal|denied|signal|abort|launch" | tail -80 || true
+          for f in ~/Library/Logs/DiagnosticReports/*; do
             [ -e "$f" ] || continue
-            if grep -q "BondTouch" "$f"; then cp "$f" shots/ ; echo "----- crash report $f -----"; head -c 6000 "$f"; fi
+            if grep -qi "BondTouch\|lightwave" "$f" 2>/dev/null; then cp "$f" shots/ ; echo "----- crash report $f -----"; head -c 8000 "$f"; fi
           done
           shot() {
             name="$1"; shift
