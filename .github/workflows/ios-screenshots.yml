@@ -62,6 +62,16 @@ jobs:
           xcrun simctl privacy "$UDID" grant location-always "$ID" || true
           xcrun simctl privacy "$UDID" grant photos "$ID" || true
           mkdir -p shots
+          # One launch with the app's console attached: if it stops on launch, the reason
+          # (a Swift fatal error, an exception) is printed here and saved with the shots.
+          xcrun simctl terminate "$UDID" "$ID" 2>/dev/null || true
+          ( timeout 25 xcrun simctl launch --console-pty "$UDID" "$ID" -demo -appStyle aero > shots/launch-console.txt 2>&1 || true )
+          echo "----- launch console -----"; tail -60 shots/launch-console.txt || true
+          sleep 2
+          for f in ~/Library/Logs/DiagnosticReports/*.ips; do
+            [ -e "$f" ] || continue
+            if grep -q "BondTouch" "$f"; then cp "$f" shots/ ; echo "----- crash report $f -----"; head -c 6000 "$f"; fi
+          done
           shot() {
             name="$1"; shift
             xcrun simctl terminate "$UDID" "$ID" 2>/dev/null || true
