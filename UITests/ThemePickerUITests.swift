@@ -18,19 +18,21 @@ final class ThemePickerUITests: XCTestCase {
 
     func testEveryThemeCanBePicked() {
         let app = XCUIApplication()
-        app.launchArguments = ["-demo", "-demoTab", "settings", "-themePickerOpen", "1", "-appStyle", "aero"]
+        // No -appStyle here: a launch argument would pin the theme and every pick would be ignored.
+        app.launchArguments = ["-demo", "-demoTab", "settings", "-themePickerOpen", "1"]
         app.launch()
         sleep(4)
         // Start from the most likely offenders, then the rest.
-        let order = ["Raindrop", "Bubble", "Citrus"] + titles.filter { !["Raindrop", "Bubble", "Citrus"].contains($0) }
+        let order = ["Raindrop", "Bubble", "Raindrop", "Citrus", "Aero Glass", "Raindrop", "Midnight Neon", "Bubble"]
         for title in order {
             let tile = app.buttons["\(title) theme"]
             var swipes = 0
-            while !(tile.exists && tile.isHittable) && swipes < 12 {
-                app.swipeUp(velocity: .slow)
+            while !(tile.exists && tile.isHittable) && swipes < 16 {
+                // Scroll towards the tile, whichever way it is.
+                if tile.exists && tile.frame.minY < 0 { app.swipeDown(velocity: .slow) } else { app.swipeUp(velocity: .slow) }
                 swipes += 1
             }
-            shot(app, "\(title)-before")
+            shot(app, "\(title)-before-\(order.firstIndex(of: title) ?? 0)")
             guard tile.exists else { XCTFail("\(title): tile not found"); continue }
             guard tile.isHittable else {
                 XCTFail("\(title): tile exists but is NOT hittable (something is covering it) frame=\(tile.frame)")
