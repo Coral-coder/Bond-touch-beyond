@@ -2513,8 +2513,8 @@ undefined4 FUN_00027d50(void)
 void FUN_00027d54(undefined4 param_1,undefined4 param_2,undefined4 param_3,undefined4 param_4)
 
 {
-  FUN_00028424(0x32,500,param_3,param_4,param_2,param_3,param_4);
-  FUN_00038464(0xffffff,0x1e,200,200,1000,600,2000);
+  motor_on(0x32,500,param_3,param_4,param_2,param_3,param_4);
+  leds_req_breath(0xffffff,0x1e,200,200,1000,600,2000);
   return;
 }
 
@@ -2816,9 +2816,9 @@ LAB_00028278:
 }
 
 
-/* ---- FUN_00028400 @ 00028400 ---- */
+/* ---- motor_off @ 00028400 ---- */
 
-void FUN_00028400(void)
+void motor_off(void)
 
 {
   int iVar1;
@@ -2835,11 +2835,11 @@ void FUN_00028400(void)
 }
 
 
-/* ---- FUN_00028424 @ 00028424 ---- */
+/* ---- motor_on @ 00028424 ---- */
 
 /* WARNING: Globals starting with '_' overlap smaller symbols at the same address */
 
-void FUN_00028424(undefined4 param_1,undefined4 param_2)
+void motor_on(undefined4 param_1,undefined4 param_2)
 
 {
   int iVar1;
@@ -3337,7 +3337,7 @@ undefined4 FUN_000289e8(void)
   } while (uVar2 < 0x84);
   pcVar4 = s_app_setting____________APP_data_s_00028aac;
 LAB_00028a5c:
-  FUN_000342fc(pcVar4);
+  debug_printf(pcVar4);
   FUN_00028b28();
   return 1;
 }
@@ -6022,27 +6022,30 @@ void FUN_0002b2fc(void)
 }
 
 
-/* ---- FUN_0002b368 @ 0002b368 ---- */
+/* ---- ffa6_on_write @ 0002b368 ---- */
+/* [0x10] ping; [0x88,len,frame..] batch; else process_app_cmd */
 
-void FUN_0002b368(char *param_1,int param_2)
+/* [0x10] ping; [0x88,len,frame..] batch; else process_app_cmd */
+
+void ffa6_on_write(char *param_1,int param_2)
 
 {
   byte bVar1;
   int iVar2;
   
-  FUN_000342fc(s_appcmd_rev__d_0002b3c0);
+  debug_printf(s_appcmd_rev__d_0002b3c0);
   FUN_00034300(param_1,param_2);
   if ((param_2 == 1) && (*param_1 == '\x10')) {
     FUN_000288cc(0,0,DAT_0002b3d0);
   }
   if (*param_1 != -0x78) {
-    FUN_000343f0(param_1,param_2);
+    process_app_cmd(param_1,param_2);
     return;
   }
   iVar2 = 1;
   do {
     bVar1 = param_1[iVar2];
-    FUN_000343f0(param_1 + iVar2 + 1,(uint)bVar1);
+    process_app_cmd(param_1 + iVar2 + 1,(uint)bVar1);
     iVar2 = iVar2 + (uint)bVar1 + 1;
   } while (iVar2 < param_2);
   return;
@@ -6054,7 +6057,7 @@ void FUN_0002b368(char *param_1,int param_2)
 void FUN_0002b3d4(undefined4 param_1,undefined4 param_2)
 
 {
-  FUN_000342fc(s_auid_rev__d_0002b3f4);
+  debug_printf(s_auid_rev__d_0002b3f4);
   FUN_00034300(param_1,param_2);
   FUN_000347cc(param_1,param_2);
   return;
@@ -6066,7 +6069,7 @@ void FUN_0002b3d4(undefined4 param_1,undefined4 param_2)
 void FUN_0002b404(undefined4 param_1,undefined4 param_2)
 
 {
-  FUN_000342fc(s_token_rev__d__>_0002b424);
+  debug_printf(s_token_rev__d__>_0002b424);
   FUN_00034300(param_1,param_2);
   FUN_00034cdc(param_1,param_2);
   return;
@@ -6225,7 +6228,7 @@ void FUN_0002b598(undefined4 param_1,undefined4 param_2,undefined4 param_3,undef
     *(undefined4 *)(iVar1 + 0x13) = 0;
     *(undefined4 *)(iVar1 + 0x17) = 0;
     FUN_00030234(iVar2);
-    FUN_00028424(100,1000);
+    motor_on(100,1000);
     FUN_0002ed00();
     FUN_00038610();
     FUN_0002ed9c(*(undefined4 *)(_DAT_0002b694 + 0x4c),0xf,500,500,0,1000);
@@ -6587,12 +6590,12 @@ void FUN_0002ba9c(void)
 }
 
 
-/* ---- FUN_0002bb48 @ 0002bb48 ---- */
+/* ---- config_cmd_process @ 0002bb48 ---- */
 
 /* WARNING: Type propagation algorithm not settling */
 /* WARNING: Globals starting with '_' overlap smaller symbols at the same address */
 
-char * FUN_0002bb48(byte *param_1)
+char * config_cmd_process(byte *param_1)
 
 {
   byte *pbVar1;
@@ -7800,9 +7803,9 @@ void thunk_FUN_000340cc(void)
 }
 
 
-/* ---- FUN_0002cb20 @ 0002cb20 ---- */
+/* ---- cmd26_led_motor_ctrl_execute @ 0002cb20 ---- */
 
-void FUN_0002cb20(int param_1,uint param_2,uint param_3,uint param_4)
+void cmd26_led_motor_ctrl_execute(int param_1,uint param_2,uint param_3,uint param_4)
 
 {
   char cVar1;
@@ -7818,10 +7821,10 @@ void FUN_0002cb20(int param_1,uint param_2,uint param_3,uint param_4)
   
   if (((*(byte *)(param_1 + 1) == 0) || (100 < *(byte *)(param_1 + 1))) ||
      (*(short *)(param_1 + 2) == 0)) {
-    FUN_00028400();
+    motor_off();
   }
   else {
-    FUN_00028424();
+    motor_on();
   }
   uVar4 = (uint)*(ushort *)(param_1 + 0xf);
   local_18 = param_2;
@@ -7829,7 +7832,7 @@ void FUN_0002cb20(int param_1,uint param_2,uint param_3,uint param_4)
   uStack_10 = param_4;
   if (((uVar4 == 0) || (cVar1 = *(char *)(param_1 + 4), cVar1 == '\x04')) ||
      ((bVar2 = *(byte *)(param_1 + 8), 100 < bVar2 || (bVar2 == 0)))) {
-    FUN_000383d8();
+    leds_off();
   }
   else {
     uVar7 = (uint)*(byte *)(param_1 + 5) << 0x10 | (uint)*(byte *)(param_1 + 6) << 8 |
@@ -7843,7 +7846,7 @@ void FUN_0002cb20(int param_1,uint param_2,uint param_3,uint param_4)
         if (cVar1 == '\x02') {
           local_14 = (uint)*(ushort *)(param_1 + 0xd);
           uVar3 = *(ushort *)(param_1 + 0xb);
-          FUN_00038464(uVar7,bVar2,*(undefined2 *)(param_1 + 9),*(undefined2 *)(param_1 + 9));
+          leds_req_breath(uVar7,bVar2,*(undefined2 *)(param_1 + 9),*(undefined2 *)(param_1 + 9));
           local_18 = (uint)uVar3;
           uStack_10 = uVar4;
         }
@@ -7852,7 +7855,7 @@ void FUN_0002cb20(int param_1,uint param_2,uint param_3,uint param_4)
       uVar6 = *(undefined2 *)(param_1 + 0xd);
       uVar5 = *(undefined2 *)(param_1 + 0xb);
     }
-    FUN_0003842c(uVar7,bVar2,uVar5,uVar6);
+    leds_req_blink(uVar7,bVar2,uVar5,uVar6);
     local_18 = uVar4;
   }
 LAB_0002cba6:
@@ -7871,14 +7874,14 @@ void FUN_0002cbb4(byte *param_1,uint param_2,uint param_3,uint param_4)
   uint local_18;
   
   if (*(short *)(param_1 + 0xd) == 0) {
-    FUN_00028400();
+    motor_off();
   }
   else {
     if ((*param_1 == 0) || (100 < *param_1)) {
-      FUN_00028400();
+      motor_off();
     }
     else {
-      FUN_00028424();
+      motor_on();
     }
     if ((((param_1[1] != 0) && (param_1[1] < 0x65)) || ((param_1[2] != 0 && (param_1[2] < 0x65))))
        || ((param_1[3] != 0 && (param_1[3] < 0x65)))) {
@@ -7891,7 +7894,7 @@ void FUN_0002cbb4(byte *param_1,uint param_2,uint param_3,uint param_4)
       goto LAB_0002cc30;
     }
   }
-  FUN_000383d8();
+  leds_off();
   local_20 = param_2;
   uStack_1c = param_3;
   local_18 = param_4;
@@ -7922,8 +7925,8 @@ void FUN_0002cce4(void)
   }
   *(undefined *)(iVar2 + 8) = uVar3;
   FUN_000302b0(DAT_0002cd38 + 8);
-  FUN_00039194(0);
-  FUN_000391ac(1);
+  input_flag_clear(0);
+  input_flag_set(1);
   FUN_0003907c();
   FUN_00039014(30000,DAT_0002cd3c);
   FUN_000384e4(0xffffff,100,0);
@@ -10049,9 +10052,9 @@ undefined4 FUN_0002e948(uint param_1)
 }
 
 
-/* ---- FUN_0002e954 @ 0002e954 ---- */
+/* ---- led_motor_ctrl_queue_add @ 0002e954 ---- */
 
-undefined4 FUN_0002e954(undefined4 param_1)
+undefined4 led_motor_ctrl_queue_add(undefined4 param_1)
 
 {
   int iVar1;
@@ -10097,9 +10100,9 @@ void FUN_0002e9e0(void)
 }
 
 
-/* ---- FUN_0002e9ec @ 0002e9ec ---- */
+/* ---- led_motor_test_queue_add @ 0002e9ec ---- */
 
-undefined4 FUN_0002e9ec(undefined4 param_1)
+undefined4 led_motor_test_queue_add(undefined4 param_1)
 
 {
   int iVar1;
@@ -10113,7 +10116,7 @@ undefined4 FUN_0002e9ec(undefined4 param_1)
     FUN_00026218(iVar1,0x75,s__________user_queue_c_0002ea48);
   }
   else {
-    FUN_000342fc(s_led_motor_test_queue_is_full____t_0002ea20);
+    debug_printf(s_led_motor_test_queue_is_full____t_0002ea20);
   }
   return 0;
 }
@@ -10159,7 +10162,7 @@ void FUN_0002eab4(void)
   if (cVar1 != '\0') {
     *DAT_0002eacc = cVar1 + -1;
     if (cVar1 == '\x01') {
-      FUN_000368c8();
+      start_execute_queue_led_motor_test();
       return;
     }
   }
@@ -11444,7 +11447,7 @@ void FUN_0002ffe4(ushort *param_1)
       *param_1 = 0x1e;
     }
     FUN_00026484(auStack_28,*(undefined4 *)(param_1 + 4),*param_1);
-    FUN_000342fc(s_APP_NAME__d__s_00030068,*param_1,auStack_28);
+    debug_printf(s_APP_NAME__d__s_00030068,*param_1,auStack_28);
     FUN_000369e8(auStack_28,*param_1);
   }
   else if (*(int *)(param_1 + 2) == 1) {
@@ -11485,7 +11488,7 @@ void FUN_0003008c(undefined4 *param_1)
     FUN_0002fea4();
   }
   if (*pcVar1 == '\0') {
-    FUN_000342fc(s_mes_get_____000301bc);
+    debug_printf(s_mes_get_____000301bc);
     iVar3 = FUN_000305c4(_DAT_000301d0,DAT_000301cc);
     if (iVar3 != 0) {
       FUN_00026218(iVar3,0x205,s__________main_c_000301d3 + 1);
@@ -15051,7 +15054,7 @@ LAB_00032aae:
     if (sVar1 != *(short *)(param_1 + 0x24)) {
       return;
     }
-    FUN_0002b368(iVar7,*(undefined2 *)(param_2 + 0x10),uVar2,uVar5);
+    ffa6_on_write(iVar7,*(undefined2 *)(param_2 + 0x10),uVar2,uVar5);
     return;
   }
   FUN_0002b3d4(iVar7,*(undefined2 *)(param_2 + 0x10),uVar2,uVar5);
@@ -17171,9 +17174,9 @@ void FUN_000342b0(void)
 }
 
 
-/* ---- FUN_000342fc @ 000342fc ---- */
+/* ---- debug_printf @ 000342fc ---- */
 
-void FUN_000342fc(void)
+void debug_printf(void)
 
 {
   return;
@@ -17266,11 +17269,13 @@ void FUN_0003434c(int param_1)
 }
 
 
-/* ---- FUN_000343f0 @ 000343f0 ---- */
+/* ---- process_app_cmd @ 000343f0 ---- */
+/* 0x25..0x35 (0x35 = [0x35,0,0x88] toggles two input flags) */
 
 /* WARNING: Globals starting with '_' overlap smaller symbols at the same address */
+/* 0x25..0x35 (0x35 = [0x35,0,0x88] toggles two input flags) */
 
-void FUN_000343f0(undefined *param_1,int param_2,undefined4 param_3,undefined4 param_4)
+void process_app_cmd(undefined *param_1,int param_2,undefined4 param_3,undefined4 param_4)
 
 {
   byte bVar1;
@@ -17284,7 +17289,7 @@ void FUN_000343f0(undefined *param_1,int param_2,undefined4 param_3,undefined4 p
   if ((param_1 == (undefined *)0x0) && (param_2 != 0)) {
     return;
   }
-  FUN_000342fc(s_process_app_cmd__x_00034638,*param_1);
+  debug_printf(s_process_app_cmd__x_00034638,*param_1);
   puVar2 = DAT_00034654;
   iVar5 = DAT_00034650;
   iVar7 = DAT_00034650 + 8;
@@ -17295,7 +17300,7 @@ void FUN_000343f0(undefined *param_1,int param_2,undefined4 param_3,undefined4 p
       if (iVar5 != 0) {
         return;
       }
-      uVar4 = FUN_000342fc(s_Goto_DFU_mode__Restart_now__0003465c);
+      uVar4 = debug_printf(s_Goto_DFU_mode__Restart_now__0003465c);
       FUN_0002a7aa(uVar4,param_2,param_3,param_4);
       return;
     }
@@ -17303,17 +17308,17 @@ void FUN_000343f0(undefined *param_1,int param_2,undefined4 param_3,undefined4 p
   case 0x26:
     if ((0x84 < *(byte *)(DAT_00034650 + 8)) && (*(byte *)(DAT_00034650 + 8) != 0xff)) {
       *(undefined *)(DAT_00034650 + 0x1c) = 0;
-      FUN_00039194(1);
-      FUN_000391ac(0);
+      input_flag_clear(1);
+      input_flag_set(0);
       *(undefined *)(iVar5 + 8) = 0x85;
       FUN_000302b0(iVar7);
       pcVar6 = param_1 + 2;
       if (*pcVar6 != '\x01') {
-        FUN_0002cb20(pcVar6,param_2,param_3,param_4);
+        cmd26_led_motor_ctrl_execute(pcVar6,param_2,param_3,param_4);
         return;
       }
-      FUN_000342fc(s_add_APP_CMD_LED_MOTOR_CTRL_packe_000346b0);
-      iVar5 = FUN_0002e954(pcVar6);
+      debug_printf(s_add_APP_CMD_LED_MOTOR_CTRL_packe_000346b0);
+      iVar5 = led_motor_ctrl_queue_add(pcVar6);
       if (iVar5 != 0) {
         return;
       }
@@ -17323,7 +17328,7 @@ void FUN_000343f0(undefined *param_1,int param_2,undefined4 param_3,undefined4 p
     goto LAB_00034456;
   case 0x27:
     if ((0x84 < *(byte *)(DAT_00034650 + 8)) && (*(byte *)(DAT_00034650 + 8) != 0xff)) {
-      FUN_0002bb48(param_1 + 2,param_2,param_3,param_4);
+      config_cmd_process(param_1 + 2,param_2,param_3,param_4);
       return;
     }
     FUN_00034324(s_BondTouch_has_not_been_certified_0003467c,param_2,param_3,param_4);
@@ -17350,10 +17355,10 @@ void FUN_000343f0(undefined *param_1,int param_2,undefined4 param_3,undefined4 p
       *(undefined4 *)(DAT_00034704 + 8) = *(undefined4 *)(iVar5 + 0x20);
       *_DAT_00034708 = 0;
       FUN_00038024(iVar3 + 8);
-      FUN_000391ac(0);
-      FUN_00039194(1);
-      FUN_00038464(0xffffff,0x1e,200);
-      FUN_00028424(0x50,300);
+      input_flag_set(0);
+      input_flag_clear(1);
+      leds_req_breath(0xffffff,0x1e,200);
+      motor_on(0x50,300);
       *(undefined *)(iVar5 + 8) = 0x85;
       FUN_000302b0(iVar7,0x32,0x32,1000);
       return;
@@ -17363,24 +17368,24 @@ void FUN_000343f0(undefined *param_1,int param_2,undefined4 param_3,undefined4 p
     if ((0x84 < *(byte *)(DAT_00034650 + 8)) && (*(byte *)(DAT_00034650 + 8) != 0xff)) {
       *DAT_00034654 = 0;
       if (param_1[2] == '\x11') {
-        uVar4 = FUN_000342fc(s_CMD_EXECUTE_QUEUE_LED_MOTOR_CTRL_00034754);
-        FUN_000367a4(uVar4,param_2,param_3,param_4);
+        uVar4 = debug_printf(s_CMD_EXECUTE_QUEUE_LED_MOTOR_CTRL_00034754);
+        start_execute_queue_led_motor_ctrl(uVar4,param_2,param_3,param_4);
         return;
       }
       if (param_1[2] != '\"') {
         return;
       }
-      uVar4 = FUN_000342fc(s_CMD_EXECUTE_QUEUE_LED_MOTOR_TEST_0003470b + 1);
-      FUN_000368c8(uVar4,param_2,param_3,param_4);
+      uVar4 = debug_printf(s_CMD_EXECUTE_QUEUE_LED_MOTOR_TEST_0003470b + 1);
+      start_execute_queue_led_motor_test(uVar4,param_2,param_3,param_4);
       return;
     }
     pcVar6 = s_BondTouch_has_not_been_certified_00034730;
     goto LAB_0003460a;
   case 0x33:
     if ((0x84 < *(byte *)(DAT_00034650 + 8)) && (*(byte *)(DAT_00034650 + 8) != 0xff)) {
-      FUN_000342fc(s_add_APP_CMD_MOTOR_LED_TEST_packe_00034778);
+      debug_printf(s_add_APP_CMD_MOTOR_LED_TEST_packe_00034778);
       *puVar2 = 2;
-      iVar5 = FUN_0002e9ec(param_1 + 2);
+      iVar5 = led_motor_test_queue_add(param_1 + 2);
       if (iVar5 != 0) {
         return;
       }
@@ -17390,7 +17395,7 @@ void FUN_000343f0(undefined *param_1,int param_2,undefined4 param_3,undefined4 p
 LAB_00034456:
     pcVar6 = s_BondTouch_has_not_been_certified_0003467c;
 LAB_0003460a:
-    FUN_000342fc(pcVar6,param_2,param_3,param_4);
+    debug_printf(pcVar6,param_2,param_3,param_4);
     return;
   case 0x34:
     if ((0x84 < *(byte *)(DAT_00034650 + 8)) && (*(byte *)(DAT_00034650 + 8) != 0xff)) {
@@ -17408,12 +17413,12 @@ LAB_0003460a:
       bVar1 = DAT_00034654[1];
       DAT_00034654[1] = bVar1 ^ 1;
       if ((bVar1 ^ 1) == 0) {
-        FUN_000391ac(0);
-        FUN_000391ac(1,param_2,param_3,param_4);
+        input_flag_set(0);
+        input_flag_set(1,param_2,param_3,param_4);
         return;
       }
-      FUN_00039194();
-      FUN_00039194(1,param_2,param_3,param_4);
+      input_flag_clear();
+      input_flag_clear(1,param_2,param_3,param_4);
       return;
     }
   }
@@ -17442,8 +17447,8 @@ void FUN_000347cc(ushort *param_1,int param_2,undefined4 param_3,undefined4 para
     if (*(char *)(iVar1 + 8) == -0x7d) {
       FUN_0003907c();
       if (*(uint *)(DAT_00034860 + 8) == uVar4) {
-        FUN_000391ac(0);
-        FUN_00039194(1);
+        input_flag_set(0);
+        input_flag_clear(1);
         *(undefined *)(iVar1 + 8) = 0x85;
         uVar3 = 0x11;
         local_20 = param_2;
@@ -17454,7 +17459,7 @@ void FUN_000347cc(ushort *param_1,int param_2,undefined4 param_3,undefined4 para
         local_20 = 1000;
         uStack_1c = 500;
         local_18 = 30000;
-        FUN_00038464(*(undefined4 *)(DAT_00034860 + 0x40),0x1e,0xfa);
+        leds_req_breath(*(undefined4 *)(DAT_00034860 + 0x40),0x1e,0xfa);
         FUN_00039014(30000,DAT_00034864);
         *(undefined *)(iVar1 + 8) = 0x84;
         uVar3 = 0x12;
@@ -17482,10 +17487,10 @@ void FUN_00034868(void)
   
   iVar1 = DAT_000348c8;
   *(undefined *)(DAT_000348c8 + 8) = 1;
-  FUN_000391ac(0);
-  FUN_00039194(1);
-  FUN_00028400();
-  FUN_000383d8();
+  input_flag_set(0);
+  input_flag_clear(1);
+  motor_off();
+  leds_off();
   FUN_000386e4();
   FUN_00038610();
   FUN_000388bc();
@@ -17508,10 +17513,10 @@ void FUN_00034868(void)
 void FUN_000348dc(void)
 
 {
-  FUN_000383d8();
+  leds_off();
   FUN_000384e4(0xffffff,0x1e,0);
-  FUN_00039194(0);
-  FUN_00039194(1);
+  input_flag_clear(0);
+  input_flag_clear(1);
   FUN_000302b0(DAT_00034904);
   return;
 }
@@ -17545,7 +17550,7 @@ LAB_000349a4:
           FUN_0002fe38(0x50);
           *(undefined *)(iVar2 + 0xb) = 1;
 LAB_00034988:
-          FUN_000383d8();
+          leds_off();
           goto LAB_0003494c;
         }
         if (cVar1 == '\x05') {
@@ -17596,9 +17601,9 @@ void FUN_000349f4(void)
   undefined4 uVar1;
   
   *DAT_00034a28 = 0;
-  FUN_00038464(0xffffff,0x1e,400,400);
-  FUN_00039194(0);
-  uVar1 = FUN_00039194(1);
+  leds_req_breath(0xffffff,0x1e,400,400);
+  input_flag_clear(0);
+  uVar1 = input_flag_clear(1);
   FUN_0002ba30(uVar1,0,200,0);
   return;
 }
@@ -17616,12 +17621,12 @@ void FUN_00034a2c(void)
   iVar1 = DAT_00034aa4;
   *(undefined *)(DAT_00034aa4 + 0x1c) = 0;
   *(undefined *)(iVar1 + 8) = 0x86;
-  FUN_000391ac(1);
+  input_flag_set(1);
   iVar1 = DAT_00034aa8;
   FUN_00039014(*(undefined4 *)(DAT_00034aa8 + 0x20),DAT_00034aac);
   FUN_000302b0(DAT_00034aa4 + 8);
   iVar2 = *(int *)(iVar1 + 0x20);
-  FUN_00038464(*(undefined4 *)(iVar1 + 0x48),0x3c,500,iVar2 - 500U & 0xffff,0x32,0x32,iVar2);
+  leds_req_breath(*(undefined4 *)(iVar1 + 0x48),0x3c,500,iVar2 - 500U & 0xffff,0x32,0x32,iVar2);
   return;
 }
 
@@ -17651,10 +17656,10 @@ void FUN_00034ab0(void)
     FUN_00030234(DAT_00034b1c + 0xd);
   }
   FUN_0003880c();
-  FUN_000391ac(0);
-  FUN_00039194(1);
-  FUN_00028400();
-  FUN_000383d8();
+  input_flag_set(0);
+  input_flag_clear(1);
+  motor_off();
+  leds_off();
   pcVar3 = DAT_00034b24;
   *(undefined *)(iVar2 + 0x1c) = 0;
   if (*pcVar3 != '\0') {
@@ -17711,13 +17716,13 @@ void FUN_00034b28(undefined4 param_1,uint param_2,undefined4 param_3,undefined4 
       *(undefined4 *)(iVar3 + 0xf) = param_1;
       *(uint *)(iVar3 + 0x13) = param_2;
       *(undefined4 *)(iVar3 + 0x17) = 0xffffffff;
-      FUN_00039194(0);
-      FUN_00039194(1);
+      input_flag_clear(0);
+      input_flag_clear(1);
       uVar4 = 3000;
       local_28 = 0;
       local_24 = 0x96;
       uStack_20 = 3000;
-      FUN_00038464(*(undefined4 *)(iVar2 + 0x50),0x3c,0x1c2,0x1c2);
+      leds_req_breath(*(undefined4 *)(iVar2 + 0x50),0x3c,0x1c2,0x1c2);
     }
   }
   FUN_00039014(uVar4,DAT_00034c00);
@@ -17734,7 +17739,7 @@ void FUN_00034c04(void)
 {
   FUN_00034324(s_process_no_ouid_double_tap_detec_00034c2c);
   FUN_00027d50();
-  FUN_00038464(0xffffff,0x1e,200,200,0x32,0x96,0x44c);
+  leds_req_breath(0xffffff,0x1e,200,200,0x32,0x96,0x44c);
   return;
 }
 
@@ -17753,8 +17758,8 @@ void FUN_00034c54(void)
   *(undefined4 *)(iVar1 + 0xf) = 0;
   *(undefined4 *)(iVar1 + 0x13) = 0;
   FUN_00030234(iVar1 + 0xd);
-  FUN_00038464(*(undefined4 *)(DAT_00034cd4 + 0x44),0x1e,200,200,0x32,0x32,1000);
-  FUN_00028424(0x50,2000);
+  leds_req_breath(*(undefined4 *)(DAT_00034cd4 + 0x44),0x1e,200,200,0x32,0x32,1000);
+  motor_on(0x50,2000);
   FUN_0003907c();
   FUN_00039014(10000,DAT_00034cd8);
   return;
@@ -18457,7 +18462,7 @@ void FUN_0003548c(undefined4 param_1,undefined4 param_2,undefined4 param_3,undef
     *(undefined *)(DAT_000354f8 + 10) = 1;
     *(undefined4 *)(iVar1 + 0x18) = 0x50;
     FUN_00028ca4(*(undefined4 *)(DAT_000354fc + 0x24),0x666,0);
-    FUN_00028424(100,900);
+    motor_on(100,900);
     FUN_0002ed00();
     FUN_00038610();
     local_10 = 0;
@@ -18487,14 +18492,14 @@ void FUN_00035508(void)
   iVar2 = *(int *)(DAT_00035544 + 0x18);
   if (0 < iVar2) {
     if ((iVar2 == 0x32) || (iVar2 == 0x14)) {
-      FUN_00028424(100,900);
+      motor_on(100,900);
     }
     iVar2 = *(int *)(iVar1 + 0x18) + -1;
     *(int *)(iVar1 + 0x18) = iVar2;
     if (iVar2 == 0) {
       FUN_0003554c();
       *(undefined *)(DAT_00035548 + 0x31) = 0;
-      FUN_000383d8();
+      leds_off();
       return;
     }
   }
@@ -19375,9 +19380,9 @@ void FUN_00036164(void)
   
   do {
   } while (*_DAT_000361b0 != '\x02');
-  FUN_000391ac(0);
-  FUN_000391ac(1);
-  FUN_000391ac(2);
+  input_flag_set(0);
+  input_flag_set(1);
+  input_flag_set(2);
   FUN_00034270();
   iVar1 = FUN_00038ff8();
   software_interrupt(0x33);
@@ -19756,11 +19761,11 @@ void FUN_0003670c(void)
 }
 
 
-/* ---- FUN_000367a4 @ 000367a4 ---- */
+/* ---- start_execute_queue_led_motor_ctrl @ 000367a4 ---- */
 
 /* WARNING: Globals starting with '_' overlap smaller symbols at the same address */
 
-void FUN_000367a4(void)
+void start_execute_queue_led_motor_ctrl(void)
 
 {
   int iVar1;
@@ -19772,11 +19777,11 @@ void FUN_000367a4(void)
   iVar2 = FUN_0002e998(auStack_20);
   iVar1 = DAT_00036814;
   if (iVar2 == 0) {
-    FUN_000342fc(s_led_motor_ctrl_queue_get_NONE__S_0003686c);
+    debug_printf(s_led_motor_ctrl_queue_get_NONE__S_0003686c);
     FUN_000388bc();
     iVar2 = FUN_00027a9a();
     if (iVar2 == 0) {
-      FUN_000342fc(s_accel_switch_double_tap_error____000368a0,DAT_00036818);
+      debug_printf(s_accel_switch_double_tap_error____000368a0,DAT_00036818);
     }
     *(undefined *)(iVar1 + 8) = 0x85;
     thunk_FUN_00035d64();
@@ -19784,24 +19789,26 @@ void FUN_000367a4(void)
   else {
     iVar2 = FUN_00027a9e();
     if (iVar2 == 0) {
-      FUN_000342fc(s_accel_switch_single_tap_error____0003681c,DAT_00036818);
+      debug_printf(s_accel_switch_single_tap_error____0003681c,DAT_00036818);
     }
-    FUN_0002cb20(auStack_20);
+    cmd26_led_motor_ctrl_execute(auStack_20);
     if (local_11 <= local_1e) {
       local_11 = local_1e;
     }
     FUN_00038854(local_11,_DAT_00036844);
     *(undefined *)(iVar1 + 8) = 0x88;
-    FUN_000342fc(s_Func___s__STATE_QUEUE_EXECUTING__00036847 + 1,DAT_00036818);
+    debug_printf(s_Func___s__STATE_QUEUE_EXECUTING__00036847 + 1,DAT_00036818);
   }
   FUN_000302b0(DAT_00036814 + 8);
   return;
 }
 
 
-/* ---- FUN_000368c8 @ 000368c8 ---- */
+/* ---- start_execute_queue_led_motor_test @ 000368c8 ---- */
 
-undefined8 FUN_000368c8(undefined4 param_1,undefined4 param_2,undefined4 param_3,uint param_4)
+undefined8
+start_execute_queue_led_motor_test
+          (undefined4 param_1,undefined4 param_2,undefined4 param_3,uint param_4)
 
 {
   int iVar1;
@@ -19821,8 +19828,8 @@ undefined8 FUN_000368c8(undefined4 param_1,undefined4 param_2,undefined4 param_3
   if (iVar2 == 0) {
     FUN_000388bc();
     FUN_00027a9a();
-    FUN_00028400();
-    FUN_000383d8();
+    motor_off();
+    leds_off();
     *(undefined *)(iVar1 + 8) = 0x85;
     thunk_FUN_00035d64();
   }
@@ -20295,7 +20302,7 @@ void FUN_00036df4(int param_1)
         FUN_000302b0(iVar11);
         FUN_00034324(s_app_motor_enable____d__d__x_00037098,*(undefined *)(iVar6 + 0x25),*puVar1,
                      *(undefined4 *)(iVar6 + 0x4c));
-        FUN_00028424(*(undefined *)(iVar6 + 0x25),*puVar1);
+        motor_on(*(undefined *)(iVar6 + 0x25),*puVar1);
         FUN_000384e4(*(undefined4 *)(iVar6 + 0x4c),0x50,*puVar1);
         *(undefined *)(iVar3 + 2) = 1;
       }
@@ -20320,7 +20327,7 @@ void FUN_00036df4(int param_1)
         }
         else {
           if (cVar5 == -0x7a) {
-            FUN_00028400();
+            motor_off();
             if ((*(byte *)(iVar2 + 0x1c) | *(byte *)(iVar3 + 2)) == 0) {
               FUN_00034324(s_This_touch_release_have_NOT_a_to_000370dc);
               return;
@@ -20343,9 +20350,9 @@ void FUN_00036df4(int param_1)
             uVar9 = *(uint *)(iVar3 + 0x20);
             if (uVar9 < *(uint *)(iVar6 + 0x18)) {
               FUN_00034324(s_Touch_duration_time____dms_is_to_0003715c,uVar9);
-              FUN_000383d8();
+              leds_off();
               FUN_0003880c();
-              FUN_00028400();
+              motor_off();
               FUN_00039014(*(undefined4 *)(iVar6 + 0x20),_DAT_00037004 + 4);
             }
             else {
@@ -20353,7 +20360,7 @@ void FUN_00036df4(int param_1)
               *(char *)(iVar2 + 0x1c) = cVar5;
               FUN_00034324(DAT_0003719c,cVar5,uVar9,*(undefined4 *)(iVar3 + 0x24));
               FUN_0003880c();
-              FUN_00028400();
+              motor_off();
               FUN_00034b28(*(undefined4 *)(iVar3 + 0x20),*(undefined4 *)(iVar3 + 0x24));
               if (*(char *)(iVar2 + 0x2e) == '\x01') {
                 *(undefined *)(iVar2 + 0x2e) = 0;
@@ -20363,7 +20370,7 @@ void FUN_00036df4(int param_1)
           }
           if (*(char *)(iVar2 + 0x1c) == *(char *)(iVar6 + 0x14)) {
             *(undefined4 *)(iVar3 + 0x24) = 0;
-            FUN_00039194(1);
+            input_flag_clear(1);
             return;
           }
         }
@@ -21298,11 +21305,11 @@ void FUN_000383b4(undefined4 param_1)
 }
 
 
-/* ---- FUN_000383d8 @ 000383d8 ---- */
+/* ---- leds_off @ 000383d8 ---- */
 
 /* WARNING: Globals starting with '_' overlap smaller symbols at the same address */
 
-void FUN_000383d8(void)
+void leds_off(void)
 
 {
   int iVar1;
@@ -21323,10 +21330,10 @@ void FUN_000383d8(void)
 }
 
 
-/* ---- FUN_0003842c @ 0003842c ---- */
+/* ---- leds_req_blink @ 0003842c ---- */
 
-void FUN_0003842c(undefined4 param_1,undefined4 param_2,undefined4 param_3,undefined4 param_4,
-                 undefined4 param_5)
+void leds_req_blink(undefined4 param_1,undefined4 param_2,undefined4 param_3,undefined4 param_4,
+                   undefined4 param_5)
 
 {
   undefined4 *puVar1;
@@ -21344,11 +21351,11 @@ void FUN_0003842c(undefined4 param_1,undefined4 param_2,undefined4 param_3,undef
 }
 
 
-/* ---- FUN_00038464 @ 00038464 ---- */
+/* ---- leds_req_breath @ 00038464 ---- */
 
 undefined8
-FUN_00038464(undefined4 param_1,undefined4 param_2,undefined4 param_3,undefined4 param_4,
-            undefined4 param_5,undefined4 param_6,undefined4 param_7)
+leds_req_breath(undefined4 param_1,undefined4 param_2,undefined4 param_3,undefined4 param_4,
+               undefined4 param_5,undefined4 param_6,undefined4 param_7)
 
 {
   undefined4 *puVar1;
@@ -21441,7 +21448,7 @@ void FUN_00038548(undefined4 param_1,undefined4 param_2,undefined4 param_3,undef
 void FUN_00038588(void)
 
 {
-  FUN_00038464(0xffffff,0x1e,500,500,0,0x32,0x3fc);
+  leds_req_breath(0xffffff,0x1e,500,500,0,0x32,0x3fc);
   return;
 }
 
@@ -21974,9 +21981,9 @@ LAB_00039186:
 }
 
 
-/* ---- FUN_00039194 @ 00039194 ---- */
+/* ---- input_flag_clear @ 00039194 ---- */
 
-void FUN_00039194(int param_1)
+void input_flag_clear(int param_1)
 
 {
   if (param_1 != 0) {
@@ -21990,9 +21997,9 @@ void FUN_00039194(int param_1)
 }
 
 
-/* ---- FUN_000391ac @ 000391ac ---- */
+/* ---- input_flag_set @ 000391ac ---- */
 
-void FUN_000391ac(int param_1)
+void input_flag_set(int param_1)
 
 {
   if (param_1 != 0) {

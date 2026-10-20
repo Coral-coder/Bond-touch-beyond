@@ -5143,18 +5143,18 @@ void FUN_0001f840(void)
   FUN_00025c5c();
   FUN_0002953c();
   FUN_000219f8();
-  FUN_00029db0();
-  FUN_00022690();
+  settings_get_brightness();
+  display_set_brightness();
   FUN_00029de8();
-  FUN_00023238();
+  motor_set_level_table();
   FUN_00022e34();
   FUN_00022be0();
   FUN_000237f4();
   FUN_00022ccc();
   FUN_00029de8();
-  FUN_00023238();
+  motor_set_level_table();
   cVar2 = FUN_00029df4();
-  FUN_000232c0((int)cVar2);
+  motor_set_balance((int)cVar2);
   FUN_000284d8();
   FUN_000292bc();
   FUN_00028d74();
@@ -6004,9 +6004,9 @@ void FUN_00020614(void)
 }
 
 
-/* ---- FUN_00020824 @ 00020824 ---- */
+/* ---- aw20036_set_brightness @ 00020824 ---- */
 
-void FUN_00020824(int param_1,undefined param_2,uint param_3,uint param_4)
+void aw20036_set_brightness(int param_1,undefined param_2,uint param_3,uint param_4)
 
 {
   int iVar1;
@@ -6047,9 +6047,9 @@ void FUN_0002084c(void)
 }
 
 
-/* ---- FUN_0002087c @ 0002087c ---- */
+/* ---- aw20036_set_rgb @ 0002087c ---- */
 
-void FUN_0002087c(int param_1,undefined4 param_2)
+void aw20036_set_rgb(int param_1,undefined4 param_2)
 
 {
   undefined4 local_c [3];
@@ -6134,9 +6134,9 @@ LAB_00020938:
 }
 
 
-/* ---- FUN_00020a08 @ 00020a08 ---- */
+/* ---- aw20036_led_on @ 00020a08 ---- */
 
-void FUN_00020a08(int param_1,int param_2)
+void aw20036_led_on(int param_1,int param_2)
 
 {
   if (param_2 == 0) {
@@ -6632,7 +6632,7 @@ void FUN_000213e8(uint param_1)
     do {
       uVar2 = uVar3 & 0xff;
       uVar3 = uVar3 + 1;
-      FUN_00020a08(uVar2,1);
+      aw20036_led_on(uVar2,1);
     } while (uVar3 != 9);
     FUN_00020108();
     FUN_00020da4(0,1);
@@ -6664,7 +6664,7 @@ void FUN_000215dc(undefined4 param_1,int param_2)
   uVar9 = 0;
   do {
     uVar5 = uVar9;
-    FUN_0002087c(uVar5 & 0xff,param_1);
+    aw20036_set_rgb(uVar5 & 0xff,param_1);
     pbVar2 = DAT_000217d8;
     uVar9 = uVar5 + 1;
   } while (uVar5 + 1 != 9);
@@ -6677,59 +6677,59 @@ void FUN_000215dc(undefined4 param_1,int param_2)
     uVar6 = 10 - uVar8 & 0xff;
     if (3 < (int)(uVar5 - 2)) {
       uVar4 = uVar8 - 2 & 0xff;
-      FUN_00020a08(uVar4,1);
+      aw20036_led_on(uVar4,1);
       bVar1 = *pbVar2;
-      FUN_00020824(uVar4,bVar1,bVar1,bVar1);
+      aw20036_set_brightness(uVar4,bVar1,bVar1,bVar1);
     }
     if (uVar6 < 5) {
-      FUN_00020a08(uVar6,1);
+      aw20036_led_on(uVar6,1);
       bVar1 = *pbVar2;
-      FUN_00020824(uVar6,bVar1,bVar1,bVar1);
+      aw20036_set_brightness(uVar6,bVar1,bVar1,bVar1);
       if ((int)(uVar5 - 10) < (int)(10 - uVar5)) goto LAB_0002168a;
     }
     else {
 LAB_0002168a:
-      FUN_00020a08(uVar8 - 1 & 0xff,0);
-      FUN_00020a08(uVar7 & 0xff,0);
+      aw20036_led_on(uVar8 - 1 & 0xff,0);
+      aw20036_led_on(uVar7 & 0xff,0);
     }
     uVar6 = uVar5 - 1;
     if (uVar5 != 10) {
       if (3 < (int)uVar6) {
         uVar4 = uVar8 - 1 & 0xff;
-        FUN_00020a08(uVar4,1);
+        aw20036_led_on(uVar4,1);
         bVar1 = *DAT_000217d8 >> 2;
-        FUN_00020824(uVar4,bVar1,bVar1,bVar1);
+        aw20036_set_brightness(uVar4,bVar1,bVar1,bVar1);
       }
       if (uVar7 != 0xffffffff) {
         if ((int)uVar7 < 5) {
-          FUN_00020a08(uVar7 & 0xff,1);
+          aw20036_led_on(uVar7 & 0xff,1);
           bVar1 = *pbVar2 >> 2;
-          FUN_00020824(uVar7 & 0xff,bVar1,bVar1,bVar1);
+          aw20036_set_brightness(uVar7 & 0xff,bVar1,bVar1,bVar1);
         }
         if ((int)(uVar5 - 9) < (int)uVar7) {
-          FUN_00020a08(uVar8,0);
-          FUN_00020a08(uVar9 & 0xff,0);
+          aw20036_led_on(uVar8,0);
+          aw20036_led_on(uVar9 & 0xff,0);
         }
       }
     }
     if (uVar5 < 9) {
       if (uVar5 != 3) {
-        FUN_00020a08(uVar8,1);
+        aw20036_led_on(uVar8,1);
         bVar1 = *DAT_000217d8 >> 4;
-        FUN_00020824(uVar8,bVar1,bVar1,bVar1);
+        aw20036_set_brightness(uVar8,bVar1,bVar1,bVar1);
         goto joined_r0x0002171a;
       }
 LAB_00021626:
-      FUN_00020a08(uVar8 + 1 & 0xff,0);
-      FUN_00020a08(7 - uVar8 & 0xff,0);
+      aw20036_led_on(uVar8 + 1 & 0xff,0);
+      aw20036_led_on(7 - uVar8 & 0xff,0);
     }
     else {
 joined_r0x0002171a:
       if (-1 < (int)uVar9) {
         if (uVar9 == 5) goto LAB_00021626;
-        FUN_00020a08(uVar9 & 0xff,1);
+        aw20036_led_on(uVar9 & 0xff,1);
         bVar1 = *DAT_000217d8 >> 4;
-        FUN_00020824(uVar9 & 0xff,bVar1,bVar1,bVar1);
+        aw20036_set_brightness(uVar9 & 0xff,bVar1,bVar1,bVar1);
       }
       if ((int)(uVar5 - 8) < (int)uVar9) goto LAB_00021626;
     }
@@ -6768,7 +6768,7 @@ void FUN_000217e4(undefined4 param_1,int param_2)
   uVar5 = 0;
   do {
     uVar7 = uVar5;
-    FUN_0002087c(uVar7 & 0xff,param_1);
+    aw20036_set_rgb(uVar7 & 0xff,param_1);
     uVar5 = uVar7 + 1;
   } while (uVar7 + 1 != 9);
   param_2 = param_2 * 1000;
@@ -6778,31 +6778,31 @@ void FUN_000217e4(undefined4 param_1,int param_2)
   do {
     uVar7 = 6 - uVar5;
     if (-1 < (int)uVar7) {
-      FUN_00020a08(uVar7 & 0xff,1);
+      aw20036_led_on(uVar7 & 0xff,1);
       bVar1 = *DAT_000219f4;
-      FUN_00020824(uVar7 & 0xff,bVar1,bVar1,bVar1);
+      aw20036_set_brightness(uVar7 & 0xff,bVar1,bVar1,bVar1);
     }
     uVar3 = uVar5 & 0xff;
     uVar4 = uVar3 + 2 & 0xff;
     if (uVar5 + 2 < 9) {
-      FUN_00020a08(uVar4,1);
+      aw20036_led_on(uVar4,1);
       bVar1 = *DAT_000219f4;
-      FUN_00020824(uVar4,bVar1,bVar1,bVar1);
+      aw20036_set_brightness(uVar4,bVar1,bVar1,bVar1);
       if ((int)uVar7 < (int)(uVar5 + 2)) goto LAB_000218c0;
     }
     else {
 LAB_000218c0:
-      FUN_00020a08(uVar6 & 0xff,0);
-      FUN_00020a08(uVar3 + 1 & 0xff,0);
+      aw20036_led_on(uVar6 & 0xff,0);
+      aw20036_led_on(uVar3 + 1 & 0xff,0);
     }
     if (uVar6 == 5) {
       if (uVar5 != 2) {
 LAB_00021904:
         if ((int)(uVar5 + 1) < 9) {
           uVar7 = uVar3 + 1 & 0xff;
-          FUN_00020a08(uVar7,1);
+          aw20036_led_on(uVar7,1);
           bVar1 = *DAT_000219f4 >> 2;
-          FUN_00020824(uVar7,bVar1,bVar1,bVar1);
+          aw20036_set_brightness(uVar7,bVar1,bVar1,bVar1);
         }
         if ((int)uVar6 < (int)(uVar5 + 1)) goto LAB_00021830;
         if ((int)uVar8 < 5) goto LAB_00021844;
@@ -6815,15 +6815,15 @@ LAB_000218e2:
     }
     else {
       if (-1 < (int)uVar6) {
-        FUN_00020a08(uVar6 & 0xff,1);
+        aw20036_led_on(uVar6 & 0xff,1);
         bVar1 = *DAT_000219f4 >> 2;
-        FUN_00020824(uVar6 & 0xff,bVar1,bVar1,bVar1);
+        aw20036_set_brightness(uVar6 & 0xff,bVar1,bVar1,bVar1);
       }
       if (uVar5 != 2) goto LAB_00021904;
       if (2 < (int)uVar6) goto LAB_000218de;
 LAB_00021830:
-      FUN_00020a08(uVar8 & 0xff,0);
-      FUN_00020a08(uVar3,0);
+      aw20036_led_on(uVar8 & 0xff,0);
+      aw20036_led_on(uVar3,0);
       if (4 < (int)uVar8) {
 LAB_00021912:
         uVar7 = uVar5 + 1;
@@ -6831,24 +6831,24 @@ LAB_00021912:
 LAB_00021850:
           uVar7 = uVar5 + 1;
           if (uVar5 == 9) goto LAB_00021856;
-          FUN_00020a08(uVar3,1);
+          aw20036_led_on(uVar3,1);
           bVar1 = *DAT_000219f4 >> 4;
-          FUN_00020824(uVar3,bVar1,bVar1,bVar1);
+          aw20036_set_brightness(uVar3,bVar1,bVar1,bVar1);
         }
         goto LAB_000218e2;
       }
 LAB_00021844:
       if (uVar8 != 0xffffffff) {
-        FUN_00020a08(uVar8 & 0xff,1);
+        aw20036_led_on(uVar8 & 0xff,1);
         bVar1 = *DAT_000219f4 >> 4;
-        FUN_00020824(uVar8 & 0xff,bVar1,bVar1,bVar1);
+        aw20036_set_brightness(uVar8 & 0xff,bVar1,bVar1,bVar1);
         goto LAB_00021912;
       }
       if (3 < uVar5) goto LAB_00021850;
 LAB_00021856:
       uVar7 = uVar5 + 1;
-      FUN_00020a08(9 - uVar3 & 0xff,0);
-      FUN_00020a08(uVar3 - 1 & 0xff,0);
+      aw20036_led_on(9 - uVar3 & 0xff,0);
+      aw20036_led_on(uVar3 - 1 & 0xff,0);
     }
     FUN_0002024c();
     for (iVar2 = param_2; iVar2 != 0; iVar2 = iVar2 + -1) {
@@ -6904,7 +6904,7 @@ void FUN_000219f8(void)
   } while (iVar1 != 0);
   uVar2 = FUN_00029ddc();
   FUN_0001fff8((uVar2 & 0xf) << 4);
-  uVar2 = FUN_00029db0();
+  uVar2 = settings_get_brightness();
   if (uVar2 != 0) {
     *DAT_00021ac8 = (char)uVar2;
     if ((uVar2 >> 3 & 0xff) == 0) {
@@ -6982,13 +6982,13 @@ void FUN_00021b70(undefined4 param_1)
   do {
     uVar1 = uVar2 & 0xff;
     uVar2 = uVar2 + 1;
-    FUN_0002087c(uVar1,param_1);
+    aw20036_set_rgb(uVar1,param_1);
   } while (uVar2 != 9);
   uVar2 = 0;
   do {
     uVar1 = uVar2 & 0xff;
     uVar2 = uVar2 + 1;
-    FUN_00020a08(uVar1,1);
+    aw20036_led_on(uVar1,1);
   } while (uVar2 != 9);
   FUN_0002024c();
   return;
@@ -7003,48 +7003,48 @@ void FUN_00021bb0(int param_1,undefined4 param_2)
   FUN_0002084c();
   FUN_00028d74();
   if (param_1 << 0x1f < 0) {
-    FUN_0002087c(0,param_2);
-    FUN_00020a08(0,1);
+    aw20036_set_rgb(0,param_2);
+    aw20036_led_on(0,1);
     FUN_000203e8(0);
   }
   if (param_1 << 0x1e < 0) {
-    FUN_0002087c(1,param_2);
-    FUN_00020a08(1,1);
+    aw20036_set_rgb(1,param_2);
+    aw20036_led_on(1,1);
     FUN_000203e8(1);
   }
   if (param_1 << 0x1d < 0) {
-    FUN_0002087c(2,param_2);
-    FUN_00020a08(2,1);
+    aw20036_set_rgb(2,param_2);
+    aw20036_led_on(2,1);
     FUN_000203e8(2);
   }
   if (param_1 << 0x1c < 0) {
-    FUN_0002087c(3,param_2);
-    FUN_00020a08(3,1);
+    aw20036_set_rgb(3,param_2);
+    aw20036_led_on(3,1);
     FUN_000203e8(3);
   }
   if (param_1 << 0x1b < 0) {
-    FUN_0002087c(4,param_2);
-    FUN_00020a08(4,1);
+    aw20036_set_rgb(4,param_2);
+    aw20036_led_on(4,1);
     FUN_000203e8(4);
   }
   if (param_1 << 0x1a < 0) {
-    FUN_0002087c(5,param_2);
-    FUN_00020a08(5,1);
+    aw20036_set_rgb(5,param_2);
+    aw20036_led_on(5,1);
     FUN_000203e8(5);
   }
   if (param_1 << 0x19 < 0) {
-    FUN_0002087c(6,param_2);
-    FUN_00020a08(6,1);
+    aw20036_set_rgb(6,param_2);
+    aw20036_led_on(6,1);
     FUN_000203e8(6);
   }
   if (param_1 << 0x18 < 0) {
-    FUN_0002087c(7,param_2);
-    FUN_00020a08(7,1);
+    aw20036_set_rgb(7,param_2);
+    aw20036_led_on(7,1);
     FUN_000203e8(7);
   }
   if (param_1 << 0x17 < 0) {
-    FUN_0002087c(8,param_2);
-    FUN_00020a08(8,1);
+    aw20036_set_rgb(8,param_2);
+    aw20036_led_on(8,1);
     FUN_000203e8(8);
   }
   return;
@@ -7063,18 +7063,20 @@ void FUN_00021cd0(undefined4 param_1)
   do {
     uVar1 = uVar2 & 0xff;
     uVar2 = uVar2 + 1;
-    FUN_00020824(uVar1,param_1,param_1,param_1);
+    aw20036_set_brightness(uVar1,param_1,param_1,param_1);
   } while (uVar2 != 9);
   FUN_0002024c();
   return;
 }
 
 
-/* ---- FUN_00021cf0 @ 00021cf0 ---- */
+/* ---- display_all_leds_color @ 00021cf0 ---- */
+/* 9 LEDs, saved brightness */
 
 /* WARNING: Globals starting with '_' overlap smaller symbols at the same address */
+/* 9 LEDs, saved brightness */
 
-void FUN_00021cf0(undefined3 param_1,undefined4 param_2)
+void display_all_leds_color(undefined3 param_1,undefined4 param_2)
 
 {
   char *pcVar1;
@@ -7103,7 +7105,7 @@ void FUN_00021cf0(undefined3 param_1,undefined4 param_2)
   do {
     uVar2 = uVar4 & 0xff;
     uVar4 = uVar4 + 1;
-    FUN_00020824(uVar2,param_2,param_2,param_2);
+    aw20036_set_brightness(uVar2,param_2,param_2,param_2);
   } while (uVar4 != 9);
   FUN_0002024c();
   if (*pcVar1 == '\0') {
@@ -7113,22 +7115,25 @@ void FUN_00021cf0(undefined3 param_1,undefined4 param_2)
   do {
     uVar2 = uVar4 & 0xff;
     uVar4 = uVar4 + 1;
-    FUN_0002087c(uVar2,param_1);
+    aw20036_set_rgb(uVar2,param_1);
   } while (uVar4 != 9);
   uVar4 = 0;
   do {
     uVar2 = uVar4 & 0xff;
     uVar4 = uVar4 + 1;
-    FUN_00020a08(uVar2,1);
+    aw20036_led_on(uVar2,1);
   } while (uVar4 != 9);
   FUN_0002024c();
   return;
 }
 
 
-/* ---- FUN_00021dbc @ 00021dbc ---- */
+/* ---- display_sched_event_handler @ 00021dbc ---- */
+/* 8 cases (table 0x32fd8) */
 
-void FUN_00021dbc(byte *param_1)
+/* 8 cases (table 0x32fd8) */
+
+void display_sched_event_handler(byte *param_1)
 
 {
   if (*param_1 < 8) {
@@ -7184,7 +7189,7 @@ void FUN_00021f9c(uint param_1)
     do {
       uVar2 = uVar1 & 0xff;
       uVar1 = uVar1 + 1;
-      FUN_00020a08(uVar2,0);
+      aw20036_led_on(uVar2,0);
     } while (uVar1 != 9);
     FUN_0002024c();
     return;
@@ -7209,9 +7214,12 @@ void FUN_00022364(void)
 }
 
 
-/* ---- FUN_0002237c @ 0002237c ---- */
+/* ---- display_show @ 0002237c ---- */
+/* (mode, positions, idx) */
 
-void FUN_0002237c(int param_1,byte *param_2,int param_3)
+/* (mode, positions, idx) */
+
+void display_show(int param_1,byte *param_2,int param_3)
 
 {
   byte bVar1;
@@ -7257,21 +7265,21 @@ void FUN_0002237c(int param_1,byte *param_2,int param_3)
     do {
       uVar10 = uVar12 & 0xff;
       uVar12 = uVar12 + 1;
-      FUN_00020a08(uVar10,0);
+      aw20036_led_on(uVar10,0);
     } while (uVar12 != 9);
     bVar1 = *param_2;
-    FUN_0002087c(bVar1,local_2c);
-    FUN_00020a08(bVar1,1);
+    aw20036_set_rgb(bVar1,local_2c);
+    aw20036_led_on(bVar1,1);
     bVar2 = *DAT_000225fc;
-    FUN_00020824(bVar1,bVar2,bVar2,bVar2);
+    aw20036_set_brightness(bVar1,bVar2,bVar2,bVar2);
     puVar14 = DAT_00022600;
     if (bVar1 != 0) {
       cVar7 = bVar1 - 1;
-      FUN_0002087c(cVar7,local_2c);
-      FUN_00020a08(cVar7,1);
+      aw20036_set_rgb(cVar7,local_2c);
+      aw20036_led_on(cVar7,1);
       puVar14 = DAT_00022600;
       uVar4 = *DAT_00022600;
-      FUN_00020824(cVar7,uVar4,uVar4,uVar4);
+      aw20036_set_brightness(cVar7,uVar4,uVar4,uVar4);
       if (7 < bVar1) goto LAB_000224ba;
     }
     cVar7 = bVar1 + 1;
@@ -7284,19 +7292,19 @@ void FUN_0002237c(int param_1,byte *param_2,int param_3)
     do {
       uVar10 = uVar12 & 0xff;
       uVar12 = uVar12 + 1;
-      FUN_00020a08(uVar10,0);
+      aw20036_led_on(uVar10,0);
     } while (uVar12 != 9);
     bVar1 = *param_2;
     bVar2 = param_2[1];
-    FUN_0002087c(bVar1,local_2c);
-    FUN_00020a08(bVar1,1);
+    aw20036_set_rgb(bVar1,local_2c);
+    aw20036_led_on(bVar1,1);
     pbVar5 = DAT_000225fc;
     bVar3 = *DAT_000225fc;
-    FUN_00020824(bVar1,bVar3,bVar3,bVar3);
-    FUN_0002087c(bVar2,local_2c);
-    FUN_00020a08(bVar2,1);
+    aw20036_set_brightness(bVar1,bVar3,bVar3,bVar3);
+    aw20036_set_rgb(bVar2,local_2c);
+    aw20036_led_on(bVar2,1);
     bVar3 = *pbVar5;
-    FUN_00020824(bVar2,bVar3,bVar3,bVar3);
+    aw20036_set_brightness(bVar2,bVar3,bVar3,bVar3);
     if (bVar2 < bVar1) {
       bVar13 = bVar1 - bVar2;
       bVar3 = bVar1;
@@ -7308,39 +7316,39 @@ void FUN_0002237c(int param_1,byte *param_2,int param_3)
     }
     if (bVar3 < 8) {
       cVar7 = bVar3 + 1;
-      FUN_0002087c(cVar7,local_2c);
-      FUN_00020a08(cVar7,1);
+      aw20036_set_rgb(cVar7,local_2c);
+      aw20036_led_on(cVar7,1);
       uVar4 = *DAT_00022600;
-      FUN_00020824(cVar7,uVar4,uVar4,uVar4);
+      aw20036_set_brightness(cVar7,uVar4,uVar4,uVar4);
     }
     if (bVar1 != 0) {
       cVar7 = bVar1 - 1;
-      FUN_0002087c(cVar7,local_2c);
-      FUN_00020a08(cVar7,1);
+      aw20036_set_rgb(cVar7,local_2c);
+      aw20036_led_on(cVar7,1);
       uVar4 = *DAT_00022600;
-      FUN_00020824(cVar7,uVar4,uVar4,uVar4);
+      aw20036_set_brightness(cVar7,uVar4,uVar4,uVar4);
     }
     if (bVar13 == 2) {
       cVar7 = bVar3 - 1;
-      FUN_0002087c(cVar7,local_2c);
-      FUN_00020a08(cVar7,1);
+      aw20036_set_rgb(cVar7,local_2c);
+      aw20036_led_on(cVar7,1);
       bVar1 = *pbVar5 >> 1;
-      FUN_00020824(cVar7,bVar1,bVar1,bVar1);
+      aw20036_set_brightness(cVar7,bVar1,bVar1,bVar1);
       goto LAB_000224ba;
     }
     if (bVar13 < 3) goto LAB_000224ba;
     cVar8 = bVar1 + 1;
-    FUN_0002087c(cVar8,local_2c);
-    FUN_00020a08(cVar8,1);
+    aw20036_set_rgb(cVar8,local_2c);
+    aw20036_led_on(cVar8,1);
     puVar14 = DAT_00022600;
     uVar4 = *DAT_00022600;
     cVar7 = bVar3 - 1;
-    FUN_00020824(cVar8,uVar4,uVar4,uVar4);
+    aw20036_set_brightness(cVar8,uVar4,uVar4,uVar4);
   }
-  FUN_0002087c(cVar7,local_2c);
-  FUN_00020a08(cVar7,1);
+  aw20036_set_rgb(cVar7,local_2c);
+  aw20036_led_on(cVar7,1);
   uVar4 = *puVar14;
-  FUN_00020824(cVar7,uVar4,uVar4,uVar4);
+  aw20036_set_brightness(cVar7,uVar4,uVar4,uVar4);
 LAB_000224ba:
   FUN_0002024c();
   return;
@@ -7363,7 +7371,7 @@ void FUN_0002260c(int param_1,undefined *param_2)
     do {
       uVar3 = uVar5 & 0xff;
       uVar5 = uVar5 + 1;
-      FUN_00020a08(uVar3,0);
+      aw20036_led_on(uVar3,0);
     } while (uVar5 != 9);
     uVar2 = *param_2;
     puVar4 = DAT_00022688;
@@ -7376,26 +7384,29 @@ void FUN_0002260c(int param_1,undefined *param_2)
     do {
       uVar3 = uVar5 & 0xff;
       uVar5 = uVar5 + 1;
-      FUN_00020a08(uVar3,0);
+      aw20036_led_on(uVar3,0);
     } while (uVar5 != 9);
     uVar1 = *param_2;
     uVar2 = param_2[1];
-    FUN_0002087c(uVar1,*DAT_00022688);
-    FUN_00020a08(uVar1,1);
-    FUN_00020824(uVar1,0xf,0xf,0xf);
+    aw20036_set_rgb(uVar1,*DAT_00022688);
+    aw20036_led_on(uVar1,1);
+    aw20036_set_brightness(uVar1,0xf,0xf,0xf);
     puVar4 = DAT_0002268c;
   }
-  FUN_0002087c(uVar2,*puVar4);
-  FUN_00020a08(uVar2,1);
-  FUN_00020824(uVar2,0xf,0xf,0xf);
+  aw20036_set_rgb(uVar2,*puVar4);
+  aw20036_led_on(uVar2,1);
+  aw20036_set_brightness(uVar2,0xf,0xf,0xf);
   FUN_0002024c();
   return;
 }
 
 
-/* ---- FUN_00022690 @ 00022690 ---- */
+/* ---- display_set_brightness @ 00022690 ---- */
+/* cmd 0x4D */
 
-void FUN_00022690(uint param_1)
+/* cmd 0x4D */
+
+void display_set_brightness(uint param_1)
 
 {
   if (param_1 != 0) {
@@ -7420,7 +7431,7 @@ void FUN_000226b0(void)
   FUN_00028d74();
   FUN_000215dc(*DAT_000226d4,0x32);
   FUN_00028674(0);
-  FUN_000269b8(0x1f);
+  fsm_post_event(0x1f);
   return;
 }
 
@@ -7434,7 +7445,7 @@ void FUN_000226d8(void)
   FUN_00028d74();
   FUN_000215dc(*DAT_000226fc,100);
   FUN_00028674(0);
-  FUN_000269b8(0x1f);
+  fsm_post_event(0x1f);
   return;
 }
 
@@ -7451,7 +7462,7 @@ void FUN_00022700(undefined4 param_1)
   uVar1 = FUN_00029c98(param_1);
   FUN_000217e4(uVar1,0x32);
   FUN_00028674(0);
-  FUN_000269b8(0x1f);
+  fsm_post_event(0x1f);
   return;
 }
 
@@ -7480,7 +7491,7 @@ void FUN_00022738(undefined4 param_1)
   do {
     uVar4 = uVar8 & 0xff;
     uVar8 = uVar8 + 1;
-    FUN_0002087c(uVar4,uVar3);
+    aw20036_set_rgb(uVar4,uVar3);
     pbVar2 = DAT_000228d4;
     iVar6 = DAT_000228d0;
   } while (uVar8 != 9);
@@ -7489,22 +7500,22 @@ void FUN_00022738(undefined4 param_1)
   uVar8 = 0xfffffffe;
   do {
     if (bVar7 < 9) {
-      FUN_00020a08(bVar7,1);
+      aw20036_led_on(bVar7,1);
       bVar1 = *pbVar2;
-      FUN_00020824(bVar7,bVar1,bVar1,bVar1);
-      FUN_00020a08(cVar10,0);
+      aw20036_set_brightness(bVar7,bVar1,bVar1,bVar1);
+      aw20036_led_on(cVar10,0);
     }
     if (uVar8 + 1 < 9) {
-      FUN_00020a08(bVar7 - 1,1);
+      aw20036_led_on(bVar7 - 1,1);
       bVar1 = *pbVar2 >> 2;
-      FUN_00020824(bVar7 - 1,bVar1,bVar1,bVar1);
-      FUN_00020a08(cVar10,0);
+      aw20036_set_brightness(bVar7 - 1,bVar1,bVar1,bVar1);
+      aw20036_led_on(cVar10,0);
     }
     if (uVar8 < 9) {
-      FUN_00020a08(uVar8 & 0xff,1);
+      aw20036_led_on(uVar8 & 0xff,1);
       bVar1 = *pbVar2 >> 4;
-      FUN_00020824(uVar8 & 0xff,bVar1,bVar1,bVar1);
-      FUN_00020a08(cVar10,0);
+      aw20036_set_brightness(uVar8 & 0xff,bVar1,bVar1,bVar1);
+      aw20036_led_on(cVar10,0);
     }
     FUN_0002024c();
     iVar9 = DAT_000228dc;
@@ -7527,7 +7538,7 @@ void FUN_00022738(undefined4 param_1)
     iVar6 = iVar6 + -1;
   } while (iVar6 != 0);
   FUN_00028674(0);
-  FUN_000269b8(0x1f);
+  fsm_post_event(0x1f);
   return;
 }
 
@@ -7555,7 +7566,7 @@ void FUN_000228e4(undefined4 param_1)
   uVar9 = 0;
   do {
     uVar6 = uVar9;
-    FUN_0002087c(uVar6 & 0xff,uVar3);
+    aw20036_set_rgb(uVar6 & 0xff,uVar3);
     pbVar2 = DAT_00022a74;
     uVar9 = uVar6 + 1;
   } while (uVar6 + 1 != 9);
@@ -7564,23 +7575,23 @@ void FUN_000228e4(undefined4 param_1)
   pbVar10 = DAT_00022a78;
   do {
     if (uVar6 < 9) {
-      FUN_00020a08(uVar6 & 0xff,1);
+      aw20036_led_on(uVar6 & 0xff,1);
       bVar1 = *pbVar2;
-      FUN_00020824(uVar6 & 0xff,bVar1,bVar1,bVar1);
-      FUN_00020a08(cVar8,0);
+      aw20036_set_brightness(uVar6 & 0xff,bVar1,bVar1,bVar1);
+      aw20036_led_on(cVar8,0);
     }
     if (uVar6 + 1 < 9) {
       uVar5 = uVar6 + 1 & 0xff;
-      FUN_00020a08(uVar5,1);
+      aw20036_led_on(uVar5,1);
       bVar1 = *pbVar2 >> 2;
-      FUN_00020824(uVar5,bVar1,bVar1,bVar1);
-      FUN_00020a08(cVar8,0);
+      aw20036_set_brightness(uVar5,bVar1,bVar1,bVar1);
+      aw20036_led_on(cVar8,0);
     }
     if (uVar9 < 9) {
-      FUN_00020a08(uVar9 & 0xff,1);
+      aw20036_led_on(uVar9 & 0xff,1);
       bVar1 = *pbVar2 >> 4;
-      FUN_00020824(uVar9 & 0xff,bVar1,bVar1,bVar1);
-      FUN_00020a08(cVar8,0);
+      aw20036_set_brightness(uVar9 & 0xff,bVar1,bVar1,bVar1);
+      aw20036_led_on(cVar8,0);
     }
     FUN_0002024c();
     iVar7 = DAT_00022a80;
@@ -7604,7 +7615,7 @@ void FUN_000228e4(undefined4 param_1)
     iVar4 = iVar4 + -1;
   } while (iVar4 != 0);
   FUN_00028674(0);
-  FUN_000269b8(0x1f);
+  fsm_post_event(0x1f);
   return;
 }
 
@@ -7624,21 +7635,21 @@ void FUN_00022a88(undefined4 param_1,undefined4 param_2)
   do {
     uVar3 = uVar4;
     uVar4 = uVar3 & 0xff;
-    FUN_0002087c(uVar4,param_1);
-    FUN_00020a08(uVar4,1);
+    aw20036_set_rgb(uVar4,param_1);
+    aw20036_led_on(uVar4,1);
     uVar1 = *puVar2;
-    FUN_00020824(uVar4,uVar1,uVar1,uVar1);
+    aw20036_set_brightness(uVar4,uVar1,uVar1,uVar1);
     uVar4 = uVar3 + 1;
   } while (uVar3 + 1 != 4);
-  FUN_00020a08(4,0);
+  aw20036_led_on(4,0);
   uVar3 = uVar3 + 2;
   do {
     uVar4 = uVar3 & 0xff;
-    FUN_0002087c(uVar4,param_2);
-    FUN_00020a08(uVar4,1);
+    aw20036_set_rgb(uVar4,param_2);
+    aw20036_led_on(uVar4,1);
     uVar1 = *puVar2;
     uVar3 = uVar3 + 1;
-    FUN_00020824(uVar4,uVar1,uVar1,uVar1);
+    aw20036_set_brightness(uVar4,uVar1,uVar1,uVar1);
   } while (uVar3 != 9);
   FUN_0002024c();
   return;
@@ -7719,9 +7730,12 @@ void FUN_00022b68(void)
 }
 
 
-/* ---- FUN_00022b84 @ 00022b84 ---- */
+/* ---- cmd4b_led_color @ 00022b84 ---- */
+/* args[0]==0 -> sched {2, led, R, G, B}; else {3} (clear) */
 
-void FUN_00022b84(char *param_1)
+/* args[0]==0 -> sched {2, led, R, G, B}; else {3} (clear) */
+
+void cmd4b_led_color(char *param_1)
 
 {
   undefined local_10;
@@ -7853,9 +7867,12 @@ void FUN_00022ccc(void)
 }
 
 
-/* ---- FUN_00022db8 @ 00022db8 ---- */
+/* ---- motor_pan_position @ 00022db8 ---- */
+/* AW86224 x2 (I2C 0x58) reg 0x1E: A = gain[p]-bal, B = gain[8-p]+bal */
 
-void FUN_00022db8(int param_1)
+/* AW86224 x2 (I2C 0x58) reg 0x1E: A = gain[p]-bal, B = gain[8-p]+bal */
+
+void motor_pan_position(int param_1)
 
 {
   char *pcVar1;
@@ -8041,9 +8058,12 @@ void FUN_00023224(void)
 }
 
 
-/* ---- FUN_00023238 @ 00023238 ---- */
+/* ---- motor_set_level_table @ 00023238 ---- */
+/* gain[i] = level*base[i]/100 (9 positions) */
 
-void FUN_00023238(int param_1)
+/* gain[i] = level*base[i]/100 (9 positions) */
+
+void motor_set_level_table(int param_1)
 
 {
   byte *pbVar1;
@@ -8075,9 +8095,9 @@ void FUN_00023238(int param_1)
 }
 
 
-/* ---- FUN_000232c0 @ 000232c0 ---- */
+/* ---- motor_set_balance @ 000232c0 ---- */
 
-void FUN_000232c0(int param_1)
+void motor_set_balance(int param_1)
 
 {
   *DAT_000232d0 = *(undefined *)(DAT_000232cc + param_1);
@@ -8085,9 +8105,9 @@ void FUN_000232c0(int param_1)
 }
 
 
-/* ---- FUN_000232d4 @ 000232d4 ---- */
+/* ---- motor_preview_buzz @ 000232d4 ---- */
 
-void FUN_000232d4(void)
+void motor_preview_buzz(void)
 
 {
   undefined4 uVar1;
@@ -9178,9 +9198,12 @@ void FUN_000248d4(void)
 }
 
 
-/* ---- FUN_000249c4 @ 000249c4 ---- */
+/* ---- ffb1_app_cmd_dispatch @ 000249c4 ---- */
+/* [prefix, cmd, args..]; table 0x3312c indexed cmd-0x11 (0x11..0x57) */
 
-void FUN_000249c4(int param_1,int param_2)
+/* [prefix, cmd, args..]; table 0x3312c indexed cmd-0x11 (0x11..0x57) */
+
+void ffb1_app_cmd_dispatch(int param_1,int param_2)
 
 {
   uint uVar1;
@@ -9561,9 +9584,12 @@ void FUN_00025480(void)
 }
 
 
-/* ---- FUN_000254cc @ 000254cc ---- */
+/* ---- ffb2_on_write @ 000254cc ---- */
+/* touch pattern header + 20-byte sample packets */
 
-void FUN_000254cc(void)
+/* touch pattern header + 20-byte sample packets */
+
+void ffb2_on_write(void)
 
 {
   byte bVar1;
@@ -9733,7 +9759,7 @@ void FUN_00025bc4(undefined param_1)
     FUN_00031764(uVar1,&local_1c,2);
     local_1a = 0x14;
     if (*DAT_00025c44 == '\0') {
-      FUN_000269b8(0x21);
+      fsm_post_event(0x21);
     }
     else {
       FUN_0001b1fc(&local_18,0,0x10);
@@ -9932,7 +9958,7 @@ void FUN_00025fa0(undefined4 param_1,undefined4 param_2)
     FUN_00031764(uVar1,param_1,param_2);
     local_22 = 0x14;
     if (*DAT_00026014 == '\0') {
-      FUN_000269b8(0x21);
+      fsm_post_event(0x21);
     }
     else {
       FUN_0001b1fc(&local_20,0,0x10);
@@ -10071,13 +10097,13 @@ void FUN_00026138(ushort *param_1)
       }
       *DAT_00026500 = 0;
       FUN_000260b0();
-      FUN_000269b8(0xc);
+      fsm_post_event(0xc);
       iVar7 = DAT_000264d0;
     }
     else if (uVar9 < 0x11) {
       if (uVar9 == 1) {
         if (*DAT_000264f4 != '\0') {
-          FUN_000269b8(0x16);
+          fsm_post_event(0x16);
           iVar7 = DAT_000264d0;
         }
       }
@@ -10118,7 +10144,7 @@ void FUN_00026138(ushort *param_1)
         }
         *pcVar1 = '\0';
       }
-      FUN_000269b8(0xd);
+      fsm_post_event(0xd);
       iVar7 = DAT_000264d0;
     }
     goto LAB_000261e2;
@@ -10239,7 +10265,7 @@ void FUN_00026610(undefined4 param_1,undefined2 param_2)
   
   local_1a = param_2;
   if (*DAT_0002665c == '\0') {
-    FUN_000269b8(0x1a);
+    fsm_post_event(0x1a);
   }
   else {
     FUN_0001b1fc(&local_18,0,0x10);
@@ -10485,9 +10511,9 @@ void FUN_00026990(void)
 }
 
 
-/* ---- FUN_000269b8 @ 000269b8 ---- */
+/* ---- fsm_post_event @ 000269b8 ---- */
 
-void FUN_000269b8(void)
+void fsm_post_event(void)
 
 {
   if (*DAT_00026cfc < 0x15) {
@@ -10516,7 +10542,7 @@ void FUN_00026aa8(void)
 {
   undefined *unaff_r6;
   
-  FUN_000269b8(2);
+  fsm_post_event(2);
   *unaff_r6 = 1;
   FUN_00028d74();
   FUN_00021b00();
@@ -10557,7 +10583,7 @@ void FUN_00026c24(void)
   int iVar1;
   undefined *unaff_r6;
   
-  FUN_000269b8(2);
+  fsm_post_event(2);
   *unaff_r6 = 0xb;
   FUN_00028d74();
   FUN_00029f14();
@@ -10568,7 +10594,7 @@ void FUN_00026c24(void)
   FUN_00025bc4(0x8c);
   FUN_00021b00();
   FUN_00026668();
-  FUN_00029db0();
+  settings_get_brightness();
   FUN_00021cd0();
   FUN_00021bb0(0x38,0xffffff);
   FUN_000242d0();
@@ -10614,8 +10640,8 @@ void FUN_00026e86(void)
     FUN_000282fc();
   }
   unaff_r4[1] = (byte)iVar3;
-  FUN_0002237c(2);
-  FUN_00022db8((uint)*unaff_r4 + (uint)unaff_r4[1] >> 1);
+  display_show(2);
+  motor_pan_position((uint)*unaff_r4 + (uint)unaff_r4[1] >> 1);
   pbVar2 = DAT_00027130;
   bVar1 = *DAT_00027130;
   *(byte *)(DAT_0002713c + (uint)bVar1) = unaff_r4[1] << 4 | *unaff_r4;
@@ -10634,8 +10660,8 @@ void FUN_00026e9c(void)
   byte *pbVar2;
   byte *unaff_r4;
   
-  FUN_0002237c(2);
-  FUN_00022db8((uint)*unaff_r4 + (uint)unaff_r4[1] >> 1);
+  display_show(2);
+  motor_pan_position((uint)*unaff_r4 + (uint)unaff_r4[1] >> 1);
   pbVar2 = DAT_00027130;
   bVar1 = *DAT_00027130;
   *(byte *)(DAT_0002713c + (uint)bVar1) = unaff_r4[1] << 4 | *unaff_r4;
@@ -10654,8 +10680,8 @@ void FUN_00026ef6(void)
   byte *pbVar2;
   byte *unaff_r4;
   
-  FUN_0002237c(1);
-  FUN_00022db8(*unaff_r4);
+  display_show(1);
+  motor_pan_position(*unaff_r4);
   pbVar2 = DAT_00027130;
   bVar1 = *DAT_00027130;
   *(byte *)(DAT_0002713c + (uint)bVar1) = *unaff_r4 | 0xf0;
@@ -10716,7 +10742,7 @@ void FUN_000274ee(void)
   byte *unaff_r5;
   undefined *unaff_r6;
   
-  FUN_00022db8((uint)*unaff_r5 + (uint)unaff_r5[1] >> 1);
+  motor_pan_position((uint)*unaff_r5 + (uint)unaff_r5[1] >> 1);
   if ((int)(uint)*unaff_r4 < (int)(*DAT_0002785c - 1)) {
     FUN_0002809e();
   }
@@ -10727,7 +10753,7 @@ void FUN_000274ee(void)
   FUN_00028d74();
   FUN_000250cc();
   if (*DAT_00027864 == '\0') {
-    FUN_000269b8(2);
+    fsm_post_event(2);
     *unaff_r6 = 4;
     FUN_00028d74();
     FUN_00021b00();
@@ -10736,7 +10762,7 @@ void FUN_000274ee(void)
                     /* WARNING: Subroutine does not return */
     FUN_000269ee();
   }
-  FUN_000269b8(2);
+  fsm_post_event(2);
   *unaff_r6 = 6;
   FUN_000248c4(0);
   FUN_00025bc4(0x89);
@@ -10776,7 +10802,7 @@ void FUN_000274fa(void)
   FUN_00028d74();
   FUN_000250cc();
   if (*DAT_00027864 == '\0') {
-    FUN_000269b8(2);
+    fsm_post_event(2);
     *unaff_r6 = 4;
     FUN_00028d74();
     FUN_00021b00();
@@ -10785,7 +10811,7 @@ void FUN_000274fa(void)
                     /* WARNING: Subroutine does not return */
     FUN_000269ee();
   }
-  FUN_000269b8(2);
+  fsm_post_event(2);
   *unaff_r6 = 6;
   FUN_000248c4(0);
   FUN_00025bc4(0x89);
@@ -11014,9 +11040,9 @@ void FUN_00028086(void)
   undefined *unaff_r6;
   
   FUN_000250a0();
-  FUN_000269b8(2);
+  fsm_post_event(2);
   *unaff_r6 = 4;
-  FUN_000269b8(1);
+  fsm_post_event(1);
                     /* WARNING: Subroutine does not return */
   FUN_000269ee();
 }
@@ -11205,9 +11231,9 @@ void FUN_000281f8(void)
   *(undefined *)(unaff_r5 + 1) = 0xb4;
   *(char *)(unaff_r5 + 2) = *pcVar2;
   FUN_00025fa0();
-  FUN_000269b8(2);
+  fsm_post_event(2);
   *unaff_r6 = 7;
-  FUN_000269b8(1);
+  fsm_post_event(1);
                     /* WARNING: Subroutine does not return */
   FUN_000269ee();
 }
@@ -11225,9 +11251,9 @@ void FUN_00028212(void)
   *(undefined *)(unaff_r5 + 1) = 0xb4;
   *(undefined *)(unaff_r5 + 2) = DAT_20003016;
   FUN_00025fa0();
-  FUN_000269b8(2);
+  fsm_post_event(2);
   *unaff_r6 = 7;
-  FUN_000269b8(1);
+  fsm_post_event(1);
                     /* WARNING: Subroutine does not return */
   FUN_000269ee();
 }
@@ -11240,9 +11266,9 @@ void FUN_0002823e(void)
 {
   undefined *unaff_r6;
   
-  FUN_000269b8(2);
+  fsm_post_event(2);
   *unaff_r6 = 4;
-  FUN_000269b8(1);
+  fsm_post_event(1);
                     /* WARNING: Subroutine does not return */
   FUN_000269ee();
 }
@@ -11269,9 +11295,9 @@ void FUN_0002826a(void)
 {
   undefined *unaff_r6;
   
-  FUN_000269b8(2);
+  fsm_post_event(2);
   *unaff_r6 = 0xd;
-  FUN_000269b8(1);
+  fsm_post_event(1);
                     /* WARNING: Subroutine does not return */
   FUN_000269ee();
 }
@@ -11284,9 +11310,9 @@ void FUN_0002827e(void)
 {
   undefined *unaff_r6;
   
-  FUN_000269b8(2);
+  fsm_post_event(2);
   *unaff_r6 = 1;
-  FUN_000269b8(1);
+  fsm_post_event(1);
                     /* WARNING: Subroutine does not return */
   FUN_000269ee();
 }
@@ -11299,9 +11325,9 @@ void FUN_00028292(void)
 {
   undefined *unaff_r6;
   
-  FUN_000269b8(2);
+  fsm_post_event(2);
   *unaff_r6 = 0xb;
-  FUN_000269b8(1);
+  fsm_post_event(1);
                     /* WARNING: Subroutine does not return */
   FUN_000269ee();
 }
@@ -11317,12 +11343,12 @@ void FUN_000282a6(void)
   
   iVar1 = FUN_00022bd4();
   if (iVar1 == 3) {
-    FUN_0002237c(1);
+    display_show(1);
   }
   else {
-    FUN_0002237c(1);
+    display_show(1);
   }
-  FUN_00022db8(*unaff_r5);
+  motor_pan_position(*unaff_r5);
                     /* WARNING: Subroutine does not return */
   FUN_000274fa();
 }
@@ -11365,9 +11391,9 @@ void FUN_000282fc(void)
   DAT_200020f8 = 0xff;
   FUN_00028d74();
   FUN_00022738(DAT_20003016);
-  FUN_000269b8(2);
+  fsm_post_event(2);
   *unaff_r6 = 8;
-  FUN_000269b8(1);
+  fsm_post_event(1);
                     /* WARNING: Subroutine does not return */
   FUN_000269ee();
 }
@@ -11395,9 +11421,9 @@ void FUN_00028304(void)
   DAT_200020f8 = 0xff;
   FUN_00028d74();
   FUN_00022738(DAT_20003016);
-  FUN_000269b8(2);
+  fsm_post_event(2);
   *unaff_r6 = 8;
-  FUN_000269b8(1);
+  fsm_post_event(1);
                     /* WARNING: Subroutine does not return */
   FUN_000269ee();
 }
@@ -11422,9 +11448,9 @@ void FUN_0002830c(void)
   DAT_200020f8 = 0xff;
   FUN_00028d74();
   FUN_00022738(DAT_20003016);
-  FUN_000269b8(2);
+  fsm_post_event(2);
   *unaff_r6 = 8;
-  FUN_000269b8(1);
+  fsm_post_event(1);
                     /* WARNING: Subroutine does not return */
   FUN_000269ee();
 }
@@ -11437,7 +11463,7 @@ void FUN_0002835c(void)
 {
   undefined *unaff_r6;
   
-  FUN_000269b8(2);
+  fsm_post_event(2);
   *unaff_r6 = 3;
                     /* WARNING: Subroutine does not return */
   FUN_00027790();
@@ -11452,7 +11478,7 @@ void FUN_0002836a(void)
   undefined unaff_r5;
   undefined *unaff_r6;
   
-  FUN_000269b8(2);
+  fsm_post_event(2);
   *unaff_r6 = unaff_r5;
   FUN_00026c98();
   FUN_00022364();
@@ -11498,7 +11524,7 @@ void FUN_00028382(void)
   *(char *)(unaff_r5 + 3) = cVar2;
   FUN_00025fa0();
   iVar1 = FUN_00027a30();
-  FUN_0002237c(iVar1 + -1);
+  display_show(iVar1 + -1);
   FUN_000274ee();
   FUN_00029e60();
   FUN_00031764();
@@ -11545,7 +11571,7 @@ void FUN_0002838e(void)
   *(char *)(unaff_r5 + 3) = cVar2;
   FUN_00025fa0();
   iVar1 = FUN_00027a30();
-  FUN_0002237c(iVar1 + -1);
+  display_show(iVar1 + -1);
   FUN_000274ee();
   FUN_00029e60();
   FUN_00031764();
@@ -11589,7 +11615,7 @@ void FUN_000283d8(void)
   *(char *)(unaff_r5 + 3) = cVar2;
   FUN_00025fa0();
   iVar1 = FUN_00027a30();
-  FUN_0002237c(iVar1 + -1);
+  display_show(iVar1 + -1);
   FUN_000274ee();
   FUN_00029e60();
   FUN_00031764();
@@ -11630,7 +11656,7 @@ void FUN_000283e4(void)
   *(char *)(unaff_r5 + 3) = cVar2;
   FUN_00025fa0();
   iVar1 = FUN_00027a30();
-  FUN_0002237c(iVar1 + -1);
+  display_show(iVar1 + -1);
   FUN_000274ee();
   FUN_00029e60();
   FUN_00031764();
@@ -11669,7 +11695,7 @@ void FUN_000283f2(void)
   *(char *)(unaff_r5 + 3) = cVar2;
   FUN_00025fa0();
   iVar1 = FUN_00027a30();
-  FUN_0002237c(iVar1 + -1);
+  display_show(iVar1 + -1);
   FUN_000274ee();
   FUN_00029e60();
   FUN_00031764();
@@ -11705,7 +11731,7 @@ void FUN_00028400(void)
   *(undefined *)(unaff_r5 + 3) = in_r3;
   FUN_00025fa0();
   iVar1 = FUN_00027a30();
-  FUN_0002237c(iVar1 + -1);
+  display_show(iVar1 + -1);
   FUN_000274ee();
   FUN_00029e60();
   FUN_00031764();
@@ -11735,7 +11761,7 @@ void FUN_00028410(int param_1)
 {
   char *unaff_r4;
   
-  FUN_0002237c(param_1 + -1);
+  display_show(param_1 + -1);
   FUN_000274ee();
   FUN_00029e60();
   FUN_00031764();
@@ -11771,8 +11797,8 @@ void FUN_000284ac(undefined4 param_1,undefined4 param_2,undefined param_3,int pa
   FUN_00022364();
   FUN_000237f4();
   iVar1 = FUN_00026f36();
-  FUN_0002237c(iVar1 + -2);
-  FUN_00022db8(*unaff_r5);
+  display_show(iVar1 + -2);
+  motor_pan_position(*unaff_r5);
                     /* WARNING: Subroutine does not return */
   FUN_000274fa();
 }
@@ -11818,7 +11844,7 @@ void FUN_000284d8(void)
     FUN_0001b210(iVar1,0xe9,DAT_000285b4);
   }
   *DAT_000285b0 = 1;
-  FUN_000269b8(1);
+  fsm_post_event(1);
   return;
 }
 
@@ -11828,9 +11854,9 @@ void FUN_000284d8(void)
 void FUN_000285b8(undefined param_1)
 
 {
-  FUN_000269b8(2);
+  fsm_post_event(2);
   *DAT_000285d0 = param_1;
-  FUN_000269b8(1);
+  fsm_post_event(1);
   return;
 }
 
@@ -12667,8 +12693,8 @@ LAB_00029280:
   }
   else {
     *(short *)(puVar3 + 2) = (short)DAT_00029290;
-    FUN_00023238(0x32);
-    FUN_000232c0(2);
+    motor_set_level_table(0x32);
+    motor_set_balance(2);
     *(undefined *)((int)puVar3 + 10) = 0;
     puVar3[3] = puVar3[3] & 0xfe000000 | DAT_00029294;
     puVar3[4] = puVar3[4] & 0xfe000000 | DAT_00029298;
@@ -12678,8 +12704,8 @@ LAB_00029280:
     if (*(char *)(puVar3 + 2) == '2') goto LAB_00029280;
   }
   *(short *)(puVar3 + 2) = (short)DAT_00029290;
-  FUN_00023238(0x32);
-  FUN_000232c0(2);
+  motor_set_level_table(0x32);
+  motor_set_balance(2);
 LAB_0002923e:
   *(short *)(puVar3 + 8) = (short)DAT_000292a8;
   puVar2 = DAT_000292ac;
@@ -13545,9 +13571,9 @@ undefined FUN_00029d98(void)
 }
 
 
-/* ---- FUN_00029da4 @ 00029da4 ---- */
+/* ---- settings_set_brightness @ 00029da4 ---- */
 
-void FUN_00029da4(undefined param_1)
+void settings_set_brightness(undefined param_1)
 
 {
   *(undefined *)(DAT_00029dac + 0x21) = param_1;
@@ -13555,18 +13581,18 @@ void FUN_00029da4(undefined param_1)
 }
 
 
-/* ---- FUN_00029db0 @ 00029db0 ---- */
+/* ---- settings_get_brightness @ 00029db0 ---- */
 
-undefined FUN_00029db0(void)
+undefined settings_get_brightness(void)
 
 {
   return *(undefined *)(DAT_00029db8 + 0x21);
 }
 
 
-/* ---- FUN_00029dbc @ 00029dbc ---- */
+/* ---- settings_set_led_current @ 00029dbc ---- */
 
-void FUN_00029dbc(uint param_1)
+void settings_set_led_current(uint param_1)
 
 {
   if ((int)(param_1 << 0x1c) < 0) {
@@ -13609,9 +13635,9 @@ undefined FUN_00029df4(void)
 }
 
 
-/* ---- FUN_00029e00 @ 00029e00 ---- */
+/* ---- settings_set_vibration @ 00029e00 ---- */
 
-undefined4 FUN_00029e00(uint param_1,uint param_2,int param_3)
+undefined4 settings_set_vibration(uint param_1,uint param_2,int param_3)
 
 {
   int iVar1;
@@ -13621,8 +13647,8 @@ undefined4 FUN_00029e00(uint param_1,uint param_2,int param_3)
   if ((*(byte *)(DAT_00029e30 + 8) != param_1) || (*(byte *)(DAT_00029e30 + 9) != param_2)) {
     *(char *)(DAT_00029e30 + 8) = (char)param_1;
     *(char *)(iVar1 + 9) = (char)param_2;
-    FUN_00023238();
-    FUN_000232c0((int)(char)param_2);
+    motor_set_level_table();
+    motor_set_balance((int)(char)param_2);
     if (param_3 != 0) {
       uVar2 = FUN_00028fa4();
       return uVar2;

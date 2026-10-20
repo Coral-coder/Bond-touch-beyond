@@ -1,0 +1,20 @@
+# Bond Touch More (v3/BTM) nRF51822, base 0x1B000
+0x249c4 ffb1_app_cmd_dispatch  [prefix, cmd, args..]; table 0x3312c indexed cmd-0x11 (0x11..0x57)
+0x22b84 cmd4b_led_color  args[0]==0 -> sched {2, led, R, G, B}; else {3} (clear)
+0x21dbc display_sched_event_handler  8 cases (table 0x32fd8)
+0x21cf0 display_all_leds_color  9 LEDs, saved brightness
+0x23238 motor_set_level_table  gain[i] = level*base[i]/100 (9 positions)
+0x232c0 motor_set_balance
+0x232d4 motor_preview_buzz
+0x22db8 motor_pan_position  AW86224 x2 (I2C 0x58) reg 0x1E: A = gain[p]-bal, B = gain[8-p]+bal
+0x22690 display_set_brightness  cmd 0x4D
+0x29e00 settings_set_vibration
+0x29db0 settings_get_brightness
+0x29da4 settings_set_brightness
+0x29dbc settings_set_led_current
+0x269b8 fsm_post_event
+0x254cc ffb2_on_write  touch pattern header + 20-byte sample packets
+0x2237c display_show  (mode, positions, idx)
+0x2087c aw20036_set_rgb
+0x20a08 aw20036_led_on
+0x20824 aw20036_set_brightness

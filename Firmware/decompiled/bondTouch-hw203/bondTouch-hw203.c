@@ -692,13 +692,15 @@ undefined4 FUN_0001b71c(byte *param_1,byte *param_2,int param_3)
 }
 
 
-/* ---- FUN_0001b774 @ 0001b774 ---- */
+/* ---- v1_cmd_dispatch @ 0001b774 ---- */
+/* opcode u16 - 0x21, Keil switch8 (count 0x11, target = 0x1b78e + 2*b) */
 
 /* WARNING: Function: __ARM_common_switch8 replaced with injection: switch8_r3 */
 /* WARNING (jumptable): Removing unreachable block (ram,0x0001b78a) */
 /* WARNING: Removing unreachable block (ram,0x0001b78a) */
+/* opcode u16 - 0x21, Keil switch8 (count 0x11, target = 0x1b78e + 2*b) */
 
-void FUN_0001b774(uint param_1,uint param_2)
+void v1_cmd_dispatch(uint param_1,uint param_2)
 
 {
   byte *pbVar1;
@@ -1839,12 +1841,12 @@ void FUN_0001c580(void)
       uVar6 = uVar6 + 1 & 0xffff;
     } while (uVar6 < 0x13);
     FUN_0001c924(pbVar2 + uVar6 * 6,0,6);
-    FUN_0001faec(0);
+    lis3dh_config(0);
     pbVar2 = DAT_0001c630;
     bVar3 = *DAT_0001c630 & 0xf;
     if (bVar3 == 1) {
       *(undefined2 *)(DAT_0001c630 + -6) = 1;
-      FUN_0001d034(0);
+      v1_led_set_color(0);
       uVar1 = *(undefined2 *)(pbVar2 + 2);
       bVar7 = false;
     }
@@ -1862,7 +1864,7 @@ void FUN_0001c580(void)
                  (*(int *)(pbVar2 + (uint)pbVar2[1] * 4 + 8) +
                  (uint)*(ushort *)(pbVar2 + 4) * 4 + -4);
       }
-      FUN_0001d034(uVar5);
+      v1_led_set_color(uVar5);
       bVar7 = *pbVar2 >> 4 != 0;
       uVar1 = *(undefined2 *)(pbVar2 + 2);
     }
@@ -1948,11 +1950,11 @@ FUN_0001c6b4(uint param_1,uint param_2,undefined4 param_3,int param_4,int param_
   pbVar2[1] = (byte)param_2;
   *(short *)(pbVar2 + 2) = (short)param_3;
   *(short *)(pbVar2 + 4) = (short)param_4;
-  FUN_0001faec(0);
+  lis3dh_config(0);
   pbVar2 = DAT_0001c7b0;
   if (param_1 == 1) {
     *(undefined2 *)(DAT_0001c7b0 + -6) = 1;
-    FUN_0001d034(0);
+    v1_led_set_color(0);
 LAB_0001c73e:
     uVar3 = 0;
   }
@@ -1960,7 +1962,7 @@ LAB_0001c73e:
     iVar5 = param_2 * 4;
     if ((param_1 == 2) || (param_1 == 4)) {
       *(undefined2 *)(DAT_0001c7b0 + -6) = 1;
-      FUN_0001d034(**(uint **)(pbVar2 + iVar5 + 8) & 0xffffff);
+      v1_led_set_color(**(uint **)(pbVar2 + iVar5 + 8) & 0xffffff);
       if (*DAT_0001c7b0 >> 4 == 0) goto LAB_0001c73e;
       uVar3 = **(uint **)(pbVar2 + iVar5 + 8);
     }
@@ -1970,7 +1972,7 @@ LAB_0001c73e:
       }
       *(undefined2 *)(DAT_0001c7b0 + -6) = 1;
       iVar4 = param_4 * 4 + -4;
-      FUN_0001d034(*(uint *)(*(int *)(pbVar2 + iVar5 + 8) + iVar4) & 0xffffff);
+      v1_led_set_color(*(uint *)(*(int *)(pbVar2 + iVar5 + 8) + iVar4) & 0xffffff);
       if (*DAT_0001c7b0 >> 4 == 0) goto LAB_0001c73e;
       uVar3 = *(uint *)(*(int *)(pbVar2 + iVar5 + 8) + iVar4);
     }
@@ -1998,7 +2000,7 @@ void FUN_0001c7d0(void)
 
 {
   FUN_0001d074(0);
-  FUN_0001d034(0);
+  v1_led_set_color(0);
   *(undefined2 *)(DAT_0001c80c + 2) = 0;
   FUN_0001c924(DAT_0001c810,0,0x78);
   FUN_0001c924(DAT_0001c80c + 8,0,6);
@@ -2031,7 +2033,7 @@ void FUN_0001c814(void)
   if (((bVar4 == 1) || (bVar4 == 2)) || (bVar4 == 3)) {
     if (uVar7 != uVar3) {
       if (bVar4 == 1) {
-        FUN_0001d034(0);
+        v1_led_set_color(0);
         FUN_0001d074(*(undefined2 *)(pbVar2 + 2),0);
         *(short *)(DAT_0001c8ec + -6) = *(short *)(DAT_0001c8ec + -6) + 1;
         return;
@@ -2058,12 +2060,12 @@ void FUN_0001c814(void)
         iVar8 = *(int *)(pbVar2 + iVar8 + 8);
         iVar5 = uVar7 * 2 - uVar6;
 LAB_0001c8d2:
-        FUN_0001d034(*(undefined4 *)(iVar8 + iVar5 * 4));
+        v1_led_set_color(*(undefined4 *)(iVar8 + iVar5 * 4));
         FUN_0001d074(*(undefined2 *)(pbVar2 + 2),*pbVar2 >> 4 != 0);
         return;
       }
 LAB_0001c892:
-      FUN_0001d034(*(undefined4 *)(*(int *)(DAT_0001c8ec + iVar8 + 8) + uVar3 * 4));
+      v1_led_set_color(*(undefined4 *)(*(int *)(DAT_0001c8ec + iVar8 + 8) + uVar3 * 4));
       FUN_0001d074(*(undefined2 *)(pbVar2 + 2),*pbVar2 >> 4 != 0);
       *(short *)(pbVar2 + -6) = *(short *)(pbVar2 + -6) + 1;
       return;
@@ -2312,9 +2314,12 @@ LAB_0001d028:
 }
 
 
-/* ---- FUN_0001d034 @ 0001d034 ---- */
+/* ---- v1_led_set_color @ 0001d034 ---- */
+/* 0x21: rgb scaled by byte7 (%), 3 PWM channels */
 
-void FUN_0001d034(uint param_1)
+/* 0x21: rgb scaled by byte7 (%), 3 PWM channels */
+
+void v1_led_set_color(uint param_1)
 
 {
   uint *puVar1;
@@ -2398,7 +2403,7 @@ void FUN_0001d100(void)
     }
   }
   else {
-    FUN_0001d034(DAT_0001d150);
+    v1_led_set_color(DAT_0001d150);
     FUN_0001cfa4(0x82,0xf3);
     FUN_0001d54c(DAT_0001d154,0xe6);
   }
@@ -2569,7 +2574,7 @@ LAB_0001d31a:
       }
       else {
         if (cVar1 == '\x03') {
-          FUN_0001d034(0);
+          v1_led_set_color(0);
           FUN_0001c69c(4,0xe,500,6,1);
           goto LAB_0001d358;
         }
@@ -2588,7 +2593,7 @@ LAB_0001d31a:
       }
     }
   }
-  FUN_0001d034(uVar3);
+  v1_led_set_color(uVar3);
 LAB_0001d358:
   cVar1 = *pcVar5;
   *pcVar5 = cVar1 + '\x01';
@@ -4464,7 +4469,7 @@ void FUN_0001e9a8(uint param_1,undefined4 param_2,undefined4 param_3)
   uVar2 = param_2;
   uVar3 = param_3;
   uVar4 = param_1;
-  FUN_0001d034(0xff0000);
+  v1_led_set_color(0xff0000);
   if (param_1 < 0x14) {
     pcVar1 = *(char **)(DAT_0001e9dc + param_1 * 4);
   }
@@ -6075,9 +6080,9 @@ void FUN_0001fa6c(undefined4 param_1,undefined4 param_2,undefined4 param_3,undef
 }
 
 
-/* ---- FUN_0001faec @ 0001faec ---- */
+/* ---- lis3dh_config @ 0001faec ---- */
 
-void FUN_0001faec(int param_1)
+void lis3dh_config(int param_1)
 
 {
   undefined4 uVar1;
@@ -6590,7 +6595,7 @@ void FUN_0001fff8(void)
   *(undefined4 *)(DAT_00020118 + 4) = 0x80000000;
   FUN_0001dc10();
   FUN_0001c650();
-  FUN_0001d034(0);
+  v1_led_set_color(0);
   FUN_0001d100();
   FUN_0001f454();
   FUN_0001fa6c();
