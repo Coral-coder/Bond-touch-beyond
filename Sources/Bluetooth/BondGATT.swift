@@ -132,7 +132,7 @@ enum BondGATT {
     /// has its own sequenced frames (`V1Commands`).
     static func ledMotor(_ gen: BondGeneration, rgb: Int,
                          strength: UInt8 = 88, vibMs: UInt16 = 400,
-                         brightness: UInt8 = 255, holdMs: UInt16 = 600) -> [(CBUUID, Data)] {
+                         brightness: UInt8 = 100, holdMs: UInt16 = 600) -> [(CBUUID, Data)] {
         switch gen {
         case .v3:
             // FFB1 commands are written at their exact length, as the original app does.
@@ -148,9 +148,52 @@ enum BondGATT {
         }
     }
 
+    // MARK: - Light only (no motor) and the LED test queue — docs/FIRMWARE_LED_VIBE.md
+
+    /// The band lit in `rgb` for `ms` without vibrating. v2/v4/Mini: a 0x26 frame with motor
+    /// strength 0 (the firmware drives motor and LEDs separately). Bond Touch More: FFB1 0x4B,
+    /// which never touches the motors (clear it with `v3LightOff`). Classic: not supported.
+    static func lightOnly(_ gen: BondGeneration, rgb: Int, brightness: UInt8 = 80, ms: UInt16 = 1000) -> [(CBUUID, Data)] {
+        switch gen {
+        case .v3: return [v3Color(rgb)]
+        case .v1: return []
+        default:
+            return [ledAndMotor(strength: 0, vibMs: 0, ledMode: 1, rgb: rgb, brightness: max(1, brightness),
+                                transitionMs: 0, holdMs: ms, sleepMs: 0, executeMs: ms)]
+        }
+    }
+
+    /// Bond Touch More: `[01 4B 01]` clears the colour set by 0x4B.
+    static let v3LightOff: (CBUUID, Data) = (ffb1, Data([1, 0x4B, 0x01]))
+
+    /// One step of the firmware-timed LED test queue (0x33), silent (motor strength 0): three
+    /// LEDs, each its own colour (0 = dark), for `ms` (at least 5 — shorter reboots a Bond
+    /// Touch). A step with every LED dark switches the LEDs off for its time.
+    static func lightStep(_ colors: [Int], brightness: UInt8, ms: Int) -> (CBUUID, Data) {
+        let c = (colors + [0, 0, 0]).prefix(3).map { $0 & 0xFFFFFF }
+        let level: UInt8 = c.allSatisfy { $0 == 0 } ? 0 : max(1, safeBrightness(brightness))
+        var f: [UInt8] = [0x33, 0x00, 0x00, level, level, level]
+        for rgb in c { f += be3(rgb) }
+        f += u16le(max(5, UInt16(clamping: ms)))
+        return app(f)
+    }
+
+    /// Plays the queued 0x33 steps (up to 256).
+    static let lightQueueStart: (CBUUID, Data) = app([0x32, 0x00, 0x22])
+
+    /// Touch 4 / Mini: several app frames in one write, `[0x88, len, frame…, len, frame…]`
+    /// (each frame's first 17 bytes). **Hypothesis** — whether FFA6 takes writes this long.
+    static func batched(_ frames: [(CBUUID, Data)], perWrite: Int = 9) -> [(CBUUID, Data)] {
+        stride(from: 0, to: frames.count, by: perWrite).map { i in
+            var bytes: [UInt8] = [0x88]
+            for f in frames[i..<min(frames.count, i + perWrite)] { bytes += [17] + Array(f.1.prefix(17)) }
+            return (charAppCmd, Data(bytes))
+        }
+    }
+
     /// One heartbeat pulse: a short firm buzz + glow.
     static func heartbeatPulse(_ gen: BondGeneration, rgb: Int) -> [(CBUUID, Data)] {
-        ledMotor(gen, rgb: rgb, strength: 100, vibMs: 130, brightness: 255, holdMs: 130)
+        ledMotor(gen, rgb: rgb, strength: 100, vibMs: 130, brightness: 100, holdMs: 130)
     }
 
     /// The closest strength the bracelets accept.
@@ -173,23 +216,32 @@ enum BondGATT {
                             holdMs: UInt16 = 0, sleepMs: UInt16 = 0, executeMs: UInt16 = 0) -> (CBUUID, Data) {
         let (r, g, b) = rgbBytes(rgb)
         var f: [UInt8] = [0x26, 0x00, queue, strength]
-        f += u16le(vibMs)
-        f += [ledMode, r, g, b, brightness]
-        f += u16le(transitionMs)
-        f += u16le(holdMs)
-        f += u16le(sleepMs)
-        f += u16le(executeMs)
+        f += u16le(safeMs(vibMs))
+        f += [ledMode, r, g, b, safeBrightness(brightness)]
+        f += u16le(safeMs(transitionMs))
+        f += u16le(safeMs(holdMs))
+        f += u16le(safeMs(sleepMs))
+        f += u16le(safeMs(executeMs))
         return app(f)
     }
 
     /// 0x33 "send message" step (BleAppCommandHelper.a): `[0x33, 0, strength, brightness ×3,
     /// RGB1, RGB2, RGB3, ms LE16]`.
     private static func messageStep(_ rgb: Int, strength: UInt8, brightness: UInt8, ms: Int) -> (CBUUID, Data) {
-        var f: [UInt8] = [0x33, 0x00, strength, brightness, brightness, brightness]
+        let level = safeBrightness(brightness)
+        var f: [UInt8] = [0x33, 0x00, strength, level, level, level]
         f += be3(rgb) + be3(rgb) + be3(rgb)
-        f += u16le(UInt16(clamping: ms))
+        f += u16le(safeMs(UInt16(clamping: ms)))
         return app(f)
     }
+
+    /// The firmware lights the LEDs only at brightness 1…100; 0 is off, and anything above
+    /// 100 is also off (docs/FIRMWARE_LED_VIBE.md) — so cap at 100.
+    static func safeBrightness(_ b: UInt8) -> UInt8 { min(b, 100) }
+
+    /// A duration the Bond Touch's timer can start: 1–4 ms fails to start it and the bracelet
+    /// reboots (docs/FIRMWARE_LED_VIBE.md), so those become 5 ms. 0 (none) stays 0.
+    static func safeMs(_ ms: UInt16) -> UInt16 { (1...4).contains(ms) ? 5 : ms }
 
     /// 0x32 (BleAppCommandHelper.b): ends a queued message — 0x22 after 0x33 steps, 0x11
     /// after queued 0x26 frames. The original pauses its write queue 5 s once it's written.

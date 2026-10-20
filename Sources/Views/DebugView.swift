@@ -21,6 +21,13 @@ struct DebugView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
+                    section("Bracelet lights") {
+                        NavigationLink { LightLabView() } label: {
+                            Label("Light lab — light without vibrating, POV text", systemImage: "lightbulb.led.fill")
+                                .font(.footnote)
+                        }
+                    }
+
                     section("Experimental") {
                         Picker("Polyamory features", selection: $polyMode) {
                             ForEach(Poly.Mode.allCases, id: \.rawValue) { Text($0.title).tag($0.rawValue) }

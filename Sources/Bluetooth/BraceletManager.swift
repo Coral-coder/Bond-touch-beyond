@@ -624,6 +624,14 @@ final class BraceletManager: NSObject, ObservableObject {
         gen == .v1 ? v1.touch(onOff: [130], rgb: rgb) : BondGATT.heartbeatPulse(gen, rgb: rgb)
     }
 
+    // MARK: - Light lab (debug)
+
+    /// Which bracelet generation is connected (nil: none yet).
+    var generation: BondGeneration? { gen }
+
+    /// Writes raw frames in order (the debug Light lab).
+    func send(_ writes: [(CBUUID, Data)]) { enqueue(writes) }
+
     // MARK: - Write queue
 
     private func enqueue(_ writes: [(CBUUID, Data)]) {
