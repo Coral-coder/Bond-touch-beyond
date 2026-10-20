@@ -125,9 +125,11 @@ final class BatteryService: ObservableObject {
 
     private func quantities(_ type: HKQuantityType, since: Date, unit: HKUnit) async -> [(Date, Double)] {
         await withCheckedContinuation { cont in
+            // Newest first, so a busy month (an Apple Watch can log well over the limit) cuts off
+            // the oldest readings, never the last day's; then back into time order.
             let q = HKSampleQuery(sampleType: type, predicate: HKQuery.predicateForSamples(withStart: since, end: nil),
-                                  limit: 500, sortDescriptors: [NSSortDescriptor(key: HKSampleSortIdentifierEndDate, ascending: true)]) { _, s, _ in
-                cont.resume(returning: (s as? [HKQuantitySample])?.map { ($0.endDate, $0.quantity.doubleValue(for: unit)) } ?? [])
+                                  limit: 3000, sortDescriptors: [NSSortDescriptor(key: HKSampleSortIdentifierEndDate, ascending: false)]) { _, s, _ in
+                cont.resume(returning: (s as? [HKQuantitySample])?.reversed().map { ($0.endDate, $0.quantity.doubleValue(for: unit)) } ?? [])
             }
             store.execute(q)
         }

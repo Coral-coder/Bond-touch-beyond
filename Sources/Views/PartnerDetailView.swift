@@ -38,14 +38,10 @@ struct PartnerDetailView: View {
 
     var body: some View {
         ZStack {
-            ThemeBackdrop().ignoresSafeArea()
+            // Their photo covers the whole screen, so the theme's backdrop is only drawn without one.
+            if photo == nil { ThemeBackdrop().ignoresSafeArea() }
             if let photo {
-                GeometryReader { geo in
-                    Image(uiImage: photo).resizable().scaledToFill()
-                        .frame(width: geo.size.width, height: geo.size.height)
-                        .blur(radius: store.backgroundSoftness, opaque: true)
-                        .scaleEffect(1.08).clipped()
-                }
+                SoftPhoto(photo: photo, softness: store.backgroundSoftness)
                 .ignoresSafeArea()
                 LinearGradient(colors: [Theme.bgBottom.opacity(0.15), Theme.bgBottom.opacity(0.6)],
                                startPoint: .top, endPoint: .bottom).ignoresSafeArea()

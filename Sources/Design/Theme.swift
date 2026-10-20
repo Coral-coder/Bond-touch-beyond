@@ -709,38 +709,35 @@ struct BubbleSky: View {
 }
 
 /// The Bubble theme's rising bubbles on their own, so they can float over a background photo.
-/// Drawn on the GPU (`drawingGroup`) at a modest frame rate, and still with Reduce Motion or
-/// Low Power Mode, so the animation never competes with taps.
+/// Drawn once and slid upward by Core Animation, so they cost the app nothing per frame;
+/// still with Reduce Motion or Low Power Mode.
 struct BubbleParticles: View {
     var animated = true
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         Group {
-            if animated && !reduceMotion && !ProcessInfo.processInfo.isLowPowerModeEnabled {
-                TimelineView(.animation(minimumInterval: 1 / 24)) { ctx in canvas(ctx.date.timeIntervalSinceReferenceDate) }
+            if animated && !reduceMotion && DriftingLayer.canAnimate {
+                DriftingLayer(speed: -18, draw: Self.draw)
             } else {
-                canvas(40)
+                Canvas { g, size in Self.draw(&g, size) }
             }
         }
         .allowsHitTesting(false)
     }
 
-    private func canvas(_ t: Double) -> some View {
-        Canvas { g, size in
-            var rng = SeededRandom(seed: 21)
-            for _ in 0..<16 {
-                let r = CGFloat(rng.next() * 30 + 8)
-                let speed = rng.next() * 18 + 10
-                let x0 = CGFloat(rng.next()) * size.width
-                let phase = rng.next() * 1000
-                let span = Double(size.height + r * 4)
-                let y = size.height + r * 2 - CGFloat((t * speed + phase).truncatingRemainder(dividingBy: span))
-                let x = x0 + CGFloat(sin((t + phase) * 0.6)) * 14
-                AquaGloss.bubble(&g, center: CGPoint(x: x, y: y), radius: r)
+    /// Bubbles scattered over one screen's height; each is also drawn a screen above and
+    /// below, so the picture wraps seamlessly as it loops.
+    static func draw(_ g: inout GraphicsContext, _ size: CGSize) {
+        var rng = SeededRandom(seed: 21)
+        for _ in 0..<16 {
+            let r = CGFloat(rng.next() * 30 + 8)
+            let x = CGFloat(rng.next()) * size.width
+            let y = CGFloat(rng.next()) * size.height
+            for dy in [-size.height, 0, size.height] {
+                AquaGloss.bubble(&g, center: CGPoint(x: x, y: y + dy), radius: r)
             }
         }
-        .drawingGroup()
     }
 }
 
@@ -761,46 +758,45 @@ struct RainOnGlass: View {
 }
 
 /// The Raindrop theme's drops on their own, so they can sit on a background photo too. The
-/// resting drops are drawn once; only the few running down the glass move (on the GPU).
+/// resting drops never move; the few running down the glass are drawn once and slid by Core
+/// Animation, so they cost the app nothing per frame.
 struct RainParticles: View {
     var animated = true
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         ZStack {
-            resting
-            if animated && !reduceMotion && !ProcessInfo.processInfo.isLowPowerModeEnabled {
-                TimelineView(.animation(minimumInterval: 1 / 30)) { ctx in running(ctx.date.timeIntervalSinceReferenceDate) }
+            Canvas { g, size in Self.resting(&g, size) }
+            if animated && !reduceMotion && DriftingLayer.canAnimate {
+                DriftingLayer(speed: 45, draw: Self.running)
             } else {
-                running(12)
+                Canvas { g, size in Self.running(&g, size) }
             }
         }
         .allowsHitTesting(false)
     }
 
-    /// Drops resting on the glass: they never move, so they're drawn once.
-    private var resting: some View {
-        Canvas { g, size in
-            var rng = SeededRandom(seed: 9)
-            for _ in 0..<46 {
-                let r = CGFloat(rng.next() * 7 + 2.5)
-                let p = CGPoint(x: CGFloat(rng.next()) * size.width, y: CGFloat(rng.next()) * size.height)
-                AquaGloss.drop(&g, center: p, radius: r)
-            }
+    /// Drops resting on the glass.
+    static func resting(_ g: inout GraphicsContext, _ size: CGSize) {
+        var rng = SeededRandom(seed: 9)
+        for _ in 0..<46 {
+            let r = CGFloat(rng.next() * 7 + 2.5)
+            let p = CGPoint(x: CGFloat(rng.next()) * size.width, y: CGFloat(rng.next()) * size.height)
+            AquaGloss.drop(&g, center: p, radius: r)
         }
-        .drawingGroup()
     }
 
-    /// A few running down, leaving a faint trail.
-    private func running(_ t: Double) -> some View {
-        Canvas { g, size in
-            var rng = SeededRandom(seed: 77)
-            for i in 0..<4 {
-                let x = CGFloat(rng.next()) * size.width
-                let speed = rng.next() * 40 + 30
-                let y = CGFloat((t * speed + Double(i) * 400).truncatingRemainder(dividingBy: Double(size.height + 60))) - 30
+    /// A few drops running down, each leaving a faint trail; drawn a screen above and below
+    /// too, so the picture wraps seamlessly as it loops.
+    static func running(_ g: inout GraphicsContext, _ size: CGSize) {
+        var rng = SeededRandom(seed: 77)
+        for _ in 0..<4 {
+            let x = CGFloat(rng.next()) * size.width
+            let y0 = CGFloat(rng.next()) * size.height
+            for dy in [-size.height, 0, size.height] {
+                let y = y0 + dy
                 var trail = Path()
-                trail.move(to: CGPoint(x: x, y: max(0, y - 90)))
+                trail.move(to: CGPoint(x: x, y: y - 90))
                 trail.addLine(to: CGPoint(x: x, y: y))
                 g.stroke(trail, with: .linearGradient(Gradient(colors: [.clear, .white.opacity(0.35)]),
                                                       startPoint: CGPoint(x: x, y: y - 90), endPoint: CGPoint(x: x, y: y)),
@@ -808,7 +804,88 @@ struct RainParticles: View {
                 AquaGloss.drop(&g, center: CGPoint(x: x, y: y), radius: 6)
             }
         }
-        .drawingGroup()
+    }
+}
+
+/// A picture drawn once at the view's size and slid vertically forever by Core Animation —
+/// two copies stacked, so it loops without a seam. The animation runs in the system's render
+/// server, so it never takes time from the app (taps, scrolling, sheets).
+struct DriftingLayer: UIViewRepresentable {
+    /// Points per second: negative rises, positive falls.
+    var speed: CGFloat
+    var draw: (inout GraphicsContext, CGSize) -> Void
+
+    /// Widgets and other extensions can't host UIKit views; they get the still picture.
+    static let canAnimate = !Bundle.main.bundlePath.hasSuffix(".appex")
+        && !ProcessInfo.processInfo.isLowPowerModeEnabled
+
+    func makeUIView(context: Context) -> DriftView {
+        let v = DriftView()
+        v.isUserInteractionEnabled = false
+        v.backgroundColor = .clear
+        return v
+    }
+
+    func updateUIView(_ v: DriftView, context: Context) {
+        v.speed = speed
+        v.draw = draw
+        v.setNeedsLayout()
+    }
+
+    final class DriftView: UIView {
+        var speed: CGFloat = -18
+        var draw: ((inout GraphicsContext, CGSize) -> Void)?
+        private let strip = CALayer()
+        private var builtFor = CGSize.zero
+
+        override init(frame: CGRect) {
+            super.init(frame: frame)
+            clipsToBounds = true
+            layer.addSublayer(strip)
+            NotificationCenter.default.addObserver(self, selector: #selector(restart),
+                                                   name: UIApplication.willEnterForegroundNotification, object: nil)
+        }
+        required init?(coder: NSCoder) { nil }
+
+        override func layoutSubviews() {
+            super.layoutSubviews()
+            let size = bounds.size
+            guard size != builtFor, size.width > 0, size.height > 0, let draw else { return }
+            let renderer = ImageRenderer(content: Canvas { g, s in draw(&g, s) }.frame(width: size.width, height: size.height))
+            renderer.scale = window?.screen.scale ?? UIScreen.main.scale
+            guard let image = renderer.cgImage else { return }
+            builtFor = size
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            strip.sublayers?.forEach { $0.removeFromSuperlayer() }
+            strip.frame = CGRect(x: 0, y: 0, width: size.width, height: size.height * 2)
+            for i in 0..<2 {
+                let copy = CALayer()
+                copy.contents = image
+                copy.frame = CGRect(x: 0, y: CGFloat(i) * size.height, width: size.width, height: size.height)
+                strip.addSublayer(copy)
+            }
+            CATransaction.commit()
+            restart()
+        }
+
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            if window != nil { restart() }
+        }
+
+        @objc private func restart() {
+            let h = builtFor.height
+            guard h > 0, speed != 0 else { return }
+            strip.removeAnimation(forKey: "drift")
+            let a = CABasicAnimation(keyPath: "transform.translation.y")
+            a.fromValue = speed < 0 ? 0 : -h
+            a.toValue = speed < 0 ? -h : 0
+            a.duration = Double(h / abs(speed))
+            a.repeatCount = .infinity
+            a.isRemovedOnCompletion = false
+            strip.add(a, forKey: "drift")
+        }
     }
 }
 

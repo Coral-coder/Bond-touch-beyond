@@ -43,15 +43,10 @@ struct AppBackground: View {
 
     var body: some View {
         ZStack {
-            ThemeBackdrop()
+            // A background photo covers the whole screen, so the backdrop is only drawn without one.
+            if model.backgroundPhoto == nil { ThemeBackdrop() }
             if let photo = model.backgroundPhoto {
-                GeometryReader { geo in
-                    Image(uiImage: photo).resizable().scaledToFill()
-                        .frame(width: geo.size.width, height: geo.size.height)
-                        .blur(radius: store.backgroundSoftness, opaque: true)
-                        .scaleEffect(1.08)
-                        .clipped()
-                }
+                SoftPhoto(photo: photo, softness: store.backgroundSoftness)
                 LinearGradient(colors: [Theme.bgBottom.opacity(0.25), Theme.bgBottom.opacity(0.6)],
                                startPoint: .top, endPoint: .bottom)
                 // Bubble and Raindrop keep their bubbles and drops over the photo.
