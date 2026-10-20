@@ -20,7 +20,9 @@ extension AppModel {
         guard demoArgument("-demoScrollBottom") != nil else { return }
         for delay in [3.0, 5.5] { DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
             func walk(_ v: UIView) {
-                if let s = v as? UIScrollView, s.contentSize.height > s.bounds.height {
+                if let s = v as? UIScrollView, s.contentSize.height > 0,
+                   s.contentSize.width <= s.bounds.width + 1,
+                   s.contentSize.height + s.adjustedContentInset.top + s.adjustedContentInset.bottom > s.bounds.height {
                     let bottom = s.contentSize.height + s.adjustedContentInset.bottom - s.bounds.height
                     s.setContentOffset(CGPoint(x: s.contentOffset.x, y: max(-s.adjustedContentInset.top, bottom)), animated: false)
                 }
