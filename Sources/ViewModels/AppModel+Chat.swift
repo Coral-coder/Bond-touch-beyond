@@ -138,7 +138,7 @@ extension AppModel {
     /// A message picked up from iCloud (its push may not have come through): a notification
     /// that never shows what was said. Same id as the push's, so it's never doubled.
     private func notifyChatLocally(bondID: String) {
-        guard UIApplication.shared.applicationState != .active else { return }
+        guard UIApplication.shared.applicationState != .active, NotificationKind.chat.isOn else { return }
         let content = UNMutableNotificationContent()
         content.title = partners.first { $0.id == bondID }?.displayName ?? "Your partner"
         content.body = "New message in Private Space"

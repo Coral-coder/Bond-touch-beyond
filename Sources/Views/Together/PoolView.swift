@@ -30,19 +30,19 @@ struct PoolView: View {
                 .padding(.horizontal, 16).padding(.vertical, 8).glass(Capsule())
 
             GeometryReader { geo in
-                let scale = min(geo.size.width / (Pool.width + 0.16), geo.size.height / (Pool.height + 0.16))
+                let scale = min(geo.size.width / (Pool.height + 0.16), geo.size.height / (Pool.width + 0.16))
                 Canvas { ctx, size in
                     drawTable(&ctx, size: size, scale: scale, balls: shown, aim: myTurn ? angle : nil, power: power)
                 }
                 .contentShape(Rectangle())
                 .gesture(DragGesture(minimumDistance: 0).onChanged { v in
                     guard myTurn, let cue = state.balls[0] else { return }
-                    let origin = tableOrigin(geo.size, scale)
-                    let tx = (v.location.x - origin.x) / scale, ty = (v.location.y - origin.y) / scale
-                    angle = Double(atan2(ty - cue.y, tx - cue.x))
+                    let t = toTable(v.location, geo.size, scale)
+                    angle = Double(atan2(t.y - cue.y, t.x - cue.x))
                 })
             }
-            .aspectRatio((Pool.width + 0.16) / (Pool.height + 0.16), contentMode: .fit)
+            .aspectRatio((Pool.height + 0.16) / (Pool.width + 0.16), contentMode: .fit)
+            .frame(maxHeight: .infinity)
 
             HStack(spacing: 12) {
                 Text("Power").font(Theme.font(14, .bold)).foregroundStyle(Theme.title)
@@ -74,8 +74,22 @@ struct PoolView: View {
 
     // MARK: Drawing
 
+    // The table is drawn upright (turned 90°) to fill the phone: the table's long side runs
+    // down the screen, the break end at the top and the cue ball's end at the bottom.
+
     private func tableOrigin(_ size: CGSize, _ scale: CGFloat) -> CGPoint {
-        CGPoint(x: (size.width - Pool.width * scale) / 2, y: (size.height - Pool.height * scale) / 2)
+        CGPoint(x: (size.width - Pool.height * scale) / 2, y: (size.height - Pool.width * scale) / 2)
+    }
+
+    /// Table coordinates → the screen.
+    private func toScreen(_ p: CGPoint, _ o: CGPoint, _ scale: CGFloat) -> CGPoint {
+        CGPoint(x: o.x + p.y * scale, y: o.y + (Pool.width - p.x) * scale)
+    }
+
+    /// A point on screen → table coordinates.
+    private func toTable(_ q: CGPoint, _ size: CGSize, _ scale: CGFloat) -> CGPoint {
+        let o = tableOrigin(size, scale)
+        return CGPoint(x: Pool.width - (q.y - o.y) / scale, y: (q.x - o.x) / scale)
     }
 
     private static let colors: [Int] = [0xFFFFFF, 0xF6C40E, 0x1E4FC2, 0xD7261E, 0x5B2A86, 0xF07A12, 0x1E7A3A, 0x7A1E2A, 0x111111,
@@ -83,14 +97,14 @@ struct PoolView: View {
 
     private func drawTable(_ ctx: inout GraphicsContext, size: CGSize, scale: CGFloat, balls: Pool.Rack, aim: Double?, power: Double) {
         let o = tableOrigin(size, scale)
-        func pt(_ p: CGPoint) -> CGPoint { CGPoint(x: o.x + p.x * scale, y: o.y + p.y * scale) }
-        let felt = CGRect(x: o.x, y: o.y, width: Pool.width * scale, height: Pool.height * scale)
+        func pt(_ p: CGPoint) -> CGPoint { toScreen(p, o, scale) }
+        let felt = CGRect(x: o.x, y: o.y, width: Pool.height * scale, height: Pool.width * scale)
         let railW = 0.07 * scale
         ctx.fill(Path(roundedRect: felt.insetBy(dx: -railW, dy: -railW), cornerRadius: railW * 0.8),
                  with: .linearGradient(Gradient(colors: [Color(rgbInt: 0x7A4A2A), Color(rgbInt: 0x4A2A16)]),
-                                       startPoint: CGPoint(x: 0, y: felt.minY), endPoint: CGPoint(x: 0, y: felt.maxY)))
+                                       startPoint: CGPoint(x: felt.minX, y: 0), endPoint: CGPoint(x: felt.maxX, y: 0)))
         ctx.fill(Path(felt), with: .radialGradient(Gradient(colors: [Color(rgbInt: 0x1F9A5A), Color(rgbInt: 0x116B3C)]),
-                                                   center: CGPoint(x: felt.midX, y: felt.midY), startRadius: 0, endRadius: felt.width * 0.6))
+                                                   center: CGPoint(x: felt.midX, y: felt.midY), startRadius: 0, endRadius: felt.height * 0.6))
         for p in Pool.pockets {
             let c = pt(p), r = Pool.pocketRadius * scale
             ctx.fill(Path(ellipseIn: CGRect(x: c.x - r, y: c.y - r, width: r * 2, height: r * 2)), with: .color(.black))

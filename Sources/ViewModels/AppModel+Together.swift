@@ -190,7 +190,7 @@ extension AppModel {
         var requests: [UNNotificationRequest] = []
         for (bondID, space) in together.spaces {
             let name = names[bondID] ?? "your partner"
-            for d in space.dates where !d.deleted {
+            for d in space.dates where !d.deleted && NotificationKind.dates.isOn {
                 let next = d.next()
                 let ordinal = d.ordinalText().map { " — \($0)" } ?? ""
                 func add(daysBefore: Int) {
@@ -211,7 +211,7 @@ extension AppModel {
         }
         // R.A.D.A.R. check-ins: the day before and on the day, at 9:00.
         for (bondID, space) in together.spaces {
-            guard Feature.radar.isOn, let next = space.radarNext else { continue }
+            guard Feature.radar.isOn, NotificationKind.radar.isOn, let next = space.radarNext else { continue }
             let name = names[bondID] ?? "your partner"
             for before in [1, 0] {
                 guard let day = Calendar.current.date(byAdding: .day, value: -before, to: next) else { continue }

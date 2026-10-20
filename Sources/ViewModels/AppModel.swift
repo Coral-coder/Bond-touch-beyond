@@ -325,6 +325,7 @@ final class AppModel: ObservableObject {
         let low = bracelet.batteryAlert?.lowPercent ?? 15
         guard pct <= low, !batteryAlerted else { return }
         batteryAlerted = true
+        guard NotificationKind.bracelet.isOn else { return }
         let content = UNMutableNotificationContent()
         content.title = "Bracelet battery low"
         content.body = "Your bracelet is at \(pct)%. Charge it soon so you don't miss any touches."
@@ -566,6 +567,8 @@ final class AppModel: ObservableObject {
         info.watchStandIn = watchStandIn
         if UserDefaults.standard.object(forKey: "shareWeather") as? Bool ?? true { info.weather = myWeather }
         if UserDefaults.standard.object(forKey: "shareMood") as? Bool ?? true { info.mood = myMoodShare() }
+        let muted = NotificationKind.mutedGroups
+        if !muted.isEmpty { info.muted = muted }
         return info
     }
 
@@ -818,9 +821,9 @@ final class AppModel: ObservableObject {
                 // Wake their phone right away (CloudKit's own push can lag in deep sleep).
                 let me = store.profile.name.isEmpty ? "Someone" : store.profile.name
                 if let bpm = touch.heartbeatBPM {
-                    await pushPartner(bondID: bond.id, title: "\(me)'s heartbeat", body: "💓 \(bpm) BPM", touch: touch)
+                    await pushPartner(bondID: bond.id, title: "\(me)'s heartbeat", body: "\(bpm) BPM", touch: touch, group: "h")
                 } else if touch.meaningEmoji == "📍", let label = touch.meaningLabel {
-                    await pushPartner(bondID: bond.id, title: "\(me) arrived", body: "📍 \(label)", touch: touch)
+                    await pushPartner(bondID: bond.id, title: "\(me) arrived", body: label, touch: touch, group: "a")
                 } else {
                     let body = touch.meaningLabel.map { "\(touch.meaningEmoji ?? "") \($0)".trimmingCharacters(in: .whitespaces) } ?? "❤️"
                     await pushPartner(bondID: bond.id, title: "\(me) touched you", body: body, touch: touch)
@@ -925,9 +928,17 @@ final class AppModel: ObservableObject {
     func pushPartner(bondID: String, title: String, body: String, touch: TouchMessage? = nil,
                      group: String = "t", sound: String = TouchNotification.sound) async {
         guard let token = partnerPushTokens[bondID], !token.isEmpty else { return }
+        let locator = BondCrypto.locator(forCode: bondID)
+        // They've switched this kind of notification off: a silent push, so their phone
+        // still picks it up right away, with no banner or sound.
+        if partners.first(where: { $0.id == bondID })?.presence?.muted?.contains(group) == true {
+            var extra: [String: Any] = ["bl": locator]
+            if let touch, let sealed = BondCrypto.seal(touch, code: bondID) { extra["bt"] = sealed.base64EncodedString() }
+            _ = await APNsClient.shared.sendBackground(toDeviceToken: token, extra: extra)
+            return
+        }
         // Their bracelet is connected → it plays the touch; don't buzz their phone too.
         let silent = partnerBraceletConnected[bondID] == true
-        let locator = BondCrypto.locator(forCode: bondID)
         var extra: [String: Any] = ["bl": locator]
         if let touch, let sealed = BondCrypto.seal(touch, code: bondID) { extra["bt"] = sealed.base64EncodedString() }
         await APNsClient.shared.send(toDeviceToken: token, title: title, body: body, silent: silent,

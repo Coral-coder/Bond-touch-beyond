@@ -30,6 +30,7 @@ struct SettingsView: View {
                     LayoutPickerCard()
                     FeaturesCard()
                     row("Personal details", "") { PersonalDetailsView() }
+                    row("Notifications", "") { NotificationSettingsView() }
                     row("My Bond Touch Bracelet", "") { BraceletSettingsView() }
                     row("Bracelet firmware (recovery)", "") { FirmwareSettingsView() }
                     row("Bond Heart", "") { BondHeartView() }

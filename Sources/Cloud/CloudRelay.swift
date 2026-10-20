@@ -542,6 +542,9 @@ struct PresenceInfo: Codable, Equatable {
     var weather: WeatherInfo? = nil
     /// How they're feeling and their personal battery (if they share it).
     var mood: MoodShare? = nil
+    /// Notification groups switched off on this phone (Settings → Notifications): the
+    /// partner's phone sends those silently.
+    var muted: [String]? = nil
     /// When this snapshot was written — the phone's last check-in.
     var sentAt = Date()
 }
