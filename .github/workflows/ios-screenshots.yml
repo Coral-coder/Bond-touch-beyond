@@ -66,17 +66,19 @@ jobs:
           # for it, so a launch that fails or stops is explained in the run log.
           xcrun simctl terminate "$UDID" "$ID" 2>/dev/null || true
           echo "----- launch -----"
-          xcrun simctl launch --console-pty "$UDID" "$ID" -demo -appStyle aero > shots/launch-console.txt 2>&1 &
-          LPID=$!
-          sleep 12
-          kill $LPID 2>/dev/null || true
-          cat shots/launch-console.txt | tail -80
-          echo "----- running? -----"
-          xcrun simctl spawn "$UDID" launchctl list | grep -i lightwave || echo "not running"
-          echo "----- system log -----"
-          xcrun simctl spawn "$UDID" log show --last 1m --style compact \
-            --predicate 'process == "BondTouchBeyond" OR (eventMessage CONTAINS[c] "lightwave") OR (eventMessage CONTAINS[c] "BondTouchBeyond")' \
-            2>/dev/null | grep -iE "error|fault|crash|terminat|exception|fatal|denied|signal|abort|launch" | tail -80 || true
+          xcrun simctl launch --stdout="$PWD/shots/app-stdout.txt" --stderr="$PWD/shots/app-stderr.txt" "$UDID" "$ID" -demo -appStyle aero
+          for i in 1 2 3 4 5 6 7 8 9 10 11 12; do
+            sleep 1
+            if xcrun simctl spawn "$UDID" launchctl list | grep -q "UIKitApplication:com.lightwave.beyond"; then echo "t=${i}s running"; else echo "t=${i}s NOT running"; fi
+          done
+          echo "----- app stdout/stderr -----"
+          tail -60 shots/app-stdout.txt 2>/dev/null; tail -80 shots/app-stderr.txt 2>/dev/null
+          echo "----- why it ended -----"
+          xcrun simctl spawn "$UDID" log show --last 2m --style compact \
+            --predicate '(eventMessage CONTAINS "com.lightwave.beyond" AND NOT (eventMessage CONTAINS "widget")) OR processImagePath CONTAINS "BondTouchBeyond.app"' \
+            2>/dev/null | grep -iE "exit|kill|termin|jetsam|watchdog|reason|crash|fault|error|exception|signal|abort" | grep -vi "biome" | tail -60 || true
+          sleep 20
+          ls -la ~/Library/Logs/DiagnosticReports/ 2>/dev/null | tail -20
           for f in ~/Library/Logs/DiagnosticReports/*; do
             [ -e "$f" ] || continue
             if grep -qi "BondTouch\|lightwave" "$f" 2>/dev/null; then cp "$f" shots/ ; echo "----- crash report $f -----"; head -c 8000 "$f"; fi
