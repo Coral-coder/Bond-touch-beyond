@@ -201,6 +201,9 @@ final class AppModel: ObservableObject {
     }
     let store = LocalStore()
     let heart = HeartRateService()
+    /// The partner whose chat is on screen right now (nil when no chat is open), so that
+    /// chat's notifications don't show while you're reading it.
+    var viewingChatBondID: String?
     /// Bond Heart: the pendant and the heartbeat library (AppModel+BondHeart).
     let pendant = HeartPendant()
     let heartLibrary = HeartLibrary()
@@ -939,7 +942,8 @@ final class AppModel: ObservableObject {
         }
         // Their bracelet is connected → it plays the touch; don't buzz their phone too.
         let silent = partnerBraceletConnected[bondID] == true
-        var extra: [String: Any] = ["bl": locator]
+        // "g": the kind, so an open app can tell a chat message from everything else.
+        var extra: [String: Any] = ["bl": locator, "g": group]
         if let touch, let sealed = BondCrypto.seal(touch, code: bondID) { extra["bt"] = sealed.base64EncodedString() }
         await APNsClient.shared.send(toDeviceToken: token, title: title, body: body, silent: silent,
                                      sound: sound, collapseID: "\(group)-\(locator.prefix(16))", extra: extra)

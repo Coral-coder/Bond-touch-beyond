@@ -134,6 +134,10 @@ struct ChatView: View {
         .alert("Can't invite", isPresented: Binding(get: { shareError != nil }, set: { if !$0 { shareError = nil } })) {
             Button("OK", role: .cancel) { shareError = nil }
         } message: { Text(shareError ?? "") }
+        // While this chat is on screen, its message notifications stay quiet (see AppDelegate).
+        .onAppear { model.viewingChatBondID = model.selectedPartnerID }
+        .onChange(of: model.selectedPartnerID) { model.viewingChatBondID = $0 }
+        .onDisappear { model.viewingChatBondID = nil }
     }
 
     /// Shown for an original-app partner without an iCloud chat bond yet.

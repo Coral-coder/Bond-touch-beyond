@@ -94,14 +94,25 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
 }
 
 extension AppDelegate: UNUserNotificationCenterDelegate {
-    /// With the app open, a partner's push is handled at once and shows silently — the
-    /// bracelet (or the phone's own vibration, if it isn't connected) already plays the touch.
+    /// With the app open, a partner's push is handled at once and nothing is shown — you're
+    /// already here, playing a game or whatever else, and the touch plays on the bracelet (or
+    /// the phone's own vibration). The one exception: a chat message, unless that chat is the
+    /// one on screen.
     nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter,
                                             willPresent notification: UNNotification) async
         -> UNNotificationPresentationOptions {
         let info = notification.request.content.userInfo
-        await MainActor.run { Task { await self.model.handleRemoteNotification(info) } }
-        return [.banner, .list]
+        let id = notification.request.identifier
+        return await MainActor.run {
+            Task { await self.model.handleRemoteNotification(info) }
+            // Chat: kind "m" in the push, or the "m-<bond locator prefix>" id (push and local).
+            guard info["g"] as? String == "m" || id.hasPrefix("m-") else { return [] }
+            if let open = self.model.viewingChatBondID {
+                let locator = BondCrypto.locator(forCode: open)
+                if info["bl"] as? String == locator || id == "m-\(locator.prefix(16))" { return [] }
+            }
+            return [.banner, .list, .sound]
+        }
     }
 
     /// A button on a touch notification (phone or watch): touch back, or send my heartbeat,
