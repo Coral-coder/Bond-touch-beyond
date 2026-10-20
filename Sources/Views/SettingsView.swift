@@ -36,6 +36,7 @@ struct SettingsView: View {
                     row("Bracelet firmware (recovery)", "") { FirmwareSettingsView() }
                     row("Bond Heart", "") { BondHeartView() }
                     row("Tutorials", "") { HelpView() }
+                    FeatureTourRow()
                     row("Do not disturb", "") { DoNotDisturbView() }
                     row("My people", "") { PeopleView().navigationTitle("My people") }
                     row("Private Space", "") { PrivateSpaceView() }

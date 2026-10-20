@@ -20,6 +20,8 @@ struct RootView: View {
     @AppStorage("paperInk") private var paperInk = PaperInk.aqua.rawValue
     @AppStorage(ThemeTints.key) private var themeTints = ""
     @State private var keyboardUp = false
+    /// The feature tour has been seen (or skipped); until then it opens once the profile is set up.
+    @AppStorage(FeatureTour.seenKey) private var walkthroughSeen = false
 
     var body: some View {
         ZStack {
@@ -52,6 +54,10 @@ struct RootView: View {
                     recovery.pendingImport = nil
                 }
             }
+        }
+        .fullScreenCover(isPresented: Binding(get: { store.profile.isComplete && !walkthroughSeen && !AppModel.isDemo },
+                                              set: { if !$0 { walkthroughSeen = true } })) {
+            FeatureTour { walkthroughSeen = true }
         }
         .preferredColorScheme(Theme.colorScheme)
         .tint(Theme.accent)
