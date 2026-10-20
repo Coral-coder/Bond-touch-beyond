@@ -65,6 +65,8 @@ targets:
         buildPhase: resources
         excludes:
           - README.md
+          # The decompiled source is for study only, never part of the app.
+          - "decompiled/**"
     info:
       path: Sources/App/Info.plist
       properties:
