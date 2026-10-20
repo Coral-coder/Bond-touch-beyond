@@ -95,8 +95,8 @@ struct PartnerDetailView: View {
                         .padding(16).glass(cornerRadius: 22)
 
                         PartnerMoodRow(partner: partner).padding(16).glass(cornerRadius: 22)
-                        if let mood = partner.presence?.mood, mood.series?.isEmpty == false {
-                            StressChart(mood: mood)
+                        if Feature.stress.isOn {
+                            StressChart(mood: partner.presence?.mood, name: partner.displayName)
                         }
 
                         WeatherCard(partner: partner)

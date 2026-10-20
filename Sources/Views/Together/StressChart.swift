@@ -9,6 +9,12 @@ struct StressChart: View {
 
     let points: [Point]
     var marks: [Mark] = []
+    var emptyText = "No heart-rate variability readings in the last day. Apple Watch records them through the day and while you sleep."
+
+    /// Green when calm, amber around your usual, red when stressed.
+    static func color(_ stress: Double) -> Color {
+        stress < 35 ? Theme.lime : stress < 65 ? Theme.amber : Theme.danger
+    }
 
     /// Hours shown (1…24) and where the window ends (hours before now).
     @State private var span: Double = 24
@@ -30,33 +36,33 @@ struct StressChart: View {
                     .font(Theme.font(11)).foregroundStyle(Theme.subtitle)
             }
             if points.isEmpty {
-                Text("No heart-rate variability readings in the last day. Apple Watch records them through the day and while you sleep.")
+                Text(emptyText)
                     .font(Theme.font(12)).foregroundStyle(Theme.subtitle).frame(maxWidth: .infinity, minHeight: 120)
             } else {
-                Text("Stress").font(Theme.font(12, .bold)).foregroundStyle(Theme.subtitle)
+                Text("Stress — every reading").font(Theme.font(12, .bold)).foregroundStyle(Theme.subtitle)
                 Chart {
                     ForEach(points) { p in
-                        AreaMark(x: .value("Time", p.at), y: .value("Stress", p.stress))
-                            .foregroundStyle(LinearGradient(colors: [Theme.danger.opacity(0.45), Theme.amber.opacity(0.15)],
-                                                            startPoint: .top, endPoint: .bottom))
-                            .interpolationMethod(.catmullRom)
-                        LineMark(x: .value("Time", p.at), y: .value("Stress", p.stress))
-                            .foregroundStyle(Theme.danger).interpolationMethod(.catmullRom)
+                        BarMark(x: .value("Time", p.at), y: .value("Stress", p.stress), width: .fixed(7))
+                            .foregroundStyle(Self.color(p.stress))
+                            .cornerRadius(3)
                     }
                     ForEach(marks.filter { domain.contains($0.at) }) { m in
-                        PointMark(x: .value("Time", m.at), y: .value("Stress", 92))
+                        PointMark(x: .value("Time", m.at), y: .value("Stress", 96))
                             .opacity(0)
-                            .annotation(position: .overlay) { Text(m.emoji).font(.system(size: 16)) }
+                            .annotation(position: .overlay) { Text(m.emoji).font(.system(size: 15)) }
                     }
                 }
                 .chartXScale(domain: domain)
                 .chartYScale(domain: 0...100)
                 .chartYAxis { AxisMarks(values: [0, 50, 100]) { v in
                     AxisGridLine().foregroundStyle(Theme.ink.opacity(0.1))
-                    AxisValueLabel { Text(v.as(Int.self).map { $0 == 0 ? "😌" : $0 == 50 ? "😐" : "😣" } ?? "") }
+                    AxisValueLabel { Text(v.as(Int.self).map { $0 == 0 ? "Calm" : $0 == 50 ? "Usual" : "High" } ?? "") }
                 } }
-                .chartXAxis(.hidden)
-                .frame(height: 130)
+                .chartXAxis { AxisMarks(values: .automatic(desiredCount: 5)) { _ in
+                    AxisGridLine().foregroundStyle(Theme.ink.opacity(0.1))
+                    AxisValueLabel(format: .dateTime.hour())
+                } }
+                .frame(height: 150)
 
                 Text("HRV (ms) — higher is more rested").font(Theme.font(12, .bold)).foregroundStyle(Theme.subtitle)
                 Chart(points) { p in
@@ -103,6 +109,13 @@ extension StressChart {
     }
 
     /// From what a partner shares.
+    init(mood: MoodShare?, name: String) {
+        self.init(mood: mood ?? MoodShare(emoji: "", label: "", battery: 50, level: "ok", at: .distantPast))
+        emptyText = mood == nil
+            ? "\(name) isn't sharing stress and mood. They can switch it on in Stress & mood."
+            : "No readings from \(name)'s Apple Watch in the last day."
+    }
+
     init(mood: MoodShare) {
         points = (mood.series ?? []).compactMap { $0.count == 3 ? Point(at: Date(timeIntervalSince1970: $0[0]), hrv: $0[1], stress: $0[2]) : nil }
         marks = Date().timeIntervalSince(mood.at) < 24 * 3600 ? [Mark(at: mood.at, emoji: mood.emoji)] : []

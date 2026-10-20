@@ -147,6 +147,26 @@ struct PartnerFace: View {
                     .overlay(Circle().stroke(Theme.bgBottom, lineWidth: 1.5))
             }
         }
+        .overlay(alignment: .topTrailing) { MoodBadge(partner: partner, size: size).offset(x: size * 0.08, y: -size * 0.06) }
+    }
+}
+
+/// How a partner's feeling, as an emoji on the corner of their photo (from the mood and
+/// stress they share; hidden when it's over a day old or Stress & mood is off).
+struct MoodBadge: View {
+    let partner: Partner
+    var size: CGFloat = 44
+
+    var body: some View {
+        if Feature.stress.isOn, let mood = partner.presence?.mood, Date().timeIntervalSince(mood.at) < 24 * 3600 {
+            let emoji = mood.emoji.isEmpty ? Stress.face(mood.stress).emoji : mood.emoji
+            Text(emoji)
+                .font(.system(size: max(11, size * 0.3)))
+                .padding(max(1.5, size * 0.03))
+                .background(Circle().fill(Theme.bgBottom))
+                .overlay(Circle().stroke(Theme.ink.opacity(0.25), lineWidth: 1))
+                .accessibilityLabel("\(partner.displayName) is feeling \(mood.label.isEmpty ? Stress.face(mood.stress).label : mood.label)")
+        }
     }
 }
 

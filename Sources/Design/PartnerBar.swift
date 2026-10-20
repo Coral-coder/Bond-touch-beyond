@@ -58,6 +58,7 @@ struct PartnerBar: View {
                 }
             }
             .frame(width: 42, height: 42)
+            .overlay(alignment: .topTrailing) { MoodBadge(partner: partner, size: 36).offset(x: 4, y: -4) }
             .scaleEffect(selected ? 1.05 : 1)
         }
         .buttonStyle(.plain)

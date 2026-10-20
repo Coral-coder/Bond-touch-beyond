@@ -297,6 +297,7 @@ struct HomeView: View {
                     .overlay(Circle().stroke(.white, lineWidth: 2))
             }
         }
+        .overlay(alignment: .topTrailing) { MoodBadge(partner: p, size: size).offset(x: size * 0.08, y: -size * 0.06) }
     }
 
     // MARK: Touch
