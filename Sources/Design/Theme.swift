@@ -347,6 +347,8 @@ struct ThemeFonts: ViewModifier {
 /// The backdrop for the current theme.
 struct ThemeBackdrop: View {
     var style: AppStyle = Theme.style
+    /// False: a still frame (theme picker tiles, where moving bubbles get in the way of taps).
+    var animated = true
 
     var body: some View {
         let glow = ThemeTints.tint(for: style).map { Color(rgbInt: $0) }
@@ -358,8 +360,8 @@ struct ThemeBackdrop: View {
         case .aurora: AuroraSky(glow: glow)
         case .paper: RuledPaper()
         case .chalk: Chalkboard()
-        case .bubble: BubbleSky(glow: glow)
-        case .raindrop: RainOnGlass(glow: glow)
+        case .bubble: BubbleSky(glow: glow, animated: animated)
+        case .raindrop: RainOnGlass(glow: glow, animated: animated)
         case .citrus: CitrusSun(glow: glow)
         }
     }
@@ -687,6 +689,7 @@ struct GlassBackground<S: Shape>: View {
 /// Bubble: a bright sky with soft clouds of light and glossy bubbles drifting up.
 struct BubbleSky: View {
     var glow: Color?
+    var animated = true
     var body: some View {
         ZStack {
             LinearGradient(colors: [Color(rgbInt: 0xE6FAFF), Color(rgbInt: 0x9EDFFA), Color(rgbInt: 0x5CC2F0)],
@@ -694,21 +697,38 @@ struct BubbleSky: View {
             RadialGradient(colors: [.white.opacity(0.9), .clear], center: UnitPoint(x: 0.2, y: 0.05), startRadius: 10, endRadius: 360)
             RadialGradient(colors: [(glow ?? Color(rgbInt: 0x7CE08A)).opacity(0.45), .clear], center: UnitPoint(x: 0.9, y: 1.05),
                            startRadius: 10, endRadius: 420)
-            TimelineView(.animation(minimumInterval: 1 / 30)) { ctx in
-                Canvas { g, size in
-                    let t = ctx.date.timeIntervalSinceReferenceDate
-                    var rng = SeededRandom(seed: 21)
-                    for _ in 0..<22 {
-                        let r = CGFloat(rng.next() * 30 + 8)
-                        let speed = rng.next() * 18 + 10
-                        let x0 = CGFloat(rng.next()) * size.width
-                        let phase = rng.next() * 1000
-                        let span = Double(size.height + r * 4)
-                        let y = size.height + r * 2 - CGFloat((t * speed + phase).truncatingRemainder(dividingBy: span))
-                        let x = x0 + CGFloat(sin((t + phase) * 0.6)) * 14
-                        AquaGloss.bubble(&g, center: CGPoint(x: x, y: y), radius: r)
-                    }
-                }
+            BubbleParticles(animated: animated)
+        }
+    }
+}
+
+/// The Bubble theme's rising bubbles on their own, so they can float over a background photo.
+struct BubbleParticles: View {
+    var animated = true
+
+    var body: some View {
+        Group {
+            if animated {
+                TimelineView(.animation(minimumInterval: 1 / 30)) { ctx in canvas(ctx.date.timeIntervalSinceReferenceDate) }
+            } else {
+                canvas(40)
+            }
+        }
+        .allowsHitTesting(false)
+    }
+
+    private func canvas(_ t: Double) -> some View {
+        Canvas { g, size in
+            var rng = SeededRandom(seed: 21)
+            for _ in 0..<22 {
+                let r = CGFloat(rng.next() * 30 + 8)
+                let speed = rng.next() * 18 + 10
+                let x0 = CGFloat(rng.next()) * size.width
+                let phase = rng.next() * 1000
+                let span = Double(size.height + r * 4)
+                let y = size.height + r * 2 - CGFloat((t * speed + phase).truncatingRemainder(dividingBy: span))
+                let x = x0 + CGFloat(sin((t + phase) * 0.6)) * 14
+                AquaGloss.bubble(&g, center: CGPoint(x: x, y: y), radius: r)
             }
         }
     }
@@ -717,6 +737,7 @@ struct BubbleSky: View {
 /// Raindrop: fresh green-blue light, with raindrops resting on the glass and a few running down.
 struct RainOnGlass: View {
     var glow: Color?
+    var animated = true
     var body: some View {
         ZStack {
             LinearGradient(colors: [Color(rgbInt: 0xEFFBF5), Color(rgbInt: 0xA9E6D6), Color(rgbInt: 0x5FC3B8)],
@@ -724,31 +745,48 @@ struct RainOnGlass: View {
             RadialGradient(colors: [.white.opacity(0.85), .clear], center: UnitPoint(x: 0.8, y: 0.0), startRadius: 10, endRadius: 380)
             RadialGradient(colors: [(glow ?? Color(rgbInt: 0x8BD96B)).opacity(0.4), .clear], center: UnitPoint(x: 0.1, y: 1.0),
                            startRadius: 10, endRadius: 420)
-            TimelineView(.animation(minimumInterval: 1 / 20)) { ctx in
-                Canvas { g, size in
-                    let t = ctx.date.timeIntervalSinceReferenceDate
-                    var rng = SeededRandom(seed: 9)
-                    // Drops resting on the glass.
-                    for _ in 0..<46 {
-                        let r = CGFloat(rng.next() * 7 + 2.5)
-                        let p = CGPoint(x: CGFloat(rng.next()) * size.width, y: CGFloat(rng.next()) * size.height)
-                        AquaGloss.drop(&g, center: p, radius: r)
-                    }
-                    // A few running down, leaving a faint trail.
-                    for i in 0..<4 {
-                        let x = CGFloat(rng.next()) * size.width
-                        let speed = rng.next() * 40 + 30
-                        let y = CGFloat((t * speed + Double(i) * 400).truncatingRemainder(dividingBy: Double(size.height + 60))) - 30
-                        var trail = Path()
-                        trail.move(to: CGPoint(x: x, y: max(0, y - 90)))
-                        trail.addLine(to: CGPoint(x: x, y: y))
-                        g.stroke(trail, with: .linearGradient(Gradient(colors: [.clear, .white.opacity(0.35)]),
-                                                              startPoint: CGPoint(x: x, y: y - 90), endPoint: CGPoint(x: x, y: y)),
-                                 lineWidth: 2.5)
-                        AquaGloss.drop(&g, center: CGPoint(x: x, y: y), radius: 6)
-                    }
-                }
+            RainParticles(animated: animated)
+        }
+    }
+}
+
+/// The Raindrop theme's drops on their own, so they can sit on a background photo too.
+struct RainParticles: View {
+    var animated = true
+
+    var body: some View {
+        Group {
+            if animated {
+                TimelineView(.animation(minimumInterval: 1 / 20)) { ctx in canvas(ctx.date.timeIntervalSinceReferenceDate) }
+            } else {
+                canvas(12)
             }
+        }
+        .allowsHitTesting(false)
+    }
+
+    private func canvas(_ t: Double) -> some View {
+        Canvas { g, size in
+                var rng = SeededRandom(seed: 9)
+                // Drops resting on the glass.
+                for _ in 0..<46 {
+                    let r = CGFloat(rng.next() * 7 + 2.5)
+                    let p = CGPoint(x: CGFloat(rng.next()) * size.width, y: CGFloat(rng.next()) * size.height)
+                    AquaGloss.drop(&g, center: p, radius: r)
+                }
+                // A few running down, leaving a faint trail.
+                for i in 0..<4 {
+                    let x = CGFloat(rng.next()) * size.width
+                    let speed = rng.next() * 40 + 30
+                    let y = CGFloat((t * speed + Double(i) * 400).truncatingRemainder(dividingBy: Double(size.height + 60))) - 30
+                    var trail = Path()
+                    trail.move(to: CGPoint(x: x, y: max(0, y - 90)))
+                    trail.addLine(to: CGPoint(x: x, y: y))
+                    g.stroke(trail, with: .linearGradient(Gradient(colors: [.clear, .white.opacity(0.35)]),
+                                                          startPoint: CGPoint(x: x, y: y - 90), endPoint: CGPoint(x: x, y: y)),
+                             lineWidth: 2.5)
+                    AquaGloss.drop(&g, center: CGPoint(x: x, y: y), radius: 6)
+                }
         }
     }
 }

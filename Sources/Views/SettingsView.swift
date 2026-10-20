@@ -7,6 +7,7 @@ struct SettingsView: View {
     @EnvironmentObject var store: LocalStore
 
     var body: some View {
+        ScrollViewReader { proxy in
         ScrollView {
             VStack(spacing: 16) {
                 Text("Settings").font(.title3.bold()).foregroundStyle(Theme.title).padding(.top, 10)
@@ -26,7 +27,7 @@ struct SettingsView: View {
                 .font(.subheadline).foregroundStyle(Theme.subtitle)
 
                 VStack(spacing: 12) {
-                    ThemePickerCard()
+                    ThemePickerCard().id("themeCard")
                     LayoutPickerCard()
                     FeaturesCard()
                     row("Personal details", "") { PersonalDetailsView() }
@@ -79,6 +80,13 @@ struct SettingsView: View {
                 Color.clear.frame(height: 12)
             }
             .padding(.horizontal, 20)
+        }
+        .onAppear {
+            guard UserDefaults.standard.bool(forKey: ThemePickerCard.returnKey) else { return }
+            UserDefaults.standard.set(false, forKey: ThemePickerCard.returnKey)
+            // Once the rebuilt screen has laid out.
+            DispatchQueue.main.async { proxy.scrollTo("themeCard", anchor: .top) }
+        }
         }
     }
 
@@ -685,6 +693,11 @@ private struct LayoutPickerCard: View {
 
 /// Settings → Theme: every look as a small live preview, and for Paper & Ink, the ink colour.
 private struct ThemePickerCard: View {
+    /// A theme change rebuilds every screen (so all colours update), which would put Settings
+    /// back at the top; this marks that it should come back to the theme card instead.
+    static let returnKey = "settingsReturnToTheme"
+    static func keepPlace() { UserDefaults.standard.set(true, forKey: returnKey) }
+
     @AppStorage("appStyle") private var appStyle = AppStyle.aero.rawValue
     @AppStorage("paperInk") private var paperInk = PaperInk.aqua.rawValue
     /// Folded away until tapped, so it doesn't take over Settings. Stays open across the
@@ -717,6 +730,7 @@ private struct ThemePickerCard: View {
                     ForEach(AppStyle.allCases) { style in
                         Button {
                             UISelectionFeedbackGenerator().selectionChanged()
+                            ThemePickerCard.keepPlace()
                             appStyle = style.rawValue
                         } label: { tile(style) }
                         .buttonStyle(.plain)
@@ -734,6 +748,7 @@ private struct ThemePickerCard: View {
                                 let picked = (ThemeTints.tint(for: style, in: themeTints) ?? style.tints[0].rgb) == tint.rgb
                                 Button {
                                     UISelectionFeedbackGenerator().selectionChanged()
+                                    ThemePickerCard.keepPlace()
                                     var d = ThemeTints.parse(themeTints)
                                     d[style.rawValue] = tint.rgb == style.tints[0].rgb ? nil : tint.rgb
                                     themeTints = ThemeTints.encode(d)
@@ -764,6 +779,7 @@ private struct ThemePickerCard: View {
                             ForEach(PaperInk.allCases) { ink in
                                 Button {
                                     UISelectionFeedbackGenerator().selectionChanged()
+                                    ThemePickerCard.keepPlace()
                                     paperInk = ink.rawValue
                                 } label: {
                                     VStack(spacing: 4) {
@@ -804,7 +820,7 @@ private struct ThemePickerCard: View {
         let shape = RoundedRectangle(cornerRadius: 16, style: .continuous)
         return VStack(alignment: .leading, spacing: 6) {
             ZStack {
-                ThemeBackdrop(style: style)
+                ThemeBackdrop(style: style, animated: false)
                 VStack(alignment: .leading, spacing: 6) {
                     HStack(spacing: 6) {
                         Circle().fill(p.accent).frame(width: 10, height: 10)

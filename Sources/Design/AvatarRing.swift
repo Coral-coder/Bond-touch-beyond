@@ -54,6 +54,12 @@ struct AppBackground: View {
                 }
                 LinearGradient(colors: [Theme.bgBottom.opacity(0.25), Theme.bgBottom.opacity(0.6)],
                                startPoint: .top, endPoint: .bottom)
+                // Bubble and Raindrop keep their bubbles and drops over the photo.
+                switch Theme.style {
+                case .bubble: BubbleParticles()
+                case .raindrop: RainParticles()
+                default: EmptyView()
+                }
             }
         }
         .ignoresSafeArea()
