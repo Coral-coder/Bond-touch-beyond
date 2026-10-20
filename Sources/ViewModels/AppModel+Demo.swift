@@ -14,7 +14,26 @@ extension AppModel {
         return args[i + 1]
     }
 
+    /// `-demoScrollBottom`: a few seconds in, scroll every vertical scroll view to its end, so
+    /// screenshots show what the last row looks like above the tab bar.
+    static func scrollEverythingToBottomForDemo() {
+        guard demoArgument("-demoScrollBottom") != nil else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+            func walk(_ v: UIView) {
+                if let s = v as? UIScrollView, s.contentSize.height > s.bounds.height {
+                    let bottom = s.contentSize.height + s.adjustedContentInset.bottom - s.bounds.height
+                    s.setContentOffset(CGPoint(x: s.contentOffset.x, y: max(-s.adjustedContentInset.top, bottom)), animated: false)
+                }
+                v.subviews.forEach(walk)
+            }
+            for scene in UIApplication.shared.connectedScenes {
+                (scene as? UIWindowScene)?.windows.forEach(walk)
+            }
+        }
+    }
+
     func loadDemo() {
+        Self.scrollEverythingToBottomForDemo()
         var profile = store.profile
         profile.name = "Sam"
         profile.colorRGB = 0x57C3BB

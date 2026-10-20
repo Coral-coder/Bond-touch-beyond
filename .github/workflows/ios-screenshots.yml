@@ -106,6 +106,13 @@ jobs:
           done
           shot "tab-settings-open" -appStyle aero -demoTab settings -themePickerOpen 1 -layoutPickerOpen 1
           shot "tab-us-raindrop" -appStyle raindrop -demoTab us
+          # The same screens scrolled to the end: the last row must sit above the tab bar.
+          for tab in us touches settings; do
+            shot "bottom-tab-$tab" -appStyle aero -demoTab "$tab" -demoScrollBottom 1
+          done
+          for s in games partner dates todo likes radar love roulette repair memories metamours agreements jar battery people notes; do
+            shot "bottom-$s" -appStyle aero -demoScreen "$s" -demoScrollBottom 1
+          done
           for s in chat games pool chess checkers backgammon battleship whiteboard todo notes likes dates radar battery jar love roulette question agreements repair memories polycal metamours story wavelength compose draw partner weather homeCards people private; do
             shot "screen-$s" -appStyle aero -demoScreen "$s"
           done
