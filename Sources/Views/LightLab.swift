@@ -240,9 +240,9 @@ struct LightLabView: View {
         note = "Sent: light only, \(Int(brightness))% for 1 s."
     }
 
-    /// Bond Touch More: the picture as touch samples — per column, one sample per run of lit
-    /// LEDs (a single LED, or the run's two ends), a blank sample for an empty column, and a
-    /// blank between columns so they don't smear.
+    /// Bond Touch More: the picture as touch samples — per column, a sample per piece of up to
+    /// 3 neighbouring lit LEDs, a blank sample for an empty column, and a blank between
+    /// repeats. Each lit LED also gets a dim halo on its neighbours (the firmware's own).
     private var barSamples: [Int] {
         var out: [Int] = []
         for _ in 0..<repeats {
@@ -254,7 +254,17 @@ struct LightLabView: View {
                     if let last = runs.last, last.1 == p - 1 { runs[runs.count - 1].1 = p } else { runs.append((p, p)) }
                 }
                 if runs.isEmpty { out.append(TouchPattern.none) }
-                for r in runs { out.append(TouchPattern.sample(r.0 == r.1 ? [r.0] : [r.0, r.1])) }
+                // A sample lights one LED, or two ends with only the middle one between them
+                // (wider spans leave the middle dark — docs/FIRMWARE_LED_VIBE.md §12), so a
+                // run is played in pieces of at most 3.
+                for r in runs {
+                    var lo = r.0
+                    while lo <= r.1 {
+                        let hi = min(r.1, lo + 2)
+                        out.append(TouchPattern.sample(lo == hi ? [lo] : [lo, hi]))
+                        lo = hi + 1
+                    }
+                }
             }
             out += Array(repeating: TouchPattern.none, count: 4)
         }

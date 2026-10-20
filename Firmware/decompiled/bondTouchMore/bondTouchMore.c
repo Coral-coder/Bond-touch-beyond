@@ -5702,9 +5702,9 @@ void FUN_0001fff8(char param_1)
 }
 
 
-/* ---- FUN_00020108 @ 00020108 ---- */
+/* ---- aw20036_write_enables @ 00020108 ---- */
 
-void FUN_00020108(void)
+void aw20036_write_enables(void)
 
 {
   undefined4 uVar1;
@@ -5753,9 +5753,12 @@ void FUN_00020108(void)
 }
 
 
-/* ---- FUN_0002024c @ 0002024c ---- */
+/* ---- aw20036_commit_all @ 0002024c ---- */
+/* 63 I2C writes: page2 (scaling) x27, page1 (PWM=RGB>>2) x27, enables x7 */
 
-void FUN_0002024c(void)
+/* 63 I2C writes: page2 (scaling) x27, page1 (PWM=RGB>>2) x27, enables x7 */
+
+void aw20036_commit_all(void)
 
 {
   undefined4 uVar1;
@@ -5828,14 +5831,17 @@ LAB_000202e0:
     FUN_0001b210(iVar4,0x51,DAT_000203dc);
   } while (puVar2 + 0x84 != pbVar6);
 LAB_00020360:
-  FUN_00020108();
+  aw20036_write_enables();
   return;
 }
 
 
-/* ---- FUN_000203e8 @ 000203e8 ---- */
+/* ---- aw20036_commit_led @ 000203e8 ---- */
+/* one LED: scaling x3, PWM x3, enable */
 
-void FUN_000203e8(uint param_1)
+/* one LED: scaling x3, PWM x3, enable */
+
+void aw20036_commit_led(uint param_1)
 
 {
   undefined4 uVar1;
@@ -6025,9 +6031,12 @@ void aw20036_set_brightness(int param_1,undefined param_2,uint param_3,uint para
 }
 
 
-/* ---- FUN_0002084c @ 0002084c ---- */
+/* ---- aw20036_all_off @ 0002084c ---- */
+/* clears all 9 enable flags and writes enables (0x20108) */
 
-void FUN_0002084c(void)
+/* clears all 9 enable flags and writes enables (0x20108) */
+
+void aw20036_all_off(void)
 
 {
   undefined *puVar1;
@@ -6042,7 +6051,7 @@ void FUN_0002084c(void)
   puVar1[0xf] = 0;
   puVar1[0x1e] = 0;
   puVar1[0x78] = 0;
-  FUN_00020108();
+  aw20036_write_enables();
   return;
 }
 
@@ -6561,7 +6570,7 @@ void FUN_00021324(void)
         iVar3 = *piVar1;
       }
       if (*(char *)(iVar3 + 4) != '\0') {
-        FUN_0002084c();
+        aw20036_all_off();
       }
       uVar2 = DAT_00021378;
       *(undefined *)(piVar1 + 1) = 0;
@@ -6607,9 +6616,12 @@ void FUN_00021380(void)
 }
 
 
-/* ---- FUN_000213e8 @ 000213e8 ---- */
+/* ---- display_animation @ 000213e8 ---- */
+/* index 0..11 via table */
 
-void FUN_000213e8(uint param_1)
+/* index 0..11 via table */
+
+void display_animation(uint param_1)
 
 {
   char *pcVar1;
@@ -6621,7 +6633,7 @@ void FUN_000213e8(uint param_1)
   
   pcVar1 = DAT_000215d0;
   if ((*DAT_000215d0 == '\0') || (FUN_00021380(), *pcVar1 == '\0')) {
-    FUN_0002084c();
+    aw20036_all_off();
   }
   local_18 = local_18 & 0xffffff00;
   if (0xb < param_1) {
@@ -6634,7 +6646,7 @@ void FUN_000213e8(uint param_1)
       uVar3 = uVar3 + 1;
       aw20036_led_on(uVar2,1);
     } while (uVar3 != 9);
-    FUN_00020108();
+    aw20036_write_enables();
     FUN_00020da4(0,1);
     return;
   }
@@ -6645,9 +6657,9 @@ void FUN_000213e8(uint param_1)
 }
 
 
-/* ---- FUN_000215dc @ 000215dc ---- */
+/* ---- anim_sweep_a @ 000215dc ---- */
 
-void FUN_000215dc(undefined4 param_1,int param_2)
+void anim_sweep_a(undefined4 param_1,int param_2)
 
 {
   byte bVar1;
@@ -6660,7 +6672,7 @@ void FUN_000215dc(undefined4 param_1,int param_2)
   uint uVar8;
   uint uVar9;
   
-  FUN_0002084c();
+  aw20036_all_off();
   uVar9 = 0;
   do {
     uVar5 = uVar9;
@@ -6733,14 +6745,14 @@ joined_r0x0002171a:
       }
       if ((int)(uVar5 - 8) < (int)uVar9) goto LAB_00021626;
     }
-    FUN_0002024c();
+    aw20036_commit_all();
     for (iVar3 = param_2; iVar3 != 0; iVar3 = iVar3 + -1) {
     }
     uVar7 = uVar7 + 1;
     uVar9 = uVar9 + 1;
     uVar5 = uVar6;
     if (uVar6 == 2) {
-      FUN_0002084c();
+      aw20036_all_off();
       for (; param_2 != 0; param_2 = param_2 + -1) {
       }
       return;
@@ -6749,9 +6761,9 @@ joined_r0x0002171a:
 }
 
 
-/* ---- FUN_000217e4 @ 000217e4 ---- */
+/* ---- anim_sweep_b @ 000217e4 ---- */
 
-void FUN_000217e4(undefined4 param_1,int param_2)
+void anim_sweep_b(undefined4 param_1,int param_2)
 
 {
   byte bVar1;
@@ -6764,7 +6776,7 @@ void FUN_000217e4(undefined4 param_1,int param_2)
   uint uVar8;
   bool bVar9;
   
-  FUN_0002084c();
+  aw20036_all_off();
   uVar5 = 0;
   do {
     uVar7 = uVar5;
@@ -6850,7 +6862,7 @@ LAB_00021856:
       aw20036_led_on(9 - uVar3 & 0xff,0);
       aw20036_led_on(uVar3 - 1 & 0xff,0);
     }
-    FUN_0002024c();
+    aw20036_commit_all();
     for (iVar2 = param_2; iVar2 != 0; iVar2 = iVar2 + -1) {
     }
     uVar8 = uVar8 - 1;
@@ -6858,7 +6870,7 @@ LAB_00021856:
     bVar9 = uVar5 == 9;
     uVar5 = uVar7;
     if (bVar9) {
-      FUN_0002084c();
+      aw20036_all_off();
       for (; param_2 != 0; param_2 = param_2 + -1) {
       }
       return;
@@ -6976,7 +6988,7 @@ void FUN_00021b70(undefined4 param_1)
   uint uVar2;
   
   if (*DAT_00021bac == '\0') {
-    FUN_0002084c();
+    aw20036_all_off();
   }
   uVar2 = 0;
   do {
@@ -6990,62 +7002,65 @@ void FUN_00021b70(undefined4 param_1)
     uVar2 = uVar2 + 1;
     aw20036_led_on(uVar1,1);
   } while (uVar2 != 9);
-  FUN_0002024c();
+  aw20036_commit_all();
   return;
 }
 
 
-/* ---- FUN_00021bb0 @ 00021bb0 ---- */
+/* ---- display_mask_color @ 00021bb0 ---- */
+/* (mask9, rgb): all off, then LEDs in mask lit; only caller = power-off animation (mask 0x38) */
 
-void FUN_00021bb0(int param_1,undefined4 param_2)
+/* (mask9, rgb): all off, then LEDs in mask lit; only caller = power-off animation (mask 0x38) */
+
+void display_mask_color(int param_1,undefined4 param_2)
 
 {
-  FUN_0002084c();
+  aw20036_all_off();
   FUN_00028d74();
   if (param_1 << 0x1f < 0) {
     aw20036_set_rgb(0,param_2);
     aw20036_led_on(0,1);
-    FUN_000203e8(0);
+    aw20036_commit_led(0);
   }
   if (param_1 << 0x1e < 0) {
     aw20036_set_rgb(1,param_2);
     aw20036_led_on(1,1);
-    FUN_000203e8(1);
+    aw20036_commit_led(1);
   }
   if (param_1 << 0x1d < 0) {
     aw20036_set_rgb(2,param_2);
     aw20036_led_on(2,1);
-    FUN_000203e8(2);
+    aw20036_commit_led(2);
   }
   if (param_1 << 0x1c < 0) {
     aw20036_set_rgb(3,param_2);
     aw20036_led_on(3,1);
-    FUN_000203e8(3);
+    aw20036_commit_led(3);
   }
   if (param_1 << 0x1b < 0) {
     aw20036_set_rgb(4,param_2);
     aw20036_led_on(4,1);
-    FUN_000203e8(4);
+    aw20036_commit_led(4);
   }
   if (param_1 << 0x1a < 0) {
     aw20036_set_rgb(5,param_2);
     aw20036_led_on(5,1);
-    FUN_000203e8(5);
+    aw20036_commit_led(5);
   }
   if (param_1 << 0x19 < 0) {
     aw20036_set_rgb(6,param_2);
     aw20036_led_on(6,1);
-    FUN_000203e8(6);
+    aw20036_commit_led(6);
   }
   if (param_1 << 0x18 < 0) {
     aw20036_set_rgb(7,param_2);
     aw20036_led_on(7,1);
-    FUN_000203e8(7);
+    aw20036_commit_led(7);
   }
   if (param_1 << 0x17 < 0) {
     aw20036_set_rgb(8,param_2);
     aw20036_led_on(8,1);
-    FUN_000203e8(8);
+    aw20036_commit_led(8);
   }
   return;
 }
@@ -7065,7 +7080,7 @@ void FUN_00021cd0(undefined4 param_1)
     uVar2 = uVar2 + 1;
     aw20036_set_brightness(uVar1,param_1,param_1,param_1);
   } while (uVar2 != 9);
-  FUN_0002024c();
+  aw20036_commit_all();
   return;
 }
 
@@ -7107,9 +7122,9 @@ void display_all_leds_color(undefined3 param_1,undefined4 param_2)
     uVar4 = uVar4 + 1;
     aw20036_set_brightness(uVar2,param_2,param_2,param_2);
   } while (uVar4 != 9);
-  FUN_0002024c();
+  aw20036_commit_all();
   if (*pcVar1 == '\0') {
-    FUN_0002084c();
+    aw20036_all_off();
   }
   uVar4 = 0;
   do {
@@ -7123,7 +7138,7 @@ void display_all_leds_color(undefined3 param_1,undefined4 param_2)
     uVar4 = uVar4 + 1;
     aw20036_led_on(uVar2,1);
   } while (uVar4 != 9);
-  FUN_0002024c();
+  aw20036_commit_all();
   return;
 }
 
@@ -7152,7 +7167,7 @@ void FUN_00021f68(uint param_1)
 
 {
   if (param_1 < 0xc) {
-    FUN_000213e8();
+    display_animation();
   }
   return;
 }
@@ -7166,24 +7181,27 @@ void FUN_00021f78(int param_1)
   if ((param_1 == 0) || (param_1 == 7)) {
     FUN_00020ed4(0);
     if (*DAT_00021f98 == '\0') {
-      FUN_0002084c();
+      aw20036_all_off();
     }
   }
   return;
 }
 
 
-/* ---- FUN_00021f9c @ 00021f9c ---- */
+/* ---- display_partner_menu @ 00021f9c ---- */
+/* page = active-slot mask; page 7: LEDs 0-2 slot1, 3-5 slot2, 6-8 slot3 */
 
-void FUN_00021f9c(uint param_1)
+/* page = active-slot mask; page 7: LEDs 0-2 slot1, 3-5 slot2, 6-8 slot3 */
+
+void display_partner_menu(uint param_1)
 
 {
   uint uVar1;
   uint uVar2;
   
-  uVar1 = FUN_00029c98(1);
-  FUN_00029c98(2);
-  FUN_00029c98(3);
+  uVar1 = settings_get_slot_color(1);
+  settings_get_slot_color(2);
+  settings_get_slot_color(3);
   if (7 < param_1) {
     uVar1 = 0;
     do {
@@ -7191,7 +7209,7 @@ void FUN_00021f9c(uint param_1)
       uVar1 = uVar1 + 1;
       aw20036_led_on(uVar2,0);
     } while (uVar1 != 9);
-    FUN_0002024c();
+    aw20036_commit_all();
     return;
   }
                     /* WARNING: Could not recover jumptable at 0x00021ff4. Too many branches */
@@ -7208,7 +7226,7 @@ void FUN_00022364(void)
 
 {
   if (*DAT_00022378 == '\0') {
-    FUN_0002084c();
+    aw20036_all_off();
   }
   return;
 }
@@ -7252,7 +7270,7 @@ void display_show(int param_1,byte *param_2,int param_3)
     local_2c = CONCAT12(cVar8 + bVar3,CONCAT11(cVar7 + bVar2,cVar9 + bVar1));
   }
   else if (cVar7 == '\x03') {
-    local_2c = FUN_00029c98(param_3);
+    local_2c = settings_get_slot_color(param_3);
   }
   else if (cVar7 == '\x01') {
     local_2c = *DAT_00022604;
@@ -7350,14 +7368,17 @@ void display_show(int param_1,byte *param_2,int param_3)
   uVar4 = *puVar14;
   aw20036_set_brightness(cVar7,uVar4,uVar4,uVar4);
 LAB_000224ba:
-  FUN_0002024c();
+  aw20036_commit_all();
   return;
 }
 
 
-/* ---- FUN_0002260c @ 0002260c ---- */
+/* ---- display_factory_touch_two_color @ 0002260c ---- */
+/* factory touch test: finger LEDs in two fixed colours */
 
-void FUN_0002260c(int param_1,undefined *param_2)
+/* factory touch test: finger LEDs in two fixed colours */
+
+void display_factory_touch_two_color(int param_1,undefined *param_2)
 
 {
   undefined uVar1;
@@ -7396,7 +7417,7 @@ void FUN_0002260c(int param_1,undefined *param_2)
   aw20036_set_rgb(uVar2,*puVar4);
   aw20036_led_on(uVar2,1);
   aw20036_set_brightness(uVar2,0xf,0xf,0xf);
-  FUN_0002024c();
+  aw20036_commit_all();
   return;
 }
 
@@ -7429,9 +7450,9 @@ void FUN_000226b0(void)
 {
   FUN_00028674(1);
   FUN_00028d74();
-  FUN_000215dc(*DAT_000226d4,0x32);
+  anim_sweep_a(*DAT_000226d4,0x32);
   FUN_00028674(0);
-  fsm_post_event(0x1f);
+  fsm_dispatch_event(0x1f);
   return;
 }
 
@@ -7443,9 +7464,9 @@ void FUN_000226d8(void)
 {
   FUN_00028674(1);
   FUN_00028d74();
-  FUN_000215dc(*DAT_000226fc,100);
+  anim_sweep_a(*DAT_000226fc,100);
   FUN_00028674(0);
-  fsm_post_event(0x1f);
+  fsm_dispatch_event(0x1f);
   return;
 }
 
@@ -7459,17 +7480,17 @@ void FUN_00022700(undefined4 param_1)
   
   FUN_00028674(1);
   FUN_00028d74();
-  uVar1 = FUN_00029c98(param_1);
-  FUN_000217e4(uVar1,0x32);
+  uVar1 = settings_get_slot_color(param_1);
+  anim_sweep_b(uVar1,0x32);
   FUN_00028674(0);
-  fsm_post_event(0x1f);
+  fsm_dispatch_event(0x1f);
   return;
 }
 
 
-/* ---- FUN_00022738 @ 00022738 ---- */
+/* ---- anim_slot_sweep_a @ 00022738 ---- */
 
-void FUN_00022738(undefined4 param_1)
+void anim_slot_sweep_a(undefined4 param_1)
 
 {
   byte bVar1;
@@ -7485,9 +7506,9 @@ void FUN_00022738(undefined4 param_1)
   
   FUN_00028674(1);
   FUN_00028d74();
-  uVar3 = FUN_00029c98(param_1);
+  uVar3 = settings_get_slot_color(param_1);
   uVar8 = 0;
-  FUN_0002084c();
+  aw20036_all_off();
   do {
     uVar4 = uVar8 & 0xff;
     uVar8 = uVar8 + 1;
@@ -7517,7 +7538,7 @@ void FUN_00022738(undefined4 param_1)
       aw20036_set_brightness(uVar8 & 0xff,bVar1,bVar1,bVar1);
       aw20036_led_on(cVar10,0);
     }
-    FUN_0002024c();
+    aw20036_commit_all();
     iVar9 = DAT_000228dc;
     for (iVar5 = (uint)*(byte *)(uVar8 + iVar6 + 2) * 1000; iVar5 != 0; iVar5 = iVar5 + -1) {
     }
@@ -7529,7 +7550,7 @@ void FUN_00022738(undefined4 param_1)
   do {
     iVar5 = iVar5 + -1;
   } while (iVar5 != 0);
-  FUN_0002084c();
+  aw20036_all_off();
   do {
     iVar9 = iVar9 + -1;
     iVar6 = DAT_000228e0;
@@ -7538,14 +7559,14 @@ void FUN_00022738(undefined4 param_1)
     iVar6 = iVar6 + -1;
   } while (iVar6 != 0);
   FUN_00028674(0);
-  fsm_post_event(0x1f);
+  fsm_dispatch_event(0x1f);
   return;
 }
 
 
-/* ---- FUN_000228e4 @ 000228e4 ---- */
+/* ---- anim_slot_sweep_b @ 000228e4 ---- */
 
-void FUN_000228e4(undefined4 param_1)
+void anim_slot_sweep_b(undefined4 param_1)
 
 {
   byte bVar1;
@@ -7561,8 +7582,8 @@ void FUN_000228e4(undefined4 param_1)
   
   FUN_00028674(1);
   FUN_00028d74();
-  uVar3 = FUN_00029c98(param_1);
-  FUN_0002084c();
+  uVar3 = settings_get_slot_color(param_1);
+  aw20036_all_off();
   uVar9 = 0;
   do {
     uVar6 = uVar9;
@@ -7593,7 +7614,7 @@ void FUN_000228e4(undefined4 param_1)
       aw20036_set_brightness(uVar9 & 0xff,bVar1,bVar1,bVar1);
       aw20036_led_on(cVar8,0);
     }
-    FUN_0002024c();
+    aw20036_commit_all();
     iVar7 = DAT_00022a80;
     for (iVar4 = (uint)*pbVar10 * 1000; iVar4 != 0; iVar4 = iVar4 + -1) {
     }
@@ -7606,7 +7627,7 @@ void FUN_000228e4(undefined4 param_1)
   do {
     iVar4 = iVar4 + -1;
   } while (iVar4 != 0);
-  FUN_0002084c();
+  aw20036_all_off();
   do {
     iVar7 = iVar7 + -1;
     iVar4 = DAT_00022a84;
@@ -7615,14 +7636,17 @@ void FUN_000228e4(undefined4 param_1)
     iVar4 = iVar4 + -1;
   } while (iVar4 != 0);
   FUN_00028674(0);
-  fsm_post_event(0x1f);
+  fsm_dispatch_event(0x1f);
   return;
 }
 
 
-/* ---- FUN_00022a88 @ 00022a88 ---- */
+/* ---- display_test_colors_split @ 00022a88 ---- */
+/* LEDs 0-3 = c1, LED 4 off, LEDs 5-8 = c2 (TEST_COLORS, cmd 0x47) */
 
-void FUN_00022a88(undefined4 param_1,undefined4 param_2)
+/* LEDs 0-3 = c1, LED 4 off, LEDs 5-8 = c2 (TEST_COLORS, cmd 0x47) */
+
+void display_test_colors_split(undefined4 param_1,undefined4 param_2)
 
 {
   undefined uVar1;
@@ -7651,7 +7675,7 @@ void FUN_00022a88(undefined4 param_1,undefined4 param_2)
     uVar3 = uVar3 + 1;
     aw20036_set_brightness(uVar4,uVar1,uVar1,uVar1);
   } while (uVar3 != 9);
-  FUN_0002024c();
+  aw20036_commit_all();
   return;
 }
 
@@ -7662,7 +7686,7 @@ void FUN_00022af4(void)
 
 {
   if (*DAT_00022b0c == '\0') {
-    FUN_0002084c();
+    aw20036_all_off();
   }
   FUN_00021070();
   return;
@@ -7756,9 +7780,12 @@ void cmd4b_led_color(char *param_1)
 }
 
 
-/* ---- FUN_00022bc8 @ 00022bc8 ---- */
+/* ---- display_set_color_mode @ 00022bc8 ---- */
+/* 1 = colour1, 2 = time gradient, 3 = slot colour (recording only) */
 
-void FUN_00022bc8(undefined param_1)
+/* 1 = colour1, 2 = time gradient, 3 = slot colour (recording only) */
+
+void display_set_color_mode(undefined param_1)
 
 {
   *DAT_00022bd0 = param_1;
@@ -7766,9 +7793,9 @@ void FUN_00022bc8(undefined param_1)
 }
 
 
-/* ---- FUN_00022bd4 @ 00022bd4 ---- */
+/* ---- display_get_color_mode @ 00022bd4 ---- */
 
-undefined FUN_00022bd4(void)
+undefined display_get_color_mode(void)
 
 {
   return *DAT_00022bdc;
@@ -8835,9 +8862,12 @@ void FUN_0002436c(char param_1,byte param_2)
 }
 
 
-/* ---- FUN_00024380 @ 00024380 ---- */
+/* ---- sched_event_to_fsm @ 00024380 ---- */
+/* sched code 6 (touch reg1==3) -> FSM event 9 (open MENU) */
 
-void FUN_00024380(byte *param_1)
+/* sched code 6 (touch reg1==3) -> FSM event 9 (open MENU) */
+
+void sched_event_to_fsm(byte *param_1)
 
 {
   if (*param_1 < 0xc) {
@@ -9642,10 +9672,10 @@ void ffb2_on_write(void)
       FUN_00028668(1);
     }
     if (((*pbVar4 == *pbVar5) && (pbVar4[1] == pbVar5[1])) && (pbVar4[2] == pbVar5[2])) {
-      FUN_00022bc8(1);
+      display_set_color_mode(1);
     }
     else {
-      FUN_00022bc8(2);
+      display_set_color_mode(2);
     }
     *pbVar2 = *pbVar2 + 1;
     return;
@@ -9759,7 +9789,7 @@ void FUN_00025bc4(undefined param_1)
     FUN_00031764(uVar1,&local_1c,2);
     local_1a = 0x14;
     if (*DAT_00025c44 == '\0') {
-      fsm_post_event(0x21);
+      fsm_dispatch_event(0x21);
     }
     else {
       FUN_0001b1fc(&local_18,0,0x10);
@@ -9958,7 +9988,7 @@ void FUN_00025fa0(undefined4 param_1,undefined4 param_2)
     FUN_00031764(uVar1,param_1,param_2);
     local_22 = 0x14;
     if (*DAT_00026014 == '\0') {
-      fsm_post_event(0x21);
+      fsm_dispatch_event(0x21);
     }
     else {
       FUN_0001b1fc(&local_20,0,0x10);
@@ -10097,13 +10127,13 @@ void FUN_00026138(ushort *param_1)
       }
       *DAT_00026500 = 0;
       FUN_000260b0();
-      fsm_post_event(0xc);
+      fsm_dispatch_event(0xc);
       iVar7 = DAT_000264d0;
     }
     else if (uVar9 < 0x11) {
       if (uVar9 == 1) {
         if (*DAT_000264f4 != '\0') {
-          fsm_post_event(0x16);
+          fsm_dispatch_event(0x16);
           iVar7 = DAT_000264d0;
         }
       }
@@ -10144,7 +10174,7 @@ void FUN_00026138(ushort *param_1)
         }
         *pcVar1 = '\0';
       }
-      fsm_post_event(0xd);
+      fsm_dispatch_event(0xd);
       iVar7 = DAT_000264d0;
     }
     goto LAB_000261e2;
@@ -10265,7 +10295,7 @@ void FUN_00026610(undefined4 param_1,undefined2 param_2)
   
   local_1a = param_2;
   if (*DAT_0002665c == '\0') {
-    fsm_post_event(0x1a);
+    fsm_dispatch_event(0x1a);
   }
   else {
     FUN_0001b1fc(&local_18,0,0x10);
@@ -10511,9 +10541,12 @@ void FUN_00026990(void)
 }
 
 
-/* ---- fsm_post_event @ 000269b8 ---- */
+/* ---- fsm_dispatch_event @ 000269b8 ---- */
+/* per-state jump table 0x333a4 (21 states), state var 0x200020f6 */
 
-void fsm_post_event(void)
+/* per-state jump table 0x333a4 (21 states), state var 0x200020f6 */
+
+void fsm_dispatch_event(void)
 
 {
   if (*DAT_00026cfc < 0x15) {
@@ -10542,7 +10575,7 @@ void FUN_00026aa8(void)
 {
   undefined *unaff_r6;
   
-  fsm_post_event(2);
+  fsm_dispatch_event(2);
   *unaff_r6 = 1;
   FUN_00028d74();
   FUN_00021b00();
@@ -10583,7 +10616,7 @@ void FUN_00026c24(void)
   int iVar1;
   undefined *unaff_r6;
   
-  fsm_post_event(2);
+  fsm_dispatch_event(2);
   *unaff_r6 = 0xb;
   FUN_00028d74();
   FUN_00029f14();
@@ -10596,7 +10629,7 @@ void FUN_00026c24(void)
   FUN_00026668();
   settings_get_brightness();
   FUN_00021cd0();
-  FUN_00021bb0(0x38,0xffffff);
+  display_mask_color(0x38,0xffffff);
   FUN_000242d0();
   FUN_00023224();
   FUN_00028c48();
@@ -10753,7 +10786,7 @@ void FUN_000274ee(void)
   FUN_00028d74();
   FUN_000250cc();
   if (*DAT_00027864 == '\0') {
-    fsm_post_event(2);
+    fsm_dispatch_event(2);
     *unaff_r6 = 4;
     FUN_00028d74();
     FUN_00021b00();
@@ -10762,7 +10795,7 @@ void FUN_000274ee(void)
                     /* WARNING: Subroutine does not return */
     FUN_000269ee();
   }
-  fsm_post_event(2);
+  fsm_dispatch_event(2);
   *unaff_r6 = 6;
   FUN_000248c4(0);
   FUN_00025bc4(0x89);
@@ -10802,7 +10835,7 @@ void FUN_000274fa(void)
   FUN_00028d74();
   FUN_000250cc();
   if (*DAT_00027864 == '\0') {
-    fsm_post_event(2);
+    fsm_dispatch_event(2);
     *unaff_r6 = 4;
     FUN_00028d74();
     FUN_00021b00();
@@ -10811,7 +10844,7 @@ void FUN_000274fa(void)
                     /* WARNING: Subroutine does not return */
     FUN_000269ee();
   }
-  fsm_post_event(2);
+  fsm_dispatch_event(2);
   *unaff_r6 = 6;
   FUN_000248c4(0);
   FUN_00025bc4(0x89);
@@ -10890,7 +10923,7 @@ void FUN_00027a5a(void)
   *(undefined *)(unaff_r5 + 2) = 2;
   *(undefined *)(unaff_r5 + 4) = param_12;
   FUN_00028d74();
-  FUN_0002260c(2,&stack0x00000008);
+  display_factory_touch_two_color(2,&stack0x00000008);
   if (-1 < (int)((uint)*DAT_00027ca4 << 0x1f)) {
                     /* WARNING: Subroutine does not return */
     FUN_000283f2();
@@ -10913,7 +10946,7 @@ void FUN_00027a76(undefined param_1)
   *(undefined *)(unaff_r5 + 2) = 2;
   *(undefined *)(unaff_r5 + 4) = param_1;
   FUN_00028d74();
-  FUN_0002260c(2,&stack0x00000008);
+  display_factory_touch_two_color(2,&stack0x00000008);
   if (-1 < (int)((uint)*DAT_00027ca4 << 0x1f)) {
                     /* WARNING: Subroutine does not return */
     FUN_000283f2();
@@ -10948,7 +10981,7 @@ void FUN_00027aee(undefined param_1)
   *(undefined *)(unaff_r5 + 3) = param_1;
   *(undefined *)(unaff_r5 + 2) = 1;
   FUN_00028d74();
-  FUN_0002260c(1,&stack0x00000008);
+  display_factory_touch_two_color(1,&stack0x00000008);
   if ((*DAT_00027ca4 & 1) == 0) {
                     /* WARNING: Subroutine does not return */
     FUN_000283e4();
@@ -11040,9 +11073,9 @@ void FUN_00028086(void)
   undefined *unaff_r6;
   
   FUN_000250a0();
-  fsm_post_event(2);
+  fsm_dispatch_event(2);
   *unaff_r6 = 4;
-  fsm_post_event(1);
+  fsm_dispatch_event(1);
                     /* WARNING: Subroutine does not return */
   FUN_000269ee();
 }
@@ -11127,7 +11160,7 @@ void FUN_0002818e(void)
   int iVar1;
   
   FUN_00023850();
-  FUN_000228e4(DAT_20003015);
+  anim_slot_sweep_b(DAT_20003015);
   FUN_000275ea();
   FUN_00025bc4(1);
   FUN_0001ff60(1);
@@ -11231,9 +11264,9 @@ void FUN_000281f8(void)
   *(undefined *)(unaff_r5 + 1) = 0xb4;
   *(char *)(unaff_r5 + 2) = *pcVar2;
   FUN_00025fa0();
-  fsm_post_event(2);
+  fsm_dispatch_event(2);
   *unaff_r6 = 7;
-  fsm_post_event(1);
+  fsm_dispatch_event(1);
                     /* WARNING: Subroutine does not return */
   FUN_000269ee();
 }
@@ -11251,9 +11284,9 @@ void FUN_00028212(void)
   *(undefined *)(unaff_r5 + 1) = 0xb4;
   *(undefined *)(unaff_r5 + 2) = DAT_20003016;
   FUN_00025fa0();
-  fsm_post_event(2);
+  fsm_dispatch_event(2);
   *unaff_r6 = 7;
-  fsm_post_event(1);
+  fsm_dispatch_event(1);
                     /* WARNING: Subroutine does not return */
   FUN_000269ee();
 }
@@ -11266,9 +11299,9 @@ void FUN_0002823e(void)
 {
   undefined *unaff_r6;
   
-  fsm_post_event(2);
+  fsm_dispatch_event(2);
   *unaff_r6 = 4;
-  fsm_post_event(1);
+  fsm_dispatch_event(1);
                     /* WARNING: Subroutine does not return */
   FUN_000269ee();
 }
@@ -11295,9 +11328,9 @@ void FUN_0002826a(void)
 {
   undefined *unaff_r6;
   
-  fsm_post_event(2);
+  fsm_dispatch_event(2);
   *unaff_r6 = 0xd;
-  fsm_post_event(1);
+  fsm_dispatch_event(1);
                     /* WARNING: Subroutine does not return */
   FUN_000269ee();
 }
@@ -11310,9 +11343,9 @@ void FUN_0002827e(void)
 {
   undefined *unaff_r6;
   
-  fsm_post_event(2);
+  fsm_dispatch_event(2);
   *unaff_r6 = 1;
-  fsm_post_event(1);
+  fsm_dispatch_event(1);
                     /* WARNING: Subroutine does not return */
   FUN_000269ee();
 }
@@ -11325,9 +11358,9 @@ void FUN_00028292(void)
 {
   undefined *unaff_r6;
   
-  fsm_post_event(2);
+  fsm_dispatch_event(2);
   *unaff_r6 = 0xb;
-  fsm_post_event(1);
+  fsm_dispatch_event(1);
                     /* WARNING: Subroutine does not return */
   FUN_000269ee();
 }
@@ -11341,7 +11374,7 @@ void FUN_000282a6(void)
   int iVar1;
   undefined *unaff_r5;
   
-  iVar1 = FUN_00022bd4();
+  iVar1 = display_get_color_mode();
   if (iVar1 == 3) {
     display_show(1);
   }
@@ -11390,10 +11423,10 @@ void FUN_000282fc(void)
   *unaff_r5 = 0;
   DAT_200020f8 = 0xff;
   FUN_00028d74();
-  FUN_00022738(DAT_20003016);
-  fsm_post_event(2);
+  anim_slot_sweep_a(DAT_20003016);
+  fsm_dispatch_event(2);
   *unaff_r6 = 8;
-  fsm_post_event(1);
+  fsm_dispatch_event(1);
                     /* WARNING: Subroutine does not return */
   FUN_000269ee();
 }
@@ -11420,10 +11453,10 @@ void FUN_00028304(void)
   *unaff_r5 = 0;
   DAT_200020f8 = 0xff;
   FUN_00028d74();
-  FUN_00022738(DAT_20003016);
-  fsm_post_event(2);
+  anim_slot_sweep_a(DAT_20003016);
+  fsm_dispatch_event(2);
   *unaff_r6 = 8;
-  fsm_post_event(1);
+  fsm_dispatch_event(1);
                     /* WARNING: Subroutine does not return */
   FUN_000269ee();
 }
@@ -11447,10 +11480,10 @@ void FUN_0002830c(void)
   *unaff_r5 = 0;
   DAT_200020f8 = 0xff;
   FUN_00028d74();
-  FUN_00022738(DAT_20003016);
-  fsm_post_event(2);
+  anim_slot_sweep_a(DAT_20003016);
+  fsm_dispatch_event(2);
   *unaff_r6 = 8;
-  fsm_post_event(1);
+  fsm_dispatch_event(1);
                     /* WARNING: Subroutine does not return */
   FUN_000269ee();
 }
@@ -11463,7 +11496,7 @@ void FUN_0002835c(void)
 {
   undefined *unaff_r6;
   
-  fsm_post_event(2);
+  fsm_dispatch_event(2);
   *unaff_r6 = 3;
                     /* WARNING: Subroutine does not return */
   FUN_00027790();
@@ -11478,7 +11511,7 @@ void FUN_0002836a(void)
   undefined unaff_r5;
   undefined *unaff_r6;
   
-  fsm_post_event(2);
+  fsm_dispatch_event(2);
   *unaff_r6 = unaff_r5;
   FUN_00026c98();
   FUN_00022364();
@@ -11844,7 +11877,7 @@ void FUN_000284d8(void)
     FUN_0001b210(iVar1,0xe9,DAT_000285b4);
   }
   *DAT_000285b0 = 1;
-  fsm_post_event(1);
+  fsm_dispatch_event(1);
   return;
 }
 
@@ -11854,9 +11887,9 @@ void FUN_000284d8(void)
 void FUN_000285b8(undefined param_1)
 
 {
-  fsm_post_event(2);
+  fsm_dispatch_event(2);
   *DAT_000285d0 = param_1;
-  fsm_post_event(1);
+  fsm_dispatch_event(1);
   return;
 }
 
@@ -11890,9 +11923,12 @@ void FUN_00028610(undefined4 param_1,int param_2)
 }
 
 
-/* ---- FUN_00028630 @ 00028630 ---- */
+/* ---- cmd47_store_test_colors @ 00028630 ---- */
+/* args [R1 G1 B1 R2 G2 B2 secs(1..10)] */
 
-void FUN_00028630(undefined *param_1)
+/* args [R1 G1 B1 R2 G2 B2 secs(1..10)] */
+
+void cmd47_store_test_colors(undefined *param_1)
 
 {
   undefined *puVar1;
@@ -13399,9 +13435,9 @@ undefined FUN_00029c28(void)
 }
 
 
-/* ---- FUN_00029c34 @ 00029c34 ---- */
+/* ---- settings_active_slot_mask @ 00029c34 ---- */
 
-byte FUN_00029c34(void)
+byte settings_active_slot_mask(void)
 
 {
   byte bVar1;
@@ -13417,9 +13453,9 @@ byte FUN_00029c34(void)
 }
 
 
-/* ---- FUN_00029c54 @ 00029c54 ---- */
+/* ---- settings_set_slot_color @ 00029c54 ---- */
 
-void FUN_00029c54(int param_1,uint param_2)
+void settings_set_slot_color(int param_1,uint param_2)
 
 {
   if (param_1 == 2) {
@@ -13438,9 +13474,9 @@ void FUN_00029c54(int param_1,uint param_2)
 }
 
 
-/* ---- FUN_00029c98 @ 00029c98 ---- */
+/* ---- settings_get_slot_color @ 00029c98 ---- */
 
-undefined4 FUN_00029c98(int param_1)
+undefined4 settings_get_slot_color(int param_1)
 
 {
   undefined4 uVar1;
@@ -13461,9 +13497,9 @@ undefined4 FUN_00029c98(int param_1)
 }
 
 
-/* ---- FUN_00029cc0 @ 00029cc0 ---- */
+/* ---- settings_set_slot_active @ 00029cc0 ---- */
 
-void FUN_00029cc0(int param_1,byte param_2)
+void settings_set_slot_active(int param_1,byte param_2)
 
 {
   if (param_1 == 2) {

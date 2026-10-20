@@ -280,9 +280,9 @@ v2/v4/Mini. On BTM, 50 ms *is* the firmware clock: the FFB2 player uses a fixed 
    response (one or more 7.5 ms+ connection events) plus the AW9109 upload, which gives
    tens of ms with jitter.
 4. **BTM**: 9 bar LEDs, but the only sequenced player (FFB2) runs at a fixed 50 ms per
-   sample and each sample lights 1 LED or one contiguous range lo..hi. That is too slow
-   for POV. The alternative is streaming FFB1 `0x4B` writes (all 9 LEDs one colour),
-   which is limited by BLE.
+   sample, and each sample lights at most 2 LEDs at full brightness plus dim neighbours
+   (exact rule in §12.2). That is too slow for POV. See §12 for every per-LED and speed
+   option found.
 
 ## 8. Bond Touch More (BTM): FFB1 commands relevant here
 
@@ -293,7 +293,7 @@ means set and anything else means read back with an ack `[0x0A, cmd, …]`.
 
 | cmd | Meaning (firmware) |
 |---|---|
-| `0x4B` | `cmd4b_led_color` 0x22B84. `[01 4B 00 led R G B]` schedules display event 2 at 0x21E64. `led == 0`: all 9 LEDs show RGB at the saved brightness (`display_all_leds_color` 0x21CF0). `led == 1`: brightness is set on all 9, then the colour on LEDs 0 and 1. `[01 4B 01]` = clear. **No motor call.** Before scheduling, it also posts FSM event 0x1E. **HYPOTHESIS**: that event enters the TEST_COLORS state (142). No timeout was found in this path, so the light stays until cleared. |
+| `0x4B` | `cmd4b_led_color` 0x22B84. `[01 4B 00 led R G B]` schedules display event 2 at 0x21E64. `led == 0`: all 9 LEDs show RGB at the saved brightness (`display_all_leds_color` 0x21CF0). `led == 1`: brightness is set on all 9, then the colour on LEDs 0 and 1. `[01 4B 01]` = clear. **No motor call.** Before scheduling, it also posts FSM event 0x1E, but no state handles that event (§12.4), so `0x4B` changes no state. No timeout was found in this path, so the light stays until cleared. TEST_COLORS is entered by `0x47` (§12.3). |
 | `0x48` | Vibration. Requires `args[0]` bit 0 clear, level ≤ 100 and balance ≤ 4; otherwise it only sends the ack `[0A 48 level balance]`. It sets `gain[i] = level·base[i]/100` for the 9 positions (0x23238) and the balance offset (0x232C0). `args[0] == 0` then plays a preview buzz (0x232D4); otherwise it saves (0x29E00). **Level 0 is accepted** (there is no lower bound). |
 | `0x4D` | **Global LED brightness**: `[01 4D 00 val]` sets (0x22690 / 0x29DA4), `[01 4D 01]` reads. The original app never sends it. |
 | `0x4E` | LED driver setting, low nibble (0x29DBC); values 0..3 or 8..14. **HYPOTHESIS**: AW20036 global current. |
@@ -350,4 +350,148 @@ The DFU zips were unpacked into separate scratch directories. Two tools were use
 - Ghidra 11.1.2 headless (`BinaryLoader`, `ARM:LE:32:Cortex`, bases as in §1), with
   functions seeded from the vector table and from `bl` targets.
 
-The derived pseudo-C is kept out of the repository.
+The derived pseudo-C, the annotated listings and the name maps are in
+`Firmware/decompiled/<image>/`.
+
+## 12. BTM per-LED colour
+
+The goal checked here: light any subset of the 9 bar LEDs (a 9-bit mask per column, one
+colour is fine), changed in ≤ 10 ms per column, for 9-pixel-tall POV text.
+
+**Result: no command, on any characteristic, takes a per-LED mask or a per-LED
+colour/brightness list.** The LED driver can do it (each LED has its own colour, scaling
+and enable), and the firmware has an internal mask painter, but nothing from BLE reaches
+it. Below are the closest options, each with its exact rule, followed by the evidence.
+
+### 12.1 Driver facts (AW20036, I2C address 0x3A)
+
+- **Per-LED records**: 9 records of 15 bytes at 0x20002578:
+  - `[0..2]` enable copy
+  - `[3..5]` R, G, B
+  - `[6..8]` scaling (brightness) per channel
+  - `[9..14]` register addresses (PWM, scaling)
+- **Functions**:
+  - `aw20036_set_rgb(led, rgb)` 0x2087C
+  - `aw20036_led_on(led, on)` 0x20A08
+  - `aw20036_set_brightness(led, sR, sG, sB)` 0x20824
+- **Commits**:
+  - `aw20036_commit_all` 0x2024C: page 2 (scaling) 27 writes, page 1 (PWM = RGB >> 2) 27
+    writes, then the enable registers (`aw20036_write_enables` 0x20108, 7 writes). Total
+    **63 two-byte I2C writes** per full-bar refresh.
+  - `aw20036_commit_led` 0x203E8 refreshes one LED (about 9 writes).
+- **Internal mask painter**: `display_mask_color(mask9, rgb)` 0x21BB0 turns everything
+  off, then for each set bit `i` (bit 0 = LED 0 … bit 8 = LED 8) sets the colour, turns
+  the LED on and commits it. Its **only callers** are the power-off animation in
+  `bond3_fsm` (0x26C66 / 0x26CCA, mask `0x38` = LEDs 3–5, SYS_STATE 0x8C). No FFB1 or FFB2
+  path reaches it.
+- **TWI clock**: not found as a literal; it is probably in RW data initialised at boot.
+  The I2C costs below are therefore given as transaction counts. At 400 kHz a 2-byte write
+  is about 70–100 µs including driver overhead; at 100 kHz it is about 4× that.
+
+### 12.2 FFB2 sample → lit LEDs (the fallback, exact rule)
+
+Playback tick handler 0x274B0, 50 ms. Renderer `display_show(mode, pos[], idx)` 0x2237C.
+`B` = global brightness byte at 0x200020C0, set by FFB1 `0x4D`. `b2` = byte at 0x200020C1 =
+`max(1, B >> 3)` (`display_set_brightness` 0x22690).
+
+```
+s == 0xFF        -> all LEDs off (and motor off)               ; 0x274be -> 0x28376
+lo = s & 0x0F ; hi = s >> 4
+hi == 0xF        -> display_show(1, [lo])                       ; 0x274d0 -> 0x282b6
+otherwise        -> display_show(2, [lo, hi])                   ; 0x274ea
+motor: one finger -> motor_pan_position(lo); two -> ((lo+hi)/2)
+
+mode 1 (one finger at p):  all off; p = FULL(B); p-1 = DIM(b2) if p>0; p+1 = DIM(b2) if p<8
+mode 2 (a = lo, b = hi):   all off; a = FULL; b = FULL
+    L = min(a,b), H = max(a,b), span = H-L
+    H+1 = DIM if H<8 ;  L-1 = DIM if L>0
+    span == 2  -> middle (H-1) = B>>1
+    span >= 3  -> L+1 = DIM and H-1 = DIM ; LEDs L+2 .. H-2 stay OFF
+    span 0 / 1 -> nothing more
+```
+
+All lit LEDs in a sample share one colour.
+
+**HYPOTHESIS: out-of-range nibbles are unsafe.** The firmware does not check that a nibble
+is ≤ 8. `lo` or `hi` = 9..14 would index past the 9 LED records and corrupt RAM. Send
+only `0xFF`, `0xF0|p` or `(p2<<4)|p1` with `p`, `p1`, `p2` in 0..8.
+
+This corrects `BTM_TOUCH_FORMAT.md` §3.3: a two-finger sample does **not** light the whole
+range lo..hi. It lights the two positions plus their outer neighbours, and fills the inside
+only when the span is ≤ 3.
+
+What one FFB2 sample can therefore show, at full brightness:
+- 1 LED, or
+- 2 LEDs anywhere (`(p2<<4)|p1`), or
+- 3 adjacent LEDs (span 2, with the middle LED at half brightness).
+
+There is always a dim halo of `b2/B` ≈ 1/8 on the outer neighbours. It cannot be turned
+off, because `b2` is at least 1.
+
+**Colour modes** (byte 0x20002603, set by `display_set_color_mode` 0x22BC8):
+
+| mode | colour | set where |
+|---|---|---|
+| 1 | colour 1 | FFB2 header, when colour 1 == colour 2 (0x25598) |
+| 2 | **time** gradient `c1 + idx·(c2−c1)/len` | FFB2 header, when the colours differ (0x2553A) |
+| 3 | menu-slot colour | only on entering MSG_RECORDING (0x2777C) |
+| other | default colour at 0x20002600 | – |
+
+- The gradient is per sample index, not per position.
+- No header byte selects mode 3 or a per-position colour.
+- Header byte 9 only sets the reply-menu flag (0x28668).
+
+**The 50 ms period is fixed.** It is the literal `0x666` (1638 ticks of 32768 Hz) loaded at
+0x275EC (playback entry) and 0x27782 (recording entry). No header or config field feeds it.
+
+### 12.3 Options reachable from BLE
+
+| # | Command (FFB1 unless noted) | What it lights | Speed / limits |
+|---|---|---|---|
+| A | `0x4B` all LEDs: `01 4B 00 00 R G B` | all 9, one colour | Per write: sched event → `display_all_leds_color` 0x21CF0 → 2 full commits ≈ **126 I2C writes**. Probably ~10–15 ms at 400 kHz (**HYPOTHESIS**, TWI clock unknown). Rate is set by BLE plus this cost. |
+| A′ | `0x4B` "LED_0": `01 4B 00 01 R G B` | **LEDs 0 and 1 only**, one colour (0x21ECC) | `led` is **not** an index or mask: `1` → LEDs 0+1, any other value → all 9 (0x21E88) |
+| A″ | `0x4B` clear: `01 4B 01` | off | **Powers the AW20036 down** (P0.01 low, 0x21F3C–0x21F4A). The next set raises P0.01, spins a 2000-iteration delay and re-initialises the driver. **For fast toggling, send "off" as `01 4B 00 00 00 00 00`.** |
+| B | `0x47` TEST_COLORS: `01 47 R1 G1 B1 R2 G2 B2 SS` | **LEDs 0–3 = colour 1, LED 4 = off, LEDs 5–8 = colour 2** (`display_test_colors_split` 0x22A88), for `SS` = 1..10 s (other values → 10) | Enters state 20 (SYS_STATE 0x8E) from idle (`cmd47_store_test_colors` 0x28630 → display event 4 → FSM event 0x1B → 0x276BE). **A new `0x47` while in TEST_COLORS repaints at once and restarts the timer** (0x27610), costing **one** commit (63 writes), half the cost of `0x4B`. Use colour `000000` to turn one half off. This gives a 2-pixel column: top half / bottom half. If the bracelet is busy (flag 0x20002DF7), entry is deferred. |
+| C | FFB2 touch (§12.2) | ≤ 2 LEDs at full brightness + halo | fixed 50 ms/sample, firmware-timed, ≤ 200 samples. Motor runs too, unless level 0 works (§8). |
+| D | `0x45` partner menu colours | the MENU page shows LEDs 0–2 / 3–5 / 6–8 in the 3 slot colours (`display_partner_menu` 0x21F9C, page = active-slot mask 7) | MENU opens only from a physical touch gesture: touch IC reg1 == 3 → sched code 6 → FSM event 9 (`sched_event_to_fsm` 0x24380 → 0x27EAC). It cannot be triggered from BLE. |
+
+**Write type.** FFB1 and FFB2 are declared with properties `0x1E` = read | **write without
+response** | write | notify, with max length 20. Fact from `ble_bond3_service.c` char add
+(Ghidra: `local_44[0] = … | 0x1e`, `local_50 = local_4c = 0x14`). Streaming A or B with
+write-without-response avoids the ATT round trip. The original app uses write *with*
+response.
+
+### 12.4 Other FFB1 commands traced
+
+| cmd | FSM event | Handled in | Effect |
+|---|---|---|---|
+| `0x12` | 0x26 | idle (4) | enters state 17: factory touch test. Touches draw with `display_factory_touch_two_color` 0x2260C (finger 1 and finger 2 in two fixed colours from 0x200020B0 / 0x200020AC), and positions are reported to the app. The positions come from the touch IC, not from BLE. |
+| `0x15` | 0x24 | state 17 | → state 15: factory LED test. All 9 LEDs one colour (0x21CF0), stepping every 0.5 s (0x4000 ticks). |
+| `0x13` | 0x25 | state 15 | → state 16: touch + motor test (0x2260C, 0x22DB8) |
+| `0x11` | 0x27 | states 15 / 16 | leave the factory test |
+| `0x17` | 0x23 | state 16 | (handler 0x26F9C; leave the test) |
+| `0x4C` | 0x1D | MSG_PLAYING (10) | **stop FFB2 playback** and return to idle (0x27404) |
+| `0x4F` | 0x20 | idle | state 14; ack `0A 4F …` with three counters (0x29F60 / 6C / 78) |
+| `0x30` | 0x10 | state 3 | → state 2, SYS_STATE 0x82 (WAITING_TOKEN) |
+| `0x31` | 0x14 | state 2 | (0x272F4) |
+| `0x4B` | 0x1E | – | **no state handles event 0x1E**, so `0x4B` changes no state. This corrects the hypothesis in §8. |
+| `0x43` / `0x44` | 0x18 / 0x19 | idle / state 19 | ANCS; state 19 sends SYS_STATE 0x8D |
+
+None of them accepts per-LED data.
+
+### 12.5 What this means for 9-pixel POV on a BTM
+
+- **Not possible** with the stock firmware: an arbitrary 9-LED mask per column, at any
+  speed.
+- **Best streamable approximations**:
+  1. A whole-bar on/off strobe with `0x4B` set colour / set black. Write-without-response
+     on FFB1, about one update per connection event at best. **HYPOTHESIS**: around 10–15 ms
+     per update, because of the I2C refresh.
+  2. A 2-pixel column (LEDs 0–3 / LEDs 5–8) with repeated `0x47` writes. Cheaper refresh
+     (63 writes) and firmware-held between writes. Enter the mode once from idle; each later
+     `0x47` repaints.
+- **Firmware-timed but slow**: FFB2 at 50 ms per column, ≤ 2 bright pixels + halo per
+  column (§12.2).
+- A true 9-pixel font would need modified firmware.
+  **HYPOTHESIS**: the Nordic DFU path accepts unsigned images. For: `BOND_M_DFU` packages
+  use a 141-byte init packet. Against: that size could include a signature.
