@@ -284,7 +284,7 @@ struct HomeView: View {
                     .accessibilityLabel("Add a partner")
                 }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity).padding(.bottom, TabBarSpace.fixed)
+            .frame(maxWidth: .infinity, maxHeight: .infinity).padding(.bottom, 60)
         }
     }
 
@@ -591,7 +591,7 @@ struct HomeView: View {
 }
 
 /// A small non-interactive map framing you and your partner.
-private struct PairMap: View {
+struct PairMap: View {
     let me: CLLocationCoordinate2D
     let partner: CLLocationCoordinate2D
     let meView: AnyView

@@ -1,3 +1,4 @@
+import MapKit
 import SwiftUI
 
 /// Minimal 2: the middle ground — three calm cards. Your partner (status, weather, days
@@ -6,6 +7,7 @@ import SwiftUI
 struct MinimalTwoHome: View {
     @EnvironmentObject var model: AppModel
     @EnvironmentObject var together: TogetherStore
+    @EnvironmentObject var store: LocalStore
     @State private var people = false
     @State private var partnerSheet = false
     @State private var compose = false
@@ -40,6 +42,7 @@ struct MinimalTwoHome: View {
 
     private func partnerCard(_ p: Partner) -> some View {
         Button { partnerSheet = true } label: {
+            VStack(spacing: 0) {
             HStack(spacing: 14) {
                 PartnerFace(partner: p, size: 64)
                 VStack(alignment: .leading, spacing: 3) {
@@ -52,6 +55,17 @@ struct MinimalTwoHome: View {
                 Spacer(minLength: 0)
             }
             .padding(18)
+            // Where you both are, when you're both sharing a location.
+            if let me = model.location.coordinate, let lat = p.presence?.lat, let lng = p.presence?.lng {
+                PairMap(me: me, partner: CLLocationCoordinate2D(latitude: lat, longitude: lng),
+                        meView: AnyView(AvatarRing(name: store.profile.name.isEmpty ? "Me" : store.profile.name,
+                                                   ringColor: Color(rgbInt: store.profile.colorRGB), size: 34, photo: model.myPhoto)),
+                        partnerView: AnyView(PartnerFace(partner: p, size: 38)))
+                    .frame(height: 140)
+                    .clipShape(RoundedRectangle(cornerRadius: max(Theme.cardCorner - 6, 8), style: .continuous))
+                    .padding([.horizontal, .bottom], 8)
+            }
+            }
             .glass(cornerRadius: Theme.cardCorner)
         }
         .buttonStyle(.plain)
