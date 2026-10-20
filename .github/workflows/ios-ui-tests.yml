@@ -1,0 +1,67 @@
+# Runs the UI tests (UITests/) on an iPhone simulator: taps through Settings → Theme like a
+# person and checks every theme can be picked. Screenshots go to the `uitest-shots` branch.
+name: iOS UI tests
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "UITests/**"
+      - "uitests.yml"
+      - ".github/workflows/ios-ui-tests.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  uitests:
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Fetch libsignal_ffi
+        run: scripts/fetch-libsignal-ffi.sh
+      - name: Generate the project with the UI-test target
+        run: xcodegen generate --spec uitests.yml
+      - name: Pick and boot a simulator
+        id: sim
+        run: |
+          UDID=$(xcrun simctl list devices available -j | python3 -c '
+          import json,sys
+          d=json.load(sys.stdin)["devices"]
+          best=None
+          for rt,devs in d.items():
+              if "iOS" not in rt: continue
+              for x in devs:
+                  if x["name"] in ("iPhone 16 Pro","iPhone 16","iPhone 15 Pro"):
+                      best=x["udid"]
+          print(best or "")')
+          echo "udid=$UDID" >> "$GITHUB_OUTPUT"
+          xcrun simctl boot "$UDID"
+          xcrun simctl bootstatus "$UDID" -b
+      - name: Run the UI tests
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          xcodebuild -project BondTouchBeyond.xcodeproj -scheme ThemeUITests \
+            -destination "id=${{ steps.sim.outputs.udid }}" -configuration Debug \
+            -derivedDataPath build -resultBundlePath ui.xcresult \
+            CODE_SIGNING_ALLOWED=NO test 2>&1 | tee ui.log | grep -E "THEME |error|failed|passed|Test Case|XCTAssert" | head -200
+      - name: Collect screenshots
+        if: always()
+        run: |
+          mkdir -p out
+          cp ui.log out/ 2>/dev/null || true
+          xcrun xcresulttool export attachments --path ui.xcresult --output-path out 2>&1 | tail -5 || true
+          ls out | head -50
+      - name: Push to the uitest-shots branch
+        if: always()
+        run: |
+          cd out
+          git init -q -b uitest-shots
+          git config user.name "uitest-bot"
+          git config user.email "uitest-bot@users.noreply.github.com"
+          git add . && git commit -qm "UI test of ${GITHUB_SHA::7}"
+          git push -q -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" uitest-shots

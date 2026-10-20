@@ -1,0 +1,26 @@
+# Used only by .github/workflows/ios-ui-tests.yml: the app project plus a UI-test target,
+# so the app's own project (and its TestFlight builds) stay exactly as they are.
+include:
+  - project.yml
+targets:
+  ThemeUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: UITests
+    dependencies:
+      - target: BondTouchBeyond
+    settings:
+      base:
+        TEST_TARGET_NAME: BondTouchBeyond
+        PRODUCT_BUNDLE_IDENTIFIER: com.lightwave.beyond.uitests
+        GENERATE_INFOPLIST_FILE: YES
+schemes:
+  ThemeUITests:
+    build:
+      targets:
+        BondTouchBeyond: all
+        ThemeUITests: [test]
+    test:
+      targets:
+        - ThemeUITests
