@@ -15,6 +15,8 @@ struct TogetherView: View {
     @AppStorage("usTileOrder") private var tileOrder = ""
     @State private var arranging = false
     @State private var dragging: String?
+    /// The part opened by a tapped notification (a tile id, "dates" or "likes").
+    @State private var deepLink: String?
 
     private var partner: Partner? { model.selectedPartner }
     private var space: TogetherSpace { together.space(model.selectedPartnerID) }
@@ -53,6 +55,28 @@ struct TogetherView: View {
         .sheet(isPresented: $pickingStart) { TogetherStartSheet() }
         .sheet(isPresented: $addingDate) { SpecialDateEditor(date: nil) }
         .sheet(item: $editingDate) { SpecialDateEditor(date: $0) }
+        .navigationDestination(isPresented: Binding(get: { deepLink != nil }, set: { if !$0 { deepLink = nil } })) {
+            if let id = deepLink { part(id).screenBackground() }
+        }
+        .onAppear(perform: takeRoute)
+        .onChange(of: model.route) { _ in takeRoute() }
+    }
+
+    /// A tapped notification about a part of Us: open it.
+    private func takeRoute() {
+        guard case .us(let id?) = model.route else { return }
+        model.route = nil
+        guard id == "dates" || id == "likes" || allTiles.contains(where: { $0.id == id }) else { return }
+        // A moment after appearing, so the push isn't lost while the stack is being built.
+        DispatchQueue.main.async { deepLink = id }
+    }
+
+    @ViewBuilder private func part(_ id: String) -> some View {
+        switch id {
+        case "dates": SpecialDatesView()
+        case "likes": LikesView()
+        default: allTiles.first { $0.id == id }?.destination()
+        }
     }
 
     // MARK: Header: you two and the live counter

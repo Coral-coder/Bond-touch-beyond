@@ -21,6 +21,8 @@ struct WhatsNewView: View {
     /// Newest first. Add to the top for each build; trim when it no longer needs to go back to 40.
     static let sections: [Section] = [
         Section(title: "This update", items: [
+            Item(icon: "arrow.up.forward.app.fill", title: "Notifications open the right place",
+                 detail: "Tapping a notification opens what it's about, for the partner it's from: the chat, the game, the to-do list, the note, your dates, Stress & mood, or Home for a touch."),
             Item(icon: "bell.slash.fill", title: "Quiet while you're in the app",
                  detail: "With the app open — playing a game or anything else — notifications stay quiet; touches still play. Only a chat message shows, and not for the chat you're reading."),
             Item(icon: "heart.circle", title: "The kiss button",

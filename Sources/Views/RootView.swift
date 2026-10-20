@@ -21,6 +21,9 @@ struct RootView: View {
     @AppStorage(ThemeTints.key) private var themeTints = ""
     @State private var keyboardUp = false
     @State private var showWhatsNew = false
+    /// Bumped to start a tab's navigation afresh, so a tapped notification's screen opens from
+    /// that tab's root rather than on top of whatever was open.
+    @State private var stackReset = 0
     /// What's new has been checked for this launch, so the tour knows whether to wait for it.
     @State private var launchChecked = false
     /// The feature tour has been seen (or skipped); until then it opens once the profile is set
@@ -90,12 +93,12 @@ struct RootView: View {
                     } else {
                         switch tab {
                         case .home: HomeRouter()
-                        case .us: NavigationStack { TogetherView().screenBackground() }
+                        case .us: NavigationStack { TogetherView().screenBackground() }.id(stackReset)
                         case .touches: MeaningsView()
                         case .map: MapTabView()
                         // Chat lives inside Private Space, behind its lock, as the original.
-                        case .chat: NavigationStack { PrivateSpaceView() }
-                        case .settings: NavigationStack { SettingsView() }
+                        case .chat: NavigationStack { PrivateSpaceView() }.id(stackReset)
+                        case .settings: NavigationStack { SettingsView() }.id(stackReset)
                         }
                     }
                 }
@@ -109,9 +112,39 @@ struct RootView: View {
             .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
                 keyboardUp = true
             }
+            .onAppear { open(model.route) }
+            .onChange(of: model.route) { open($0) }
             .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
                 keyboardUp = false
             }
+        }
+    }
+
+    /// A tapped notification: switch to its tab. The screen inside (a part of Us, the
+    /// bracelet settings) is opened by that tab's root, which takes the route from there.
+    private func open(_ route: AppRoute?) {
+        guard let route, !AppModel.isDemo else { return }
+        switch route {
+        case .home:
+            tab = .home
+            model.route = nil
+        case .chat:
+            tab = .chat
+            stackReset += 1
+            model.route = nil
+        case .us(let part):
+            if Feature.us.isOn {
+                tab = .us
+                stackReset += 1
+                if part == nil { model.route = nil }
+            } else {
+                // Without the Us tab, only Touch Language has a home of its own.
+                tab = part == "language" ? .touches : .home
+                model.route = nil
+            }
+        case .bracelet:
+            tab = .settings
+            stackReset += 1
         }
     }
 }

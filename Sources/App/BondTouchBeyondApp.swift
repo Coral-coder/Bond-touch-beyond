@@ -115,13 +115,18 @@ extension AppDelegate: UNUserNotificationCenterDelegate {
         }
     }
 
-    /// A button on a touch notification (phone or watch): touch back, or send my heartbeat,
-    /// to the partner the touch came from.
+    /// A notification tapped: open what it's about. Or a button on a touch notification
+    /// (phone or watch): touch back, or send my heartbeat, to the partner the touch came from.
     nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter,
                                             didReceive response: UNNotificationResponse) async {
         let info = response.notification.request.content.userInfo
         let action = response.actionIdentifier
+        let id = response.notification.request.identifier
         await MainActor.run {
+            // Tapped (not a button): open the part of the app it's about.
+            if action == UNNotificationDefaultActionIdentifier {
+                self.model.openNotification(id: id, userInfo: info)
+            }
             Task { await self.model.answerNotification(action: action, userInfo: info) }
         }
     }

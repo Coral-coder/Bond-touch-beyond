@@ -155,6 +155,8 @@ final class AppModel: ObservableObject {
 
     /// A heartbeat on screen now (the live EKG card), and its monitor beep.
     @Published var heartbeatShow: HeartbeatShow?
+    /// A tapped notification's destination, until the screens have opened it.
+    @Published var route: AppRoute?
     /// The Apple Watch's Stand-in mode is on: it plays every touch itself, like the bracelet.
     @Published var watchStandIn = false {
         didSet { if watchStandIn != oldValue { Task { await publishPresence(force: true) } } }

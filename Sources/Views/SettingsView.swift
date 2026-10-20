@@ -5,6 +5,8 @@ import SwiftUI
 struct SettingsView: View {
     @EnvironmentObject var model: AppModel
     @EnvironmentObject var store: LocalStore
+    /// Opened by a tapped bracelet notification (low battery).
+    @State private var openBracelet = false
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -90,6 +92,17 @@ struct SettingsView: View {
             DispatchQueue.main.async { proxy.scrollTo("themeCard", anchor: .top) }
         }
         }
+        .navigationDestination(isPresented: $openBracelet) {
+            BraceletSettingsView().screenBackground().navigationBarTitleDisplayMode(.inline)
+        }
+        .onAppear(perform: takeRoute)
+        .onChange(of: model.route) { _ in takeRoute() }
+    }
+
+    private func takeRoute() {
+        guard model.route == .bracelet else { return }
+        model.route = nil
+        DispatchQueue.main.async { openBracelet = true }
     }
 
     @ViewBuilder private func row<Destination: View>(_ title: String, _ icon: String,
