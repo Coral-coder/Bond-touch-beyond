@@ -94,7 +94,15 @@ enum TouchPattern {
         let n = 48
         func resample(_ s: [Double?]) -> [Double?] {
             guard s.count > 1 else { return Array(repeating: s[0], count: n) }
-            return (0..<n).map { i in s[min(s.count - 1, Int(Double(i) / Double(n - 1) * Double(s.count - 1) + 0.5))] }
+            let last = s.count - 1
+            let scale: Double = Double(last) / Double(n - 1)
+            var out: [Double?] = []
+            out.reserveCapacity(n)
+            for i in 0..<n {
+                let x: Double = Double(i) * scale + 0.5
+                out.append(s[min(last, Int(x))])
+            }
+            return out
         }
         func cost(_ x: Double?, _ y: Double?) -> Double {
             switch (x, y) {
