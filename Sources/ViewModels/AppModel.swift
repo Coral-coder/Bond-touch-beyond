@@ -896,9 +896,6 @@ final class AppModel: ObservableObject {
         if changed { TouchArchive.save(history) }
     }
 
-    /// Sends a saved meaning (Touch Language) — by id to an original-app partner, as a
-    /// labelled touch over iCloud. Returns whether it was sent.
-    @discardableResult
     /// The rainbow wave: a light running up and down the bar six times (one bar LED per 50 ms
     /// on a Bond Touch More), going through the whole rainbow as it does.
     static let rainbowWave: [Int] = {
@@ -919,6 +916,9 @@ final class AppModel: ObservableObject {
                                toBondID: toBondID, matchMeaning: false, effect: "rainbow")
     }
 
+    /// Sends a saved meaning (Touch Language) — by id to an original-app partner, as a
+    /// labelled touch over iCloud. Returns whether it was sent.
+    @discardableResult
     func sendMeaning(_ meaning: TouchMeaning, toBondID: String? = nil) async -> Bool {
         await sendTouch(pattern: meaning.pattern, generation: meaning.touchGeneration,
                         colorRGB: meaning.colorRGB, endColorRGB: meaning.endColorRGB,
