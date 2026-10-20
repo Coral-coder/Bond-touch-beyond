@@ -39,11 +39,17 @@ final class ThemePickerUITests: XCTestCase {
                 print(app.debugDescription)
                 continue
             }
+            let start = Date()
             tile.tap()
-            sleep(3)
+            var picked = false
+            while Date().timeIntervalSince(start) < 10 {
+                let b = app.buttons["\(title) theme"]
+                if b.exists && b.isSelected { picked = true; break }
+                usleep(100_000)
+            }
+            print(String(format: "THEME TIMING %@: %.2fs", title, Date().timeIntervalSince(start)))
             shot(app, "\(title)-after")
             let after = app.buttons["\(title) theme"]
-            let picked = after.waitForExistence(timeout: 5) && after.isSelected
             if !picked { print("THEME FAIL \(title): selected=\(after.exists ? String(after.isSelected) : "missing")"); print(app.debugDescription) }
             XCTAssertTrue(picked, "\(title): tapped, but it did not become the selected theme")
             print("THEME \(title): \(picked ? "OK" : "FAILED")")

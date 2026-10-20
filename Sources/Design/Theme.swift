@@ -703,13 +703,16 @@ struct BubbleSky: View {
 }
 
 /// The Bubble theme's rising bubbles on their own, so they can float over a background photo.
+/// Drawn on the GPU (`drawingGroup`) at a modest frame rate, and still with Reduce Motion or
+/// Low Power Mode, so the animation never competes with taps.
 struct BubbleParticles: View {
     var animated = true
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         Group {
-            if animated {
-                TimelineView(.animation(minimumInterval: 1 / 30)) { ctx in canvas(ctx.date.timeIntervalSinceReferenceDate) }
+            if animated && !reduceMotion && !ProcessInfo.processInfo.isLowPowerModeEnabled {
+                TimelineView(.animation(minimumInterval: 1 / 24)) { ctx in canvas(ctx.date.timeIntervalSinceReferenceDate) }
             } else {
                 canvas(40)
             }
@@ -720,7 +723,7 @@ struct BubbleParticles: View {
     private func canvas(_ t: Double) -> some View {
         Canvas { g, size in
             var rng = SeededRandom(seed: 21)
-            for _ in 0..<22 {
+            for _ in 0..<16 {
                 let r = CGFloat(rng.next() * 30 + 8)
                 let speed = rng.next() * 18 + 10
                 let x0 = CGFloat(rng.next()) * size.width
@@ -731,6 +734,7 @@ struct BubbleParticles: View {
                 AquaGloss.bubble(&g, center: CGPoint(x: x, y: y), radius: r)
             }
         }
+        .drawingGroup()
     }
 }
 
@@ -750,44 +754,55 @@ struct RainOnGlass: View {
     }
 }
 
-/// The Raindrop theme's drops on their own, so they can sit on a background photo too.
+/// The Raindrop theme's drops on their own, so they can sit on a background photo too. The
+/// resting drops are drawn once; only the few running down the glass move (on the GPU).
 struct RainParticles: View {
     var animated = true
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        Group {
-            if animated {
-                TimelineView(.animation(minimumInterval: 1 / 20)) { ctx in canvas(ctx.date.timeIntervalSinceReferenceDate) }
+        ZStack {
+            resting
+            if animated && !reduceMotion && !ProcessInfo.processInfo.isLowPowerModeEnabled {
+                TimelineView(.animation(minimumInterval: 1 / 30)) { ctx in running(ctx.date.timeIntervalSinceReferenceDate) }
             } else {
-                canvas(12)
+                running(12)
             }
         }
         .allowsHitTesting(false)
     }
 
-    private func canvas(_ t: Double) -> some View {
+    /// Drops resting on the glass: they never move, so they're drawn once.
+    private var resting: some View {
         Canvas { g, size in
-                var rng = SeededRandom(seed: 9)
-                // Drops resting on the glass.
-                for _ in 0..<46 {
-                    let r = CGFloat(rng.next() * 7 + 2.5)
-                    let p = CGPoint(x: CGFloat(rng.next()) * size.width, y: CGFloat(rng.next()) * size.height)
-                    AquaGloss.drop(&g, center: p, radius: r)
-                }
-                // A few running down, leaving a faint trail.
-                for i in 0..<4 {
-                    let x = CGFloat(rng.next()) * size.width
-                    let speed = rng.next() * 40 + 30
-                    let y = CGFloat((t * speed + Double(i) * 400).truncatingRemainder(dividingBy: Double(size.height + 60))) - 30
-                    var trail = Path()
-                    trail.move(to: CGPoint(x: x, y: max(0, y - 90)))
-                    trail.addLine(to: CGPoint(x: x, y: y))
-                    g.stroke(trail, with: .linearGradient(Gradient(colors: [.clear, .white.opacity(0.35)]),
-                                                          startPoint: CGPoint(x: x, y: y - 90), endPoint: CGPoint(x: x, y: y)),
-                             lineWidth: 2.5)
-                    AquaGloss.drop(&g, center: CGPoint(x: x, y: y), radius: 6)
-                }
+            var rng = SeededRandom(seed: 9)
+            for _ in 0..<46 {
+                let r = CGFloat(rng.next() * 7 + 2.5)
+                let p = CGPoint(x: CGFloat(rng.next()) * size.width, y: CGFloat(rng.next()) * size.height)
+                AquaGloss.drop(&g, center: p, radius: r)
+            }
         }
+        .drawingGroup()
+    }
+
+    /// A few running down, leaving a faint trail.
+    private func running(_ t: Double) -> some View {
+        Canvas { g, size in
+            var rng = SeededRandom(seed: 77)
+            for i in 0..<4 {
+                let x = CGFloat(rng.next()) * size.width
+                let speed = rng.next() * 40 + 30
+                let y = CGFloat((t * speed + Double(i) * 400).truncatingRemainder(dividingBy: Double(size.height + 60))) - 30
+                var trail = Path()
+                trail.move(to: CGPoint(x: x, y: max(0, y - 90)))
+                trail.addLine(to: CGPoint(x: x, y: y))
+                g.stroke(trail, with: .linearGradient(Gradient(colors: [.clear, .white.opacity(0.35)]),
+                                                      startPoint: CGPoint(x: x, y: y - 90), endPoint: CGPoint(x: x, y: y)),
+                         lineWidth: 2.5)
+                AquaGloss.drop(&g, center: CGPoint(x: x, y: y), radius: 6)
+            }
+        }
+        .drawingGroup()
     }
 }
 
