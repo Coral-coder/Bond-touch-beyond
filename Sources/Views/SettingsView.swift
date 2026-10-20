@@ -835,8 +835,11 @@ private struct ThemePickerCard: View {
                 .background(GlassBackground(shape: RoundedRectangle(cornerRadius: 12, style: .continuous), style: style))
                 .padding(12)
             }
+            .frame(maxWidth: .infinity)
             .frame(height: 96)
             .clipShape(shape)
+            // Tappable exactly where the tile is drawn, and nowhere else.
+            .contentShape(shape)
             .overlay(shape.stroke(selected ? Theme.accent : Theme.ink.opacity(0.15), lineWidth: selected ? 3 : 1))
             .environment(\.colorScheme, style.isLight ? .light : .dark)
             HStack(spacing: 4) {

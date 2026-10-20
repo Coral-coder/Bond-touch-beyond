@@ -352,18 +352,24 @@ struct ThemeBackdrop: View {
 
     var body: some View {
         let glow = ThemeTints.tint(for: style).map { Color(rgbInt: $0) }
-        switch style {
-        case .aero: AeroSky(glow: glow)
-        case .neon: NeonNight(glow: glow)
-        case .pastel: PastelHaze(glow: glow)
-        case .mono: Color(rgbInt: 0xF4F3EF)
-        case .aurora: AuroraSky(glow: glow)
-        case .paper: RuledPaper()
-        case .chalk: Chalkboard()
-        case .bubble: BubbleSky(glow: glow, animated: animated)
-        case .raindrop: RainOnGlass(glow: glow, animated: animated)
-        case .citrus: CitrusSun(glow: glow)
+        Group {
+            switch style {
+            case .aero: AeroSky(glow: glow)
+            case .neon: NeonNight(glow: glow)
+            case .pastel: PastelHaze(glow: glow)
+            case .mono: Color(rgbInt: 0xF4F3EF)
+            case .aurora: AuroraSky(glow: glow)
+            case .paper: RuledPaper()
+            case .chalk: Chalkboard()
+            case .bubble: BubbleSky(glow: glow, animated: animated)
+            case .raindrop: RainOnGlass(glow: glow, animated: animated)
+            case .citrus: CitrusSun(glow: glow)
+            }
         }
+        // Pure decoration: some backdrops draw well past their edges (the citrus slices, the
+        // aero blooms), and if they took touches they'd swallow taps meant for whatever sits
+        // next to them — in the theme picker that was the Bubble and Raindrop tiles.
+        .allowsHitTesting(false)
     }
 }
 
