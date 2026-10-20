@@ -63,7 +63,14 @@ actor CloudRelay {
     /// Made on first use, not at launch: demo mode (an unsigned simulator build with no iCloud
     /// entitlement) never touches iCloud, and creating the container there stops the app.
     private lazy var container = CKContainer(identifier: containerIdentifier)
-    private var db: CKDatabase { container.publicCloudDatabase }
+    private var db: CKDatabase {
+        get throws {
+            if Self.offline { throw CKError(.notAuthenticated) }
+            return container.publicCloudDatabase
+        }
+    }
+    /// Demo mode (screenshots in the unsigned simulator build) never talks to iCloud.
+    private static let offline = ProcessInfo.processInfo.arguments.contains("-demo")
     /// Change tag last seen per record, so an unchanged heartbeat/profile isn't re-reported.
     private var seenTags: [String: String] = [:]
     /// Photo hash last downloaded / uploaded per bond, so the photo moves only when it changes.
@@ -88,10 +95,13 @@ actor CloudRelay {
 
     // MARK: - Account
 
-    func currentUserID() async throws -> String { try await container.userRecordID().recordName }
+    func currentUserID() async throws -> String {
+        if Self.offline { throw CKError(.notAuthenticated) }
+        return try await container.userRecordID().recordName
+    }
 
     func accountStatusMessage() async -> String? {
-        let status = (try? await container.accountStatus()) ?? .couldNotDetermine
+        let status = Self.offline ? .couldNotDetermine : ((try? await container.accountStatus()) ?? .couldNotDetermine)
         switch status {
         case .available: return nil
         case .noAccount:
