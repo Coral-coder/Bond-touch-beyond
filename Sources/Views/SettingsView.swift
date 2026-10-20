@@ -37,6 +37,7 @@ struct SettingsView: View {
                     row("Bond Heart", "") { BondHeartView() }
                     row("What's new", "") { WhatsNewView() }
                     row("Tutorials", "") { HelpView() }
+                    FeatureTourRow()
                     row("Do not disturb", "") { DoNotDisturbView() }
                     row("My people", "") { PeopleView().navigationTitle("My people") }
                     row("Private Space", "") { PrivateSpaceView() }

@@ -21,6 +21,9 @@ struct RootView: View {
     @AppStorage(ThemeTints.key) private var themeTints = ""
     @State private var keyboardUp = false
     @State private var showWhatsNew = false
+    /// The feature tour has been seen (or skipped); until then it opens once the profile is set
+    /// up, after What's new is closed.
+    @AppStorage(FeatureTour.seenKey) private var walkthroughSeen = false
 
     var body: some View {
         ZStack {
@@ -53,6 +56,10 @@ struct RootView: View {
                     recovery.pendingImport = nil
                 }
             }
+        }
+        .fullScreenCover(isPresented: Binding(get: { store.profile.isComplete && !walkthroughSeen && !showWhatsNew && !AppModel.isDemo },
+                                              set: { if !$0 { walkthroughSeen = true } })) {
+            FeatureTour { walkthroughSeen = true }
         }
         .preferredColorScheme(Theme.colorScheme)
         .tint(Theme.accent)
