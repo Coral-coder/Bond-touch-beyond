@@ -21,6 +21,16 @@ struct WhatsNewView: View {
     /// Newest first. Add to the top for each build; trim when it no longer needs to go back to 40.
     static let sections: [Section] = [
         Section(title: "This update", items: [
+            Item(icon: "hand.tap.fill", title: "Feel what you send",
+                 detail: "The phone buzzes under your finger while you draw a touch — sharper toward the end of the bar — and knocks twice when it's sent."),
+            Item(icon: "applewatch.radiowaves.left.and.right", title: "Watch notifications you notice",
+                 detail: "The chime and a medium-strong buzz, then the touch itself in its own rhythm, driven by the app."),
+            Item(icon: "waveform.path.ecg", title: "Heartbeats you feel, not hear",
+                 detail: "No more beep: heartbeats are haptics only, and draw like a heart monitor as they play — on the card too."),
+            Item(icon: "scope", title: "Touch Language recognises your touches",
+                 detail: "A touch with the same general shape as a saved one now counts as it — a bit early, late, faster or slower is fine."),
+            Item(icon: "pencil.and.scribble", title: "Edit saved touches",
+                 detail: "Tap a saved touch (or its pencil) to change its name, emoji and colours, and draw its pattern with your finger."),
             Item(icon: "arrow.up.forward.app.fill", title: "Notifications open the right place",
                  detail: "Tapping a notification opens what it's about, for the partner it's from: the chat, the game, the to-do list, the note, your dates, Stress & mood, or Home for a touch."),
             Item(icon: "bell.slash.fill", title: "Quiet while you're in the app",

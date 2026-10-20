@@ -134,9 +134,18 @@ struct MeaningsView: View {
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel(meaning.favourite == true ? "Remove \(meaning.label) from favourites" : "Favourite \(meaning.label)")
+                        Button { editing = meaning } label: {
+                            Image(systemName: "pencil.circle.fill")
+                                .font(.system(size: 18, weight: .semibold)).foregroundStyle(Theme.subtitle)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Edit \(meaning.label)")
                     }
+                    // Tap the touch to edit it: its name, emoji, colours, and draw its pattern.
                     TouchViz(pattern: meaning.pattern, generation: meaning.touchGeneration,
                              colorRGB: meaning.colorRGB, endColorRGB: meaning.endColorRGB)
+                        .contentShape(Rectangle())
+                        .onTapGesture { editing = meaning }
                 }
                 Spacer()
                 Button {
@@ -200,9 +209,13 @@ private struct EditMeaningSheet: View {
                     ColorPicker("Start", selection: $start, supportsOpacity: false)
                     ColorPicker("End", selection: $end, supportsOpacity: false)
                 }
-                Section("Pattern") {
-                    TouchViz(pattern: pattern, generation: generation, colorRGB: start.rgbInt, endColorRGB: end.rgbInt, height: 44)
-                    Button { redrawing = true } label: { Label("Edit the pattern", systemImage: "scribble") }
+                Section {
+                    TouchViz(pattern: pattern, generation: generation, colorRGB: start.rgbInt, endColorRGB: end.rgbInt, height: 64)
+                        .contentShape(Rectangle())
+                        .onTapGesture { redrawing = true }
+                    Button { redrawing = true } label: { Label("Draw the pattern", systemImage: "scribble.variable") }
+                } header: { Text("Pattern") } footer: {
+                    Text("Draw it with your finger: left to right is time, up and down is where on the bar. Your edit opens on the current pattern.")
                 }
             }
             .navigationTitle("Edit touch")

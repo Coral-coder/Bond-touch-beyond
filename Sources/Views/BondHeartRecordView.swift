@@ -171,7 +171,6 @@ struct CustomizeHeartbeatView: View {
     @State private var photoItem: PhotosPickerItem?
     @State private var photo: UIImage?
     @State private var previewStart: Date?
-    @State private var sound = HeartbeatSound()
     @State private var saved: SavedHeartbeat?
     @State private var message: String?
     @State private var busy = false
@@ -271,7 +270,7 @@ struct CustomizeHeartbeatView: View {
         let start = Date()
         previewStart = start
         let seconds = min(20, max(5, draft.seconds))
-        sound.play(bpm: draft.bpm, seconds: seconds, start: start)
+        model.haptics.playHeartbeat(bpm: draft.bpm, seconds: seconds)
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
             if previewStart == start { previewStart = nil }
@@ -280,7 +279,7 @@ struct CustomizeHeartbeatView: View {
 
     private func stopPreview() {
         previewStart = nil
-        sound.stop()
+        model.haptics.stop()
     }
 }
 

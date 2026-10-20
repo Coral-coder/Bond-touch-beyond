@@ -115,7 +115,7 @@ struct BentoHome: View {
                     }
                 }
                 if let beat, let bpm = beat.heartbeatBPM {
-                    EKGView(bpm: bpm, colorRGB: beat.colorRGB, lineWidth: 2.2).frame(height: 40)
+                    EKGView(bpm: bpm, colorRGB: beat.colorRGB, start: model.heartbeatStart(for: beat), lineWidth: 2.2).frame(height: 40)
                 } else {
                     Text("None yet — send yours →").font(Theme.font(13, .semibold)).foregroundStyle(Theme.title)
                         .frame(height: 40)

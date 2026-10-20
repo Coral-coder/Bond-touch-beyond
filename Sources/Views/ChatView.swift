@@ -201,7 +201,7 @@ struct ChatView: View {
                 HStack(spacing: 8) {
                     Group {
                         if let bpm = t.heartbeatBPM {
-                            EKGView(bpm: bpm, colorRGB: t.colorRGB, lineWidth: 2).frame(height: 40)
+                            EKGView(bpm: bpm, colorRGB: t.colorRGB, start: model.heartbeatStart(for: t), lineWidth: 2).frame(height: 40)
                         } else {
                             TouchViz(pattern: t.pattern, generation: t.generation, colorRGB: t.colorRGB,
                                      endColorRGB: t.endColorRGB, height: 40)

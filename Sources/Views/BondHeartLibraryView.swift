@@ -85,7 +85,6 @@ private struct HeartbeatDetail: View {
     @State private var photo: UIImage?
     @State private var loaded = false
     @State private var playStart: Date?
-    @State private var sound = HeartbeatSound()
     @State private var message: String?
     @State private var busy = false
     @State private var confirmDelete = false
@@ -290,7 +289,6 @@ private struct HeartbeatDetail: View {
         let start = Date()
         playStart = start
         let seconds = min(20, max(5, hb.seconds))
-        sound.play(bpm: hb.bpm, seconds: seconds, start: start)
         model.haptics.playHeartbeat(bpm: hb.bpm, seconds: seconds)
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
@@ -300,7 +298,7 @@ private struct HeartbeatDetail: View {
 
     private func stop() {
         playStart = nil
-        sound.stop()
+        model.haptics.stop()
     }
 
     private func run(_ work: @escaping () async -> Void) {

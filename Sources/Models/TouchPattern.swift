@@ -56,65 +56,80 @@ enum TouchPattern {
         return out
     }
 
-    /// How alike two generation-3 touches are, 0…1: both are resampled to a common length
-    /// and compared position by position (a finger within one bar position counts as a
-    /// match, as does "no finger" on both). Used to spot a touch that matches a saved
-    /// meaning so it sends in that meaning's colour.
-    static func similarity(_ a: [Int], _ b: [Int]) -> Double {
-        let ta = trimmed(a), tb = trimmed(b)
-        guard !ta.isEmpty, !tb.isEmpty else { return 0 }
-        let n = 40
-        func resample(_ s: [Int]) -> [Int] {
-            guard s.count > 1 else { return Array(repeating: s[0], count: n) }
-            return (0..<n).map { i in s[min(s.count - 1, Int((Double(i) / Double(n - 1)) * Double(s.count - 1) + 0.5))] }
-        }
-        let ra = resample(ta), rb = resample(tb)
-        var match = 0
-        for i in 0..<n {
-            let fa = fingers(in: ra[i]).first, fb = fingers(in: rb[i]).first
-            if fa == nil, fb == nil { match += 1 }
-            else if let fa, let fb, abs(fa - fb) <= 1 { match += 1 }
-        }
-        return Double(match) / Double(n)
-    }
-
-    /// How alike two touches are, 0…1, in any mix of formats. Two touch-bar touches compare
-    /// timing *and* where on the bar (`similarity`); anything involving an on/off rhythm
-    /// (a gen-2 bracelet) compares the rhythm: same number of presses, similar length, and
-    /// presses lining up over time.
+    /// How alike two touches are, 0…1, in any mix of formats — "the same general shape",
+    /// never needing a perfect copy. Each touch becomes a line over time (where the finger is
+    /// on the bar, or nothing); the two lines are lined up by dynamic time warping, so being a
+    /// little early, late, faster or slower in places costs little, and positions only need to
+    /// be close (within 3 of the 9 count partly). Then a light penalty for a different overall
+    /// length or number of presses. A gen-2 on/off rhythm has no positions, so it's compared
+    /// by contact only.
     static func matchScore(_ a: [Int], generation ga: Int, _ b: [Int], generation gb: Int) -> Double {
-        if ga == 3, gb == 3 { return similarity(a, b) }
-        let ca = contact(ga == 3 ? a : samples(fromOnOff: a))
-        let cb = contact(gb == 3 ? b : samples(fromOnOff: b))
-        return rhythmSimilarity(ca, cb)
+        let positional = ga == 3 && gb == 3
+        let la = line(ga == 3 ? a : samples(fromOnOff: a), positions: positional)
+        let lb = line(gb == 3 ? b : samples(fromOnOff: b), positions: positional)
+        return shapeScore(la, lb)
     }
 
-    /// The score a touch needs to count as a saved meaning.
-    static func matchThreshold(_ ga: Int, _ gb: Int) -> Double { ga == 3 && gb == 3 ? 0.85 : 0.8 }
+    /// Same as `matchScore` for two touch-bar touches.
+    static func similarity(_ a: [Int], _ b: [Int]) -> Double { matchScore(a, generation: 3, b, generation: 3) }
 
-    /// Finger down / up per 50 ms sample, trimmed to the touch.
-    private static func contact(_ samples: [Int]) -> [Bool] {
-        trimmed(samples).map { !fingers(in: $0).isEmpty }
+    /// The score a touch needs to count as a saved meaning (about 75%: the same general shape).
+    static func matchThreshold(_ ga: Int, _ gb: Int) -> Double { 0.72 }
+
+    /// A touch as a line over time: the finger's position on the bar per 50 ms sample (two
+    /// fingers: their middle), nil where no finger is down. Without `positions`, every
+    /// contact is the same height (a rhythm).
+    private static func line(_ samples: [Int], positions: Bool) -> [Double?] {
+        trimmed(samples).map { s in
+            let f = fingers(in: s)
+            guard !f.isEmpty else { return nil }
+            return positions ? Double(f.reduce(0, +)) / Double(f.count) : 0
+        }
+    }
+
+    private static func shapeScore(_ a: [Double?], _ b: [Double?]) -> Double {
+        guard !a.isEmpty, !b.isEmpty else { return 0 }
+        let ratio = Double(min(a.count, b.count)) / Double(max(a.count, b.count))
+        guard ratio >= 0.5 else { return 0 }
+        let n = 48
+        func resample(_ s: [Double?]) -> [Double?] {
+            guard s.count > 1 else { return Array(repeating: s[0], count: n) }
+            return (0..<n).map { i in s[min(s.count - 1, Int(Double(i) / Double(n - 1) * Double(s.count - 1) + 0.5))] }
+        }
+        func cost(_ x: Double?, _ y: Double?) -> Double {
+            switch (x, y) {
+            case (nil, nil): return 0
+            case let (x?, y?): return min(1, abs(x - y) / 3)
+            default: return 1
+            }
+        }
+        let ra = resample(a), rb = resample(b)
+        // Dynamic time warping within a band (a fifth of the touch), tracking path length.
+        let band = max(4, n / 5)
+        let inf = Double.greatestFiniteMagnitude
+        var d = Array(repeating: Array(repeating: inf, count: n + 1), count: n + 1)
+        var len = Array(repeating: Array(repeating: 0, count: n + 1), count: n + 1)
+        d[0][0] = 0
+        for i in 1...n {
+            for j in max(1, i - band)...min(n, i + band) {
+                var best = (d[i - 1][j - 1], len[i - 1][j - 1])
+                if d[i - 1][j] < best.0 { best = (d[i - 1][j], len[i - 1][j]) }
+                if d[i][j - 1] < best.0 { best = (d[i][j - 1], len[i][j - 1]) }
+                d[i][j] = best.0 + cost(ra[i - 1], rb[j - 1])
+                len[i][j] = best.1 + 1
+            }
+        }
+        let shape = 1 - d[n][n] / Double(max(1, len[n][n]))
+        var score = shape * (0.85 + 0.15 * ratio)
+        let pressGap = abs(presses(a.map { $0 != nil }) - presses(b.map { $0 != nil }))
+        if pressGap == 1 { score *= 0.9 } else if pressGap > 1 { score *= 0.6 }
+        return score
     }
 
     private static func presses(_ c: [Bool]) -> Int {
         var count = 0, prev = false
         for on in c { if on && !prev { count += 1 }; prev = on }
         return count
-    }
-
-    private static func rhythmSimilarity(_ a: [Bool], _ b: [Bool]) -> Double {
-        guard !a.isEmpty, !b.isEmpty, presses(a) == presses(b) else { return 0 }
-        let lengthRatio = Double(min(a.count, b.count)) / Double(max(a.count, b.count))
-        guard lengthRatio >= 0.6 else { return 0 }
-        let n = 40
-        func resample(_ s: [Bool]) -> [Bool] {
-            guard s.count > 1 else { return Array(repeating: s[0], count: n) }
-            return (0..<n).map { i in s[min(s.count - 1, Int((Double(i) / Double(n - 1)) * Double(s.count - 1) + 0.5))] }
-        }
-        let ra = resample(a), rb = resample(b)
-        let agreement = Double((0..<n).filter { ra[$0] == rb[$0] }.count) / Double(n)
-        return agreement * (0.8 + 0.2 * lengthRatio)
     }
 
     /// The finger positions in one sample (empty when no finger is down).

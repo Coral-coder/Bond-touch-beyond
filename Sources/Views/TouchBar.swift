@@ -46,7 +46,18 @@ final class TouchBarRecorder: ObservableObject {
         if locked && !recording { fingers.positions = []; return }
         let wasEmpty = fingers.positions.isEmpty
         fingers.positions = positions
-        if !positions.isEmpty, wasEmpty { haptic.impactOccurred(intensity: 0.6); stepHaptic.prepare() }
+        // Felt while drawing: a buzz held under the finger that follows it along the bar.
+        if let top = positions.max() {
+            if wasEmpty {
+                haptic.impactOccurred(intensity: 0.8)
+                PhoneHaptics.shared.holdBegin(position: Double(top), fingers: positions.count)
+                stepHaptic.prepare()
+            } else {
+                PhoneHaptics.shared.holdUpdate(position: Double(top), fingers: positions.count)
+            }
+        } else if !wasEmpty {
+            PhoneHaptics.shared.holdEnd()
+        }
         if !positions.isEmpty, !recording { start(at: time) }
         guard recording else { return }
         let bar = positions.prefix(2).map { Int(($0 * CGFloat(TouchPattern.positions - 1)).rounded()) }
@@ -100,6 +111,7 @@ final class TouchBarRecorder: ObservableObject {
     }
 
     private func stop() {
+        PhoneHaptics.shared.holdEnd()
         link?.invalidate()
         link = nil
         recording = false

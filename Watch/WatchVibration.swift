@@ -1,6 +1,22 @@
+import AVFoundation
 import Foundation
 import SwiftUI
 import WatchKit
+
+/// The app's notification chime (a kiss and a soft bell, bundled in the watch app), played
+/// through the watch speaker. Follows the watch's Silent mode like any notification sound.
+final class Chime {
+    static let shared = Chime()
+    private var player: AVAudioPlayer?
+
+    func play(_ name: String = "touch-chime") {
+        guard let url = Bundle.main.url(forResource: name, withExtension: "wav") else { return }
+        try? AVAudioSession.sharedInstance().setCategory(.ambient, options: [.mixWithOthers])
+        try? AVAudioSession.sharedInstance().setActive(true)
+        player = try? AVAudioPlayer(contentsOf: url)
+        player?.play()
+    }
+}
 
 /// Vibrates the watch in a touch's rhythm with no tone.
 ///
@@ -184,6 +200,24 @@ enum WatchVibration {
         guard now - lastTick >= 0.06 else { return }
         lastTick = now
         playWithVibration(vibrateID, nil, ["VibePattern": [true, 30] as [Any], "Intensity": 0.6] as NSDictionary)
+    }
+
+    /// A notification arriving on the wrist: the app's chime out loud (not for heartbeats) and a
+    /// medium-strong buzz (300 ms at 0.8), then — after a short breath — the touch itself in its own rhythm.
+    /// Driven here, not left to the system, so it's the same every time.
+    static func notify(_ t: WatchTouch?) {
+        // Heartbeats are felt, never heard.
+        if t?.bpm == nil { Chime.shared.play() }
+        if let playWithVibration {
+            stopSound?(vibrateID)
+            playWithVibration(vibrateID, nil, ["VibePattern": [true, 300] as [Any], "Intensity": 0.8] as NSDictionary)
+        } else if let playSound {
+            playSound(vibrateID)
+        } else {
+            WKInterfaceDevice.current().play(.notification)
+        }
+        guard let t else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.75) { play(t) }
     }
 
     /// One firm silent buzz (a touch notification arriving): 180 ms at full intensity, or the

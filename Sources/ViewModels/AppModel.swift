@@ -136,7 +136,7 @@ final class AppModel: ObservableObject {
 
     let bracelet = BraceletManager()
     /// Vibrates the phone like the bracelet would, when the bracelet isn't connected.
-    let haptics = PhoneHaptics()
+    let haptics = PhoneHaptics.shared
 
     /// Plays a partner's touch on the bracelet — or, if the bracelet isn't connected (or the
     /// touch doesn't reach it), on the phone's vibration motor in the same rhythm. In the
@@ -163,11 +163,11 @@ final class AppModel: ObservableObject {
     }
     /// Counts double taps on the user's bracelet (Private Space unlocks on one).
     @Published var braceletDoubleTaps = 0
-    private let heartbeatSound = HeartbeatSound()
 
     /// Plays a heartbeat: on a Bond Touch More the band glows between beats and each beat is
     /// a spike up and down the bar (the only part that vibrates); on other bracelets a pulse
-    /// per beat; with no bracelet, on the phone. On screen it's a live EKG with a beep per beat.
+    /// per beat. With the app open the phone beats it too, in haptics only (no sound), while
+    /// a live EKG draws it like a heart monitor — on the card and in its own panel.
     func feelHeartbeat(_ touch: TouchMessage, bpm: Int) {
         let foreground = UIApplication.shared.applicationState == .active
         let seconds = 5.0
@@ -175,16 +175,14 @@ final class AppModel: ObservableObject {
             // Every bracelet beats it from the phone; a Bond Touch More glows between beats
             // and only buzzes on each beat's spike.
             bracelet.playHeartbeat(bpm: bpm, seconds: seconds, colorRGB: touch.colorRGB)
-        } else if foreground {
-            haptics.playHeartbeat(bpm: bpm, seconds: seconds)
         }
+        if foreground { haptics.playHeartbeat(bpm: bpm, seconds: seconds) }
         guard foreground else { return }
         let mine = touch.senderID == myUserID || touch.senderID == ChatMessage.legacySelf
         let name = mine ? "Your" : (partners.first { $0.id == touch.bondID }?.displayName ?? "Partner")
         let show = HeartbeatShow(bpm: bpm, colorRGB: touch.colorRGB, name: mine ? "Your" : name,
-                                 start: Date(), seconds: seconds)
+                                 start: Date(), seconds: seconds, touchID: touch.id)
         heartbeatShow = show
-        heartbeatSound.play(bpm: bpm, seconds: seconds, start: show.start)
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: UInt64((seconds + 0.6) * 1_000_000_000))
             if self.heartbeatShow?.id == show.id { self.heartbeatShow = nil }
@@ -193,7 +191,11 @@ final class AppModel: ObservableObject {
 
     func dismissHeartbeat() {
         heartbeatShow = nil
-        heartbeatSound.stop()
+    }
+
+    /// When the heartbeat `touch` started playing, while it's playing (its EKG draws live).
+    func heartbeatStart(for touch: TouchMessage) -> Date? {
+        heartbeatShow?.touchID == touch.id ? heartbeatShow?.start : nil
     }
 
     /// A heartbeat as a touch: the EKG on the Bond Touch More bar, tagged with its BPM.
@@ -793,6 +795,8 @@ final class AppModel: ObservableObject {
                                  meaningLabel: meaning?.label, meaningEmoji: meaning?.emoji,
                                  heartbeatBPM: heartbeatBPM)
         touch.delivery = .sending
+        // Felt leaving: a firm double knock (heartbeats have their own beat).
+        if heartbeatBPM == nil { haptics.sent() }
         recordTouch(touch)          // listed straight away as "Sending…"
         return await transmit(touch, bond: bond, meaning: meaning)
     }

@@ -84,4 +84,6 @@ struct HeartbeatShow: Identifiable, Equatable {
     let name: String
     let start: Date
     let seconds: Double
+    /// The heartbeat touch it's playing, so its card in the history can draw along live.
+    var touchID: UUID? = nil
 }

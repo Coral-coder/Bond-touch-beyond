@@ -9,8 +9,13 @@ import UIKit
 /// the partner's push notification buzzes the phone instead, and the bracelet plays the touch
 /// when it reconnects.
 final class PhoneHaptics {
+    /// One engine for the app (the model's, and the touch bar's while you draw).
+    static let shared = PhoneHaptics()
+
     private var engine: CHHapticEngine?
     private var player: CHHapticPatternPlayer?
+    /// The buzz held while a finger is on the touch bar.
+    private var hold: CHHapticAdvancedPatternPlayer?
 
     private var canPlay: Bool { UIApplication.shared.applicationState == .active }
 
@@ -118,6 +123,50 @@ final class PhoneHaptics {
                       parameters: [CHHapticEventParameter(parameterID: .hapticIntensity, value: intensity),
                                    CHHapticEventParameter(parameterID: .hapticSharpness, value: sharpness)],
                       relativeTime: time, duration: duration)
+    }
+
+    /// Stops whatever is playing (a heartbeat cut short).
+    func stop() {
+        try? player?.stop(atTime: CHHapticTimeImmediate)
+    }
+
+    /// A touch just went: a firm double knock, so you feel it leave.
+    func sent() {
+        play([Self.buzz(at: 0, duration: 0.06, intensity: 1.0, sharpness: 0.7),
+              Self.buzz(at: 0.11, duration: 0.09, intensity: 0.8, sharpness: 0.5)])
+    }
+
+    // MARK: - While drawing
+
+    /// A finger landed on the touch bar: a continuous buzz starts, as the partner will feel it.
+    /// `position` 0…1 along the bar sets its sharpness; `fingers` (1 or 2) its strength.
+    func holdBegin(position: Double, fingers: Int) {
+        guard canPlay, CHHapticEngine.capabilitiesForHardware().supportsHaptics, let engine = startedEngine() else { return }
+        holdEnd()
+        // Long enough for the whole touch window; stopped when the finger lifts.
+        let event = Self.buzz(at: 0, duration: 30, intensity: 1, sharpness: 0.5)
+        guard let pattern = try? CHHapticPattern(events: [event], parameters: []),
+              let p = try? engine.makeAdvancedPlayer(with: pattern) else { return }
+        hold = p
+        try? p.start(atTime: CHHapticTimeImmediate)
+        holdUpdate(position: position, fingers: fingers)
+    }
+
+    /// The finger moved: the buzz follows it — sharper toward the end of the bar, stronger
+    /// with two fingers.
+    func holdUpdate(position: Double, fingers: Int) {
+        guard let hold else { return }
+        let intensity = Float(fingers > 1 ? 1.0 : 0.55 + 0.35 * position)
+        let sharpness = Float(0.15 + 0.7 * position)
+        try? hold.sendParameters([CHHapticDynamicParameter(parameterID: .hapticIntensityControl, value: intensity, relativeTime: 0),
+                                  CHHapticDynamicParameter(parameterID: .hapticSharpnessControl, value: sharpness, relativeTime: 0)],
+                                 atTime: CHHapticTimeImmediate)
+    }
+
+    /// The finger lifted.
+    func holdEnd() {
+        try? hold?.stop(atTime: CHHapticTimeImmediate)
+        hold = nil
     }
 
     // MARK: - Engine

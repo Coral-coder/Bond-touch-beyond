@@ -428,14 +428,13 @@ extension AppModel {
     /// The saved meaning a touch closely matches, if any — so a touch that's really
     /// "Love you" (made on the screen, the bracelet or the watch) is treated as it.
     func matchingMeaning(pattern: [Int], generation: Int, in list: [TouchMeaning]) -> TouchMeaning? {
-        var best: (TouchMeaning, Double)?
-        for m in list where !m.pattern.isEmpty {
-            let score = TouchPattern.matchScore(pattern, generation: generation, m.pattern, generation: m.touchGeneration)
-            if score >= TouchPattern.matchThreshold(generation, m.touchGeneration), score > (best?.1 ?? 0) {
-                best = (m, score)
-            }
-        }
-        return best?.0
+        let scored = list.filter { !$0.pattern.isEmpty }
+            .map { ($0, TouchPattern.matchScore(pattern, generation: generation, $0.pattern, generation: $0.touchGeneration)) }
+            .sorted { $0.1 > $1.1 }
+        guard let best = scored.first, best.1 >= TouchPattern.matchThreshold(generation, best.0.touchGeneration) else { return nil }
+        // Two saved touches nearly as close as each other: too close to call, so neither.
+        if scored.count > 1, best.1 - scored[1].1 < 0.04 { return nil }
+        return best.0
     }
 
     /// For the touch bar: the selected partner's meaning this touch matches, if any.

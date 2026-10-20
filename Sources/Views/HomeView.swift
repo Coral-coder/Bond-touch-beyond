@@ -526,7 +526,7 @@ struct HomeView: View {
             // The touch fills the whole card, edge to edge.
             Group {
                 if let bpm = touch.heartbeatBPM {
-                    EKGView(bpm: bpm, colorRGB: touch.colorRGB, lineWidth: 3)
+                    EKGView(bpm: bpm, colorRGB: touch.colorRGB, start: model.heartbeatStart(for: touch), lineWidth: 3)
                         .padding(.vertical, 10)
                 } else {
                     TouchViz(pattern: touch.pattern, generation: touch.generation,

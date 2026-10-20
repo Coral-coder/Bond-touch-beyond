@@ -118,12 +118,14 @@ extension LocalStore {
 
 /// A touch drawn: its trace or tap rhythm, or a heartbeat's EKG.
 struct TouchGlyph: View {
+    @EnvironmentObject var model: AppModel
     let touch: TouchMessage
     var height: CGFloat = 40
 
     var body: some View {
         if let bpm = touch.heartbeatBPM {
-            EKGView(bpm: bpm, colorRGB: touch.colorRGB, lineWidth: max(1.6, height * 0.06)).frame(height: height)
+            EKGView(bpm: bpm, colorRGB: touch.colorRGB, start: model.heartbeatStart(for: touch),
+                    lineWidth: max(1.6, height * 0.06)).frame(height: height)
         } else {
             TouchViz(pattern: touch.pattern, generation: touch.generation,
                      colorRGB: touch.colorRGB, endColorRGB: touch.endColorRGB, height: height)
