@@ -30,6 +30,13 @@ struct StressChart: View {
         return end.addingTimeInterval(-span * 3600)...end
     }
 
+    /// The readings the charts draw: all of them when they slide (iOS 17), else only those in
+    /// view — so nothing is drawn past the chart's edges when zoomed in.
+    private var shown: [Point] {
+        if #available(iOS 17.0, *) { return points }
+        return points.filter { domain.contains($0.at) }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
@@ -53,7 +60,7 @@ struct StressChart: View {
             } else {
                 Text("Stress — every reading").font(Theme.font(12, .bold)).foregroundStyle(Theme.subtitle)
                 Chart {
-                    ForEach(points) { p in
+                    ForEach(shown) { p in
                         BarMark(x: .value("Time", p.at), y: .value("Stress", p.stress), width: .fixed(7))
                             .foregroundStyle(Self.color(p.stress))
                             .cornerRadius(3)
@@ -76,9 +83,10 @@ struct StressChart: View {
                     AxisValueLabel(format: .dateTime.hour())
                 } }
                 .frame(height: 150)
+                .clipped()
 
                 Text("HRV (ms) — higher is more rested").font(Theme.font(12, .bold)).foregroundStyle(Theme.subtitle)
-                Chart(points) { p in
+                Chart(shown) { p in
                     LineMark(x: .value("Time", p.at), y: .value("HRV", p.hrv))
                         .foregroundStyle(Theme.accent).interpolationMethod(.catmullRom)
                     PointMark(x: .value("Time", p.at), y: .value("HRV", p.hrv))
@@ -91,6 +99,7 @@ struct StressChart: View {
                     AxisValueLabel(format: .dateTime.hour())
                 } }
                 .frame(height: 120)
+                .clipped()
             }
         }
         .padding(16)
