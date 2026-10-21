@@ -30,6 +30,8 @@ struct LightLabView: View {
     @State private var flip = false
     /// Bond Touch More: vibration level 0 while it plays (experimental), then back.
     @State private var silent = true
+    /// Debug → Experimental light effects: the rainbow wave and the POV tests.
+    @AppStorage("experimentalLights") private var experimental = false
 
     enum Mode: String, CaseIterable, Identifiable {
         case text, heart, smile, wave, morse
@@ -73,10 +75,12 @@ struct LightLabView: View {
                 }
                 Button("Light only — no vibration (1 s)") { lightOnly() }
                     .disabled(gen == nil || gen == .v1)
-                Button("Rainbow wave") { model.feel(model.rainbowWaveTouch()) }
-                    .disabled(gen == nil || gen == .v1)
+                if experimental {
+                    Button("Rainbow wave") { model.feel(model.rainbowWaveTouch()) }
+                        .disabled(gen == nil || gen == .v1)
+                }
             }
-            Section {
+            if experimental { Section {
                 Picker("Pattern", selection: $mode) {
                     ForEach(Mode.allCases) { Text($0.title).tag($0) }
                 }
@@ -108,7 +112,7 @@ struct LightLabView: View {
                 Text(tall
                      ? "Bond Touch More: 9 pixels tall, one per bar LED. Each run of lit LEDs in a column is one 50 ms touch sample, so it's slow — swing slowly, or watch it scroll. Columns run left to right."
                      : "Swing the band quickly in a dark room. Columns run left to right; text is 3 pixels tall (one per LED). Step times under 5 ms reboot a Bond Touch, so they aren't offered.")
-            }
+            } }
             if !note.isEmpty {
                 Section { Text(note).font(.footnote) }
             }

@@ -8,6 +8,7 @@ struct DebugView: View {
     @EnvironmentObject var store: LocalStore
     @ObservedObject private var netLog = NetLog.shared
     @AppStorage(Poly.modeKey) private var polyMode = Poly.Mode.auto.rawValue
+    @AppStorage("experimentalLights") private var experimentalLights = false
     @Environment(\.dismiss) private var dismiss
 
     private var legacyActive: Bool { store.useLegacyFirebase && !store.firebaseAuthToken.isEmpty }
@@ -22,6 +23,10 @@ struct DebugView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
                     section("Bracelet lights") {
+                        Toggle("Experimental light effects (rainbow wave, POV)", isOn: $experimentalLights)
+                            .font(.footnote).tint(Theme.accent)
+                        Text("Parked until the band's firmware can show them well. On: the Rainbow wave card in Touch Language and the POV tests in the Light lab.")
+                            .font(.caption2).foregroundStyle(Theme.subtitle)
                         NavigationLink { LightLabView() } label: {
                             Label("Light lab — light without vibrating, POV text", systemImage: "lightbulb.led.fill")
                                 .font(.footnote)

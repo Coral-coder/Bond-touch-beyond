@@ -4,6 +4,9 @@ import SwiftUI
 /// name and a two-stop colour gradient (start → end), as in the original app. Tap Send to
 /// play it on your partner's bracelet.
 struct MeaningsView: View {
+    /// Debug → Experimental light effects (the rainbow wave), off until the band's firmware
+    /// can show them well.
+    @AppStorage("experimentalLights") private var experimentalLights = false
     @EnvironmentObject var model: AppModel
     @EnvironmentObject var store: LocalStore
     @State private var showAdd = false
@@ -48,7 +51,7 @@ struct MeaningsView: View {
                     }
                     .padding(.top, 8)
 
-                    rainbowCard
+                    if experimentalLights { rainbowCard }
 
                     if model.currentMeanings.isEmpty {
                         Text("You can start adding touches to your Touch Language.")

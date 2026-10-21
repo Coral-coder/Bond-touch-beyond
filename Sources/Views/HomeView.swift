@@ -100,37 +100,44 @@ struct HomeView: View {
     // MARK: Top bar
 
     private var topBar: some View {
-        HStack(spacing: 8) {
-            // Heartbeat, mood and kiss share one pill, so the partners get the room.
+        ZStack {
+            // Two pills of the same width either side — heartbeat and mood on the left, kiss and
+            // the ⋯ menu on the right — so the partner bar sits exactly in the middle.
             HStack(spacing: 0) {
-                heartButton
-                if Feature.stress.isOn {
-                    Button { showMoodCheckIn = true } label: {
-                        Image(systemName: "face.smiling")
-                            .font(.system(size: 17, weight: .semibold)).foregroundStyle(Theme.title)
+                HStack(spacing: 0) {
+                    heartButton
+                    if Feature.stress.isOn {
+                        Button { showMoodCheckIn = true } label: {
+                            Image(systemName: "face.smiling")
+                                .font(.system(size: 17, weight: .semibold)).foregroundStyle(Theme.title)
+                                .frame(width: 38, height: 44)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Mood check-in")
+                    }
+                }
+                .padding(.horizontal, 4)
+                .glass(Capsule())
+                Spacer(minLength: 0)
+                HStack(spacing: 0) {
+                    kissButton
+                    Menu {
+                        Button { editingCards = true } label: { Label("Arrange home cards", systemImage: "square.grid.2x2") }
+                        Button { showPeople = true } label: { Label("People", systemImage: "person.2") }
+                    } label: {
+                        Image(systemName: "ellipsis")
+                            .font(.system(size: 17, weight: .bold))
+                            .foregroundStyle(Theme.title)
                             .frame(width: 38, height: 44)
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Mood check-in")
+                    .accessibilityLabel("More")
                 }
-                kissButton
+                .padding(.horizontal, 4)
+                .glass(Capsule())
             }
-            .padding(.horizontal, 4)
-            .glass(Capsule())
-            Spacer(minLength: 0)
+            // Centred on the screen, clear of both pills.
             PartnerBar()
-            Spacer(minLength: 0)
-            Menu {
-                Button { editingCards = true } label: { Label("Arrange home cards", systemImage: "square.grid.2x2") }
-                Button { showPeople = true } label: { Label("People", systemImage: "person.2") }
-            } label: {
-                Image(systemName: "ellipsis")
-                    .font(.system(size: 17, weight: .bold))
-                    .foregroundStyle(Theme.title)
-                    .frame(width: 44, height: 44)
-                    .glass(Circle())
-            }
-            .accessibilityLabel("More")
+                .padding(.horizontal, 92)
         }
         .padding(.horizontal, 14)
         .padding(.top, 8)
