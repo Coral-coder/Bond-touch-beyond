@@ -611,18 +611,31 @@ final class AppModel: ObservableObject {
         if !force, Date().timeIntervalSince(lastPresencePush) < (moving ? 15 : 120) { return }
         lastPresencePush = Date()
         await refreshMyWeather()
-        await refreshBatteryIfDue()
+        // Health can sit waiting on its permission prompt, so it's read alongside rather than
+        // holding this up; the snapshot goes out again once it has the new reading.
+        if batteryReadDue {
+            Task { if await refreshBatteryIfDue() { await publishPresence(force: true) } }
+        }
         let info = currentPresence()
+        if lastPublished == nil || (lastPublished?.mood == nil) != (info.mood == nil) {
+            NetLog.shared.log(.send, info.mood == nil
+                ? "Mood not shared: nothing logged in 24 h and no Health readings (or sharing is off)"
+                : "Sharing mood with partners")
+        }
         lastPublished = info
         for partner in cloudPartners {
-            try? await relay.sendPresence(info, bond: partner.bond)
+            do {
+                try await relay.sendPresence(info, bond: partner.bond)
+            } catch {
+                NetLog.shared.log(.fail, "iCloud: status not sent to \(partner.displayName)", error.localizedDescription)
+            }
         }
     }
 
     /// Republishes when something worth showing changes: the bracelet connects or drops (also
     /// while the phone is locked — the Bluetooth event wakes the app; partners then know
     /// whether to buzz this phone), its battery moves 5 %, the phone's battery moves 5 %, or
-    /// the phone is plugged in / unplugged.
+    /// the phone is plugged in / unplugged; and re-reads Health when the phone is unlocked.
     private func watchStatusForPresence() {
         UIDevice.current.isBatteryMonitoringEnabled = true
         let center = NotificationCenter.default
@@ -635,6 +648,16 @@ final class AppModel: ObservableObject {
         .debounce(for: .seconds(2), scheduler: DispatchQueue.main)
         .sink { [weak self] in Task { @MainActor in await self?.publishIfStatusChanged() } }
         .store(in: &statusWatch)
+        // Health can't be read while the phone is locked, so read it the moment it's unlocked
+        // (if a reading is due) and send partners the new one.
+        center.publisher(for: UIApplication.protectedDataDidBecomeAvailableNotification)
+            .sink { [weak self] _ in
+                Task { @MainActor in
+                    guard let self, await self.refreshBatteryIfDue() else { return }
+                    await self.publishPresence(force: true)
+                }
+            }
+            .store(in: &statusWatch)
     }
 
     private func publishIfStatusChanged() async {
@@ -1099,6 +1122,12 @@ final class AppModel: ObservableObject {
             if let shared = events.partnerMeanings { mergeMeanings(shared, bondID: partner.id) }
             receiveTogether(space: events.space, board: events.board, bondID: partner.id)
             if let p = events.presence {
+                let before = cloudPartners[index].presence
+                if before == nil || (before?.mood == nil) != (p.mood == nil) {
+                    NetLog.shared.log(.recv, p.mood == nil
+                        ? "Status from \(partner.displayName) (iCloud), no mood shared"
+                        : "Mood from \(partner.displayName) (iCloud)")
+                }
                 cloudPartners[index].presence = p
                 cloudPartners[index].online = p.online
                 cloudPartners[index].lastSeen = p.sentAt
