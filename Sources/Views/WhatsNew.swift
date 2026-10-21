@@ -21,6 +21,8 @@ struct WhatsNewView: View {
     /// Newest first. Add to the top for each build; trim when it no longer needs to go back to 40.
     static let sections: [Section] = [
         Section(title: "This update", items: [
+            Item(icon: "person.3.sequence.fill", title: "Room for up to 10 partners",
+                 detail: "With more than three, the others gather in a cluster on the partner bar — tap it and everyone bursts out around it to pick from."),
             Item(icon: "rainbow", title: "Rainbow wave",
                  detail: "In Touch Language: a light that runs up and down the bar through the whole rainbow. Feel it, or send it — partners on this update see the rainbow too."),
             Item(icon: "hand.tap.fill", title: "Feel what you send",
