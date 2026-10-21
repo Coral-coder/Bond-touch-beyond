@@ -1,10 +1,11 @@
 import Foundation
 
 extension AppModel {
-    /// What partners see: your latest mood (from the last 12 hours) and battery.
+    /// What partners see: your latest mood (from the last 24 hours, as long as their phones
+    /// show it) and battery. A logged mood is shared even without Health readings.
     func myMoodShare() -> MoodShare? {
-        let recent = battery.entries.last.flatMap { Date().timeIntervalSince($0.at) < 12 * 3600 ? $0 : nil }
-        guard Feature.stress.isOn, let level = battery.battery else { return nil }
+        let recent = battery.entries.last.flatMap { Date().timeIntervalSince($0.at) < 24 * 3600 ? $0 : nil }
+        guard Feature.stress.isOn, let level = battery.battery ?? recent?.energy else { return nil }
         let bodyLevel = level < 20 ? "low" : "ok"
         let face = Stress.face(100 - level)
         var share = MoodShare(emoji: recent?.emoji ?? face.emoji, label: recent?.label ?? face.label,
@@ -23,10 +24,13 @@ extension AppModel {
         }
     }
 
+    /// Whether the body battery is due a re-read (every 30 minutes).
+    var batteryReadDue: Bool { Feature.stress.isOn && Date().timeIntervalSince(lastBatteryRead) > 30 * 60 }
+
     /// Re-reads the body battery every 30 minutes; a sharp drop to very low tells partners
     /// (at most every 6 hours).
     func refreshBatteryIfDue() async {
-        guard Feature.stress.isOn, Date().timeIntervalSince(lastBatteryRead) > 30 * 60 else { return }
+        guard batteryReadDue else { return }
         lastBatteryRead = Date()
         await battery.refresh()
         if let b = battery.bodyBattery, b < 15 {

@@ -611,11 +611,24 @@ final class AppModel: ObservableObject {
         if !force, Date().timeIntervalSince(lastPresencePush) < (moving ? 15 : 120) { return }
         lastPresencePush = Date()
         await refreshMyWeather()
-        await refreshBatteryIfDue()
+        // Health can sit waiting on its permission prompt, so it's read alongside rather than
+        // holding this up; the snapshot goes out again once it has the new reading.
+        if batteryReadDue {
+            Task { await refreshBatteryIfDue(); await publishPresence(force: true) }
+        }
         let info = currentPresence()
+        if lastPublished == nil || (lastPublished?.mood == nil) != (info.mood == nil) {
+            NetLog.shared.log(.send, info.mood == nil
+                ? "Mood not shared: nothing logged in 24 h and no Health readings (or sharing is off)"
+                : "Sharing mood with partners")
+        }
         lastPublished = info
         for partner in cloudPartners {
-            try? await relay.sendPresence(info, bond: partner.bond)
+            do {
+                try await relay.sendPresence(info, bond: partner.bond)
+            } catch {
+                NetLog.shared.log(.fail, "iCloud: status not sent to \(partner.displayName)", error.localizedDescription)
+            }
         }
     }
 
@@ -1099,6 +1112,12 @@ final class AppModel: ObservableObject {
             if let shared = events.partnerMeanings { mergeMeanings(shared, bondID: partner.id) }
             receiveTogether(space: events.space, board: events.board, bondID: partner.id)
             if let p = events.presence {
+                let before = cloudPartners[index].presence
+                if before == nil || (before?.mood == nil) != (p.mood == nil) {
+                    NetLog.shared.log(.recv, p.mood == nil
+                        ? "Status from \(partner.displayName) (iCloud), no mood shared"
+                        : "Mood from \(partner.displayName) (iCloud)")
+                }
                 cloudPartners[index].presence = p
                 cloudPartners[index].online = p.online
                 cloudPartners[index].lastSeen = p.sentAt
