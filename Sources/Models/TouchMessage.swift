@@ -28,8 +28,8 @@ struct TouchMessage: Identifiable, Codable, Equatable {
     /// Set when this is a heartbeat (beats per minute): `pattern` then holds the EKG, and
     /// it plays, shows and is listed as a heartbeat.
     var heartbeatBPM: Int?
-    /// A light show on top of the pattern: "rainbow" plays it through the whole spectrum on
-    /// the bracelet. Older builds ignore it and play the start → end colours.
+    /// A light effect on top of the pattern (kept so touches carrying one still decode; none
+    /// is played at the moment — the stock band firmware can't show them well).
     var effect: String?
 
     /// For the user's own touches: where it got to, as the original's Sending / Sent / Seen /
@@ -58,7 +58,6 @@ struct TouchMessage: Identifiable, Codable, Equatable {
         self.effect = effect
     }
 
-    var isRainbow: Bool { effect == "rainbow" }
 
     private enum CodingKeys: String, CodingKey {
         case id, bondID, senderID, pattern, generation, colorRGB, endColorRGB, sentAt, meaningLabel, meaningEmoji, heartbeatBPM, effect, delivery, ringSeq, missed

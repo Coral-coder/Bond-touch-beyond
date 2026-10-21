@@ -567,7 +567,7 @@ private struct TouchPayload: Codable {
     var meaningEmoji: String? = nil
     /// Set when it's a heartbeat (the pattern is then the EKG).
     var heartbeatBPM: Int? = nil
-    /// A light show ("rainbow"); older builds ignore it.
+    /// A light effect (none played at the moment); older builds ignore it.
     var effect: String? = nil
 }
 private struct MessagePayload: Codable {

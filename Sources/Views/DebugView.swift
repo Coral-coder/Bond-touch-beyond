@@ -23,7 +23,7 @@ struct DebugView: View {
                 VStack(alignment: .leading, spacing: 18) {
                     section("Bracelet lights") {
                         NavigationLink { LightLabView() } label: {
-                            Label("Light lab — light without vibrating, POV text", systemImage: "lightbulb.led.fill")
+                            Label("Light lab — light without vibrating", systemImage: "lightbulb.led.fill")
                                 .font(.footnote)
                         }
                     }
