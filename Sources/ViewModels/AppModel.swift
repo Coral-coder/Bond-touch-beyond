@@ -635,7 +635,7 @@ final class AppModel: ObservableObject {
     /// Republishes when something worth showing changes: the bracelet connects or drops (also
     /// while the phone is locked — the Bluetooth event wakes the app; partners then know
     /// whether to buzz this phone), its battery moves 5 %, the phone's battery moves 5 %, or
-    /// the phone is plugged in / unplugged.
+    /// the phone is plugged in / unplugged; and re-reads Health when the phone is unlocked.
     private func watchStatusForPresence() {
         UIDevice.current.isBatteryMonitoringEnabled = true
         let center = NotificationCenter.default
@@ -648,6 +648,16 @@ final class AppModel: ObservableObject {
         .debounce(for: .seconds(2), scheduler: DispatchQueue.main)
         .sink { [weak self] in Task { @MainActor in await self?.publishIfStatusChanged() } }
         .store(in: &statusWatch)
+        // Health can't be read while the phone is locked, so read it the moment it's unlocked
+        // (if a reading is due) and send partners the new one.
+        center.publisher(for: UIApplication.protectedDataDidBecomeAvailableNotification)
+            .sink { [weak self] _ in
+                Task { @MainActor in
+                    guard let self, await self.refreshBatteryIfDue() else { return }
+                    await self.publishPresence(force: true)
+                }
+            }
+            .store(in: &statusWatch)
     }
 
     private func publishIfStatusChanged() async {
