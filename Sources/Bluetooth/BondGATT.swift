@@ -166,6 +166,31 @@ enum BondGATT {
     /// Bond Touch More: `[01 4B 01]` clears the colour set by 0x4B.
     static let v3LightOff: (CBUUID, Data) = (ffb1, Data([1, 0x4B, 0x01]))
 
+    /// One step of the firmware-timed LED test queue (0x33), silent (motor strength 0): three
+    /// LEDs, each its own colour (0 = dark), for `ms` (at least 5 — shorter reboots a Bond
+    /// Touch). A step with every LED dark switches the LEDs off for its time.
+    static func lightStep(_ colors: [Int], brightness: UInt8, ms: Int) -> (CBUUID, Data) {
+        let c = (colors + [0, 0, 0]).prefix(3).map { $0 & 0xFFFFFF }
+        let level: UInt8 = c.allSatisfy { $0 == 0 } ? 0 : max(1, safeBrightness(brightness))
+        var f: [UInt8] = [0x33, 0x00, 0x00, level, level, level]
+        for rgb in c { f += be3(rgb) }
+        f += u16le(max(5, UInt16(clamping: ms)))
+        return app(f)
+    }
+
+    /// Plays the queued 0x33 steps (up to 256).
+    static let lightQueueStart: (CBUUID, Data) = app([0x32, 0x00, 0x22])
+
+    /// Touch 4 / Mini: several app frames in one write, `[0x88, len, frame…, len, frame…]`
+    /// (each frame's first 17 bytes). **Hypothesis** — whether FFA6 takes writes this long.
+    static func batched(_ frames: [(CBUUID, Data)], perWrite: Int = 9) -> [(CBUUID, Data)] {
+        stride(from: 0, to: frames.count, by: perWrite).map { i in
+            var bytes: [UInt8] = [0x88]
+            for f in frames[i..<min(frames.count, i + perWrite)] { bytes += [17] + Array(f.1.prefix(17)) }
+            return (charAppCmd, Data(bytes))
+        }
+    }
+
     /// One heartbeat pulse: a short firm buzz + glow.
     static func heartbeatPulse(_ gen: BondGeneration, rgb: Int) -> [(CBUUID, Data)] {
         ledMotor(gen, rgb: rgb, strength: 100, vibMs: 130, brightness: 100, holdMs: 130)
@@ -695,6 +720,70 @@ enum BondGATT {
             return v2TouchFrames(gen, onOff: touch.onOffMs, startRGB: touch.colorRGB, endRGB: touch.endColorRGB,
                                  strength: UInt8(clamping: strength))
         }
+    }
+
+    // MARK: - Rainbow
+
+    /// A colour around the rainbow: 0 red → 1/6 yellow → 1/3 green → 1/2 cyan → 2/3 blue →
+    /// 5/6 magenta → 1 red, at full saturation.
+    static func rainbow(_ x: Double) -> Int {
+        let h = (x - x.rounded(.down)) * 6
+        let i = Int(h), f = h - Double(i)
+        let (r, g, b): (Double, Double, Double)
+        switch i {
+        case 0: (r, g, b) = (1, f, 0)
+        case 1: (r, g, b) = (1 - f, 1, 0)
+        case 2: (r, g, b) = (0, 1, f)
+        case 3: (r, g, b) = (0, 1 - f, 1)
+        case 4: (r, g, b) = (f, 0, 1)
+        default: (r, g, b) = (1, 0, 1 - f)
+        }
+        return Int(r * 255) << 16 | Int(g * 255) << 8 | Int(b * 255)
+    }
+
+    /// Bond Touch More: the bracelet blends only two colours across a touch, so a rainbow is
+    /// the touch cut into short pieces (`piece` samples, 50 ms each), each blending to the
+    /// next hue — played one after another, each starting as the last ends.
+    static func v3RainbowPieces(samples raw: [Int], slot: Int = 1, piece: Int = 9) -> [(at: Double, writes: [(CBUUID, Data)])] {
+        let samples = TouchPattern.trimmed(raw)
+        guard !samples.isEmpty else { return [] }
+        let count = (samples.count + piece - 1) / piece
+        return (0..<count).map { k in
+            let part = Array(samples[(k * piece)..<min(samples.count, (k + 1) * piece)])
+            let from = rainbow(Double(k) / Double(count) * 0.85), to = rainbow(Double(k + 1) / Double(count) * 0.85)
+            return (Double(k * piece) * Double(TouchPattern.sampleMs) / 1000,
+                    v3TouchFrames(samples: part, startRGB: from, endRGB: to, slot: slot))
+        }
+    }
+
+    /// Bond Touch / Touch 4 / Mini: the rhythm as 0x33 steps — every 50 ms of a press its own
+    /// hue, sweeping the rainbow over the touch (all three LEDs), the motor at `strength`;
+    /// gaps dark and still. Then `[32 00 22]` plays it (up to 256 steps).
+    static func v2RainbowSteps(onOff raw: [Int], strength: UInt8) -> [(CBUUID, Data)] {
+        let list = raw.map { max(0, $0) }
+        let total = Double(max(1, list.reduce(0, +)))
+        var elapsed = 0.0
+        var out: [(CBUUID, Data)] = []
+        for (i, ms) in list.enumerated() where out.count < 255 {
+            if i % 2 == 0 {
+                var left = ms
+                while left > 0, out.count < 255 {
+                    let step = min(50, left)
+                    out.append(messageStep(rainbow(elapsed / total * 0.85), strength: strength, brightness: 80, ms: max(5, step)))
+                    elapsed += Double(step); left -= step
+                }
+            } else if ms > 0 {
+                out.append(messageStep(0, strength: 0, brightness: 0, ms: ms))
+                elapsed += Double(ms)
+            }
+        }
+        return out + [queueMarker(gradient: true)]
+    }
+
+    /// Bond Touch More: raw samples as a one-colour touch (no trimming — a POV message's
+    /// blank columns are kept, except at the very ends).
+    static func v3Samples(_ samples: [Int], rgb: Int, slot: Int = 1) -> [(CBUUID, Data)] {
+        v3TouchFrames(samples: samples, startRGB: rgb, endRGB: rgb, slot: slot)
     }
 
     /// FFB2 playback (BleBondManagerV3.g): header `[partner slot 1…3, n, ceil(n/20), colour1

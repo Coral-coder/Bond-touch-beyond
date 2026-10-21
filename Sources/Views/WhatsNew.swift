@@ -23,6 +23,8 @@ struct WhatsNewView: View {
         Section(title: "This update", items: [
             Item(icon: "person.3.sequence.fill", title: "Room for up to 10 partners",
                  detail: "With more than three, the others gather in a cluster on the partner bar — tap it and everyone bursts out around it to pick from."),
+            Item(icon: "rainbow", title: "Rainbow wave",
+                 detail: "In Touch Language: a light that runs up and down the bar through the whole rainbow. Feel it, or send it — partners on this update see the rainbow too."),
             Item(icon: "hand.tap.fill", title: "Feel what you send",
                  detail: "The phone buzzes under your finger while you draw a touch — sharper toward the end of the bar — and knocks twice when it's sent."),
             Item(icon: "applewatch.radiowaves.left.and.right", title: "Watch notifications you notice",

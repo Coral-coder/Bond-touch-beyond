@@ -48,6 +48,8 @@ struct MeaningsView: View {
                     }
                     .padding(.top, 8)
 
+                    rainbowCard
+
                     if model.currentMeanings.isEmpty {
                         Text("You can start adding touches to your Touch Language.")
                             .foregroundStyle(Theme.subtitle)
@@ -152,6 +154,32 @@ struct MeaningsView: View {
                     Task { await model.sendMeaning(meaning) }
                     clearNew(meaning)
                 } label: {
+                    Text("Send").font(Theme.font(15, .heavy)).foregroundStyle(Theme.onAccent)
+                        .padding(.horizontal, 16).frame(height: 36)
+                        .background(Capsule().fill(Theme.accent))
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    /// Just for fun: a light running up and down the bar through the whole rainbow.
+    private var rainbowCard: some View {
+        GlassCard {
+            HStack(spacing: 12) {
+                Button { model.feel(model.rainbowWaveTouch()) } label: {
+                    Image(systemName: "play.circle.fill").font(.system(size: 26)).foregroundStyle(Theme.accent)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Play the rainbow wave on your bracelet")
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Rainbow wave").font(.headline).foregroundStyle(Theme.title)
+                    LinearGradient(colors: stride(from: 0.0, through: 0.85, by: 0.085).map { Color(rgbInt: BondGATT.rainbow($0)) },
+                                   startPoint: .leading, endPoint: .trailing)
+                        .frame(height: 8).clipShape(Capsule())
+                }
+                Spacer()
+                Button { Task { await model.sendRainbowWave() } } label: {
                     Text("Send").font(Theme.font(15, .heavy)).foregroundStyle(Theme.onAccent)
                         .padding(.horizontal, 16).frame(height: 36)
                         .background(Capsule().fill(Theme.accent))
