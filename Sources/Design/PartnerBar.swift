@@ -134,8 +134,8 @@ struct PartnerBar: View {
     }
 }
 
-/// The partner cluster burst open: everyone fanned out in rings below where the cluster
-/// sits (six on the first ring, the rest on a wider one), springing out one after another.
+/// The partner cluster burst open: everyone fanned out in two rings below the bar (four on
+/// the inner ring, up to six on the outer), springing out one after another.
 /// Tap someone to pick them; tap anywhere else to fold it back.
 private struct PartnerBurst: View {
     @EnvironmentObject var model: AppModel
@@ -166,16 +166,19 @@ private struct PartnerBurst: View {
         .onAppear { open = true }
     }
 
-    /// Ring 1: up to six, 92 pt out; ring 2: the rest, 170 pt out — fanned below the bar
-    /// (an arc from 15° to 165°), kept on screen.
+    /// Fanned below the bar, centred on the screen: up to four on an inner ring (105 pt out,
+    /// 30°–150°), the rest — up to six — on an outer ring (200 pt out, 35°–145°), so the
+    /// bubbles never overlap; kept on screen.
     private func position(_ i: Int, in size: CGSize, from c: CGPoint) -> CGPoint {
-        let ring = i < 6 ? 0 : 1
-        let onRing = ring == 0 ? min(6, partners.count) : partners.count - 6
-        let k = ring == 0 ? i : i - 6
-        let radius: CGFloat = ring == 0 ? 92 : 170
+        let inner = min(4, partners.count)
+        let ring = i < inner ? 0 : 1
+        let onRing = ring == 0 ? inner : partners.count - inner
+        let k = ring == 0 ? i : i - inner
+        let radius: CGFloat = ring == 0 ? 105 : 200
+        let (from, span): (Double, Double) = ring == 0 ? (30, 120) : (35, 110)
         let t = onRing == 1 ? 0.5 : Double(k) / Double(onRing - 1)
-        let angle = (15 + 150 * t) * .pi / 180
-        let x = c.x + CGFloat(cos(angle)) * radius
+        let angle = (from + span * t) * .pi / 180
+        let x = size.width / 2 + CGFloat(cos(angle)) * radius
         let y = c.y + CGFloat(sin(angle)) * radius
         return CGPoint(x: min(max(x, 40), size.width - 40), y: min(max(y, 60), size.height - 60))
     }
