@@ -614,7 +614,7 @@ final class AppModel: ObservableObject {
         // Health can sit waiting on its permission prompt, so it's read alongside rather than
         // holding this up; the snapshot goes out again once it has the new reading.
         if batteryReadDue {
-            Task { await refreshBatteryIfDue(); await publishPresence(force: true) }
+            Task { if await refreshBatteryIfDue() { await publishPresence(force: true) } }
         }
         let info = currentPresence()
         if lastPublished == nil || (lastPublished?.mood == nil) != (info.mood == nil) {

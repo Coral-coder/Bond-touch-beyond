@@ -1,5 +1,6 @@
 import Foundation
 import HealthKit
+import UIKit
 
 /// How you're feeling, as shared with your partners (inside your sealed status snapshot).
 /// It updates quietly; partners only get a notification when you're stressed or overwhelmed.
@@ -95,16 +96,20 @@ final class BatteryService: ObservableObject {
     }
 
     /// Reads the body side from Health (asks for access the first time).
-    func refresh() async {
+    /// Returns false (keeping the last reading) when Health couldn't be read — e.g. the phone
+    /// is locked, when iOS keeps Health data out of reach of apps running in the background.
+    @discardableResult
+    func refresh() async -> Bool {
         // Demo mode runs unsigned in the simulator, without the HealthKit entitlement, where
         // asking for access ends the app.
-        guard HKHealthStore.isHealthDataAvailable(), !ProcessInfo.processInfo.arguments.contains("-demo") else { return }
+        guard HKHealthStore.isHealthDataAvailable(), !ProcessInfo.processInfo.arguments.contains("-demo"),
+              UIApplication.shared.isProtectedDataAvailable else { return false }
         try? await store.requestAuthorization(toShare: [], read: [hrvType, rhrType, sleepType])
         let ms = HKUnit.secondUnit(with: .milli)
         let monthAgo = Date().addingTimeInterval(-30 * 86_400), dayAgo = Date().addingTimeInterval(-36 * 3600)
-        let hrvMonth = await quantities(hrvType, since: monthAgo, unit: ms)
+        guard let hrvMonth = await quantities(hrvType, since: monthAgo, unit: ms) else { return false }
         let hrvRecent = hrvMonth.filter { $0.0 > dayAgo }.map(\.1)
-        let rhrMonth = await quantities(rhrType, since: monthAgo, unit: HKUnit.count().unitDivided(by: .minute()))
+        let rhrMonth = await quantities(rhrType, since: monthAgo, unit: HKUnit.count().unitDivided(by: .minute())) ?? []
         let sleep = await lastNightSleep()
 
         hrv = hrvRecent.isEmpty ? nil : hrvRecent.reduce(0, +) / Double(hrvRecent.count)
@@ -121,14 +126,17 @@ final class BatteryService: ObservableObject {
         if let r = restingHR, let rBase = Self.median(rhrMonth.map(\.1)), rBase > 0 { score -= (r / rBase - 1) * 120 }
         if let s = sleep { score += (s - 7) * 6 }
         bodyBattery = (hrv == nil && sleep == nil) ? nil : Int(min(100, max(3, score)).rounded())
+        return true
     }
 
-    private func quantities(_ type: HKQuantityType, since: Date, unit: HKUnit) async -> [(Date, Double)] {
+    /// nil when the query failed (as opposed to finding no readings).
+    private func quantities(_ type: HKQuantityType, since: Date, unit: HKUnit) async -> [(Date, Double)]? {
         await withCheckedContinuation { cont in
             // Newest first, so a busy month (an Apple Watch can log well over the limit) cuts off
             // the oldest readings, never the last day's; then back into time order.
             let q = HKSampleQuery(sampleType: type, predicate: HKQuery.predicateForSamples(withStart: since, end: nil),
-                                  limit: 3000, sortDescriptors: [NSSortDescriptor(key: HKSampleSortIdentifierEndDate, ascending: false)]) { _, s, _ in
+                                  limit: 3000, sortDescriptors: [NSSortDescriptor(key: HKSampleSortIdentifierEndDate, ascending: false)]) { _, s, error in
+                if error != nil, (error as? HKError)?.code != .errorNoData { return cont.resume(returning: nil) }
                 cont.resume(returning: (s as? [HKQuantitySample])?.reversed().map { ($0.endDate, $0.quantity.doubleValue(for: unit)) } ?? [])
             }
             store.execute(q)

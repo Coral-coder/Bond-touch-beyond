@@ -28,14 +28,20 @@ extension AppModel {
     var batteryReadDue: Bool { Feature.stress.isOn && Date().timeIntervalSince(lastBatteryRead) > 30 * 60 }
 
     /// Re-reads the body battery every 30 minutes; a sharp drop to very low tells partners
-    /// (at most every 6 hours).
-    func refreshBatteryIfDue() async {
-        guard batteryReadDue else { return }
+    /// (at most every 6 hours). Returns whether it got a new reading; while Health can't be
+    /// read (phone locked) it keeps the last one and tries again on the next status update.
+    @discardableResult
+    func refreshBatteryIfDue() async -> Bool {
+        guard batteryReadDue else { return false }
         lastBatteryRead = Date()
-        await battery.refresh()
+        guard await battery.refresh() else {
+            lastBatteryRead = .distantPast
+            return false
+        }
         if let b = battery.bodyBattery, b < 15 {
             await alertPartnersForCare("is running on empty 🪫 — some love would help 💛")
         }
+        return true
     }
 
     private func alertPartnersForCare(_ text: String) async {
