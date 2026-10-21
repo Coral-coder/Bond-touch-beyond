@@ -100,19 +100,39 @@ struct HomeView: View {
     // MARK: Top bar
 
     private var topBar: some View {
-        HStack(spacing: 10) {
-            heartButton
-            if Feature.stress.isOn {
-                iconButton("face.smiling", label: "Mood check-in") { showMoodCheckIn = true }
+        HStack(spacing: 8) {
+            // Heartbeat, mood and kiss share one pill, so the partners get the room.
+            HStack(spacing: 0) {
+                heartButton
+                if Feature.stress.isOn {
+                    Button { showMoodCheckIn = true } label: {
+                        Image(systemName: "face.smiling")
+                            .font(.system(size: 17, weight: .semibold)).foregroundStyle(Theme.title)
+                            .frame(width: 38, height: 44)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Mood check-in")
+                }
+                kissButton
             }
-            kissButton
-            Spacer(minLength: 8)
+            .padding(.horizontal, 4)
+            .glass(Capsule())
+            Spacer(minLength: 0)
             PartnerBar()
-            Spacer(minLength: 8)
-            iconButton("square.grid.2x2.fill", label: "Arrange home cards") { editingCards = true }
-            iconButton("person.2.fill", label: "People") { showPeople = true }
+            Spacer(minLength: 0)
+            Menu {
+                Button { editingCards = true } label: { Label("Arrange home cards", systemImage: "square.grid.2x2") }
+                Button { showPeople = true } label: { Label("People", systemImage: "person.2") }
+            } label: {
+                Image(systemName: "ellipsis")
+                    .font(.system(size: 17, weight: .bold))
+                    .foregroundStyle(Theme.title)
+                    .frame(width: 44, height: 44)
+                    .glass(Circle())
+            }
+            .accessibilityLabel("More")
         }
-        .padding(.horizontal, 18)
+        .padding(.horizontal, 14)
         .padding(.top, 8)
     }
 
@@ -124,10 +144,9 @@ struct HomeView: View {
                 .font(.system(size: 17, weight: .semibold))
                 .foregroundStyle(model.sendingHeartbeat ? Theme.pink : Theme.title)
                 .scaleEffect(model.sendingHeartbeat ? heartScale(ctx.date) : 1)
-                .frame(width: 46, height: 46)
-                .glass(Circle())
+                .frame(width: 38, height: 44)
         }
-        .contentShape(Circle())
+        .contentShape(Rectangle())
         .onTapGesture {
             guard !model.sendingHeartbeat else { return }
             UIImpactFeedbackGenerator(style: .soft).impactOccurred()
@@ -162,10 +181,9 @@ struct HomeView: View {
             }
         } label: {
             Text(kissSent ? "✓" : "💋")
-                .font(.system(size: 19))
+                .font(.system(size: 18))
                 .foregroundStyle(Theme.title)
-                .frame(width: 46, height: 46)
-                .glass(Circle())
+                .frame(width: 38, height: 44)
                 .scaleEffect(kissSent ? 1.12 : 1)
                 .animation(.spring(response: 0.3), value: kissSent)
         }
@@ -179,18 +197,6 @@ struct HomeView: View {
         let lub = t < 0.15 ? sin(t / 0.15 * .pi) * 0.22 : 0
         let dub = t > 0.22 && t < 0.34 ? sin((t - 0.22) / 0.12 * .pi) * 0.12 : 0
         return 1 + CGFloat(lub + dub)
-    }
-
-    private func iconButton(_ icon: String, label: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: icon)
-                .font(.system(size: 17, weight: .semibold))
-                .foregroundStyle(Theme.title)
-                .frame(width: 46, height: 46)
-                .glass(Circle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(label)
     }
 
     // MARK: Pair card (map + greeting)
