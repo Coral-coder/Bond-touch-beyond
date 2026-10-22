@@ -353,10 +353,8 @@ final class AppModel: ObservableObject {
         return !cloudPartners.isEmpty || (legacySignedIn && hasOriginalOnlyPartners)
     }
 
-    /// While live location sharing runs it already keeps the app running, so the keeper's
-    /// second location session would only cost battery.
     func updateKeepAlive() {
-        if needsBackgroundKeepAlive && !location.running { keeper.start() } else { keeper.stop() }
+        if needsBackgroundKeepAlive { keeper.start() } else { keeper.stop() }
     }
 
     /// True while the app is in the background (kept running for the bracelet).
@@ -374,7 +372,35 @@ final class AppModel: ObservableObject {
             location.stop()
             Task { await setOnline(true) }   // keep presence, drop the shared coordinates
         }
-        updateKeepAlive()
+    }
+
+    // MARK: - "Where are you?" (Find My style)
+
+    /// When each partner was last asked for a fresh fix.
+    private static var locateAsked: [String: Date] = [:]
+
+    /// Asks partners whose shared location is over 2 minutes old for a fresh fix: a silent
+    /// push wakes their phone, which takes one fix and publishes it (`answerLocate`). Sent
+    /// when the map opens or the app comes to the front, at most every 5 minutes per partner,
+    /// so their phone can stay on its low-power background location.
+    func requestPartnerLocations() {
+        for partner in cloudPartners {
+            guard let token = partnerPushTokens[partner.id], !token.isEmpty,
+                  let at = partner.presence?.locationAt, Date().timeIntervalSince(at) > 120,
+                  Date().timeIntervalSince(Self.locateAsked[partner.id] ?? .distantPast) > 300 else { continue }
+            Self.locateAsked[partner.id] = Date()
+            let locator = BondCrypto.locator(forCode: partner.id)
+            Task { await APNsClient.shared.sendBackground(toDeviceToken: token, extra: ["bl": locator, "g": "loc"]) }
+        }
+    }
+
+    /// A partner asked where we are: one fresh fix, published straight away.
+    private func answerLocate(_ userInfo: [AnyHashable: Any]) async -> Bool {
+        guard userInfo["g"] as? String == "loc" else { return false }
+        guard sharingLocation, let locator = userInfo["bl"] as? String,
+              cloudPartners.contains(where: { BondCrypto.locator(forCode: $0.id) == locator }) else { return true }
+        if await location.freshFix() != nil { await publishPresence(force: true) }
+        return true
     }
 
     private func broadcastLocation(_ fix: CLLocation) async {
@@ -535,9 +561,10 @@ final class AppModel: ObservableObject {
             await legacySetOnline(true)
             await setOnline(true)
             await refreshAll()
+            requestPartnerLocations()
             startCloudPolling()
             await processWidgetRequests()   // sends the widget queued while the app wasn't running
-        } else if keeper.running || (location.running && needsBackgroundKeepAlive) {
+        } else if keeper.running {
             // Kept alive in the background: keep syncing (slowly — see the poll loops; pushes
             // alone can be throttled or dropped) and stay online, so touches still reach the
             // bracelet.
@@ -1050,6 +1077,7 @@ final class AppModel: ObservableObject {
     /// then waits until the bracelet has the whole touch before letting iOS suspend the app.
     func handleRemoteNotification(_ userInfo: [AnyHashable: Any] = [:]) async {
         if !ready { await bootstrap() }
+        if await answerLocate(userInfo) { return }
         if let touch = touchFromPush(userInfo) {
             NetLog.shared.log(.recv, "Touch in push ← \(partners.first { $0.id == touch.bondID }?.displayName ?? "partner")")
             recordTouches([touch])

@@ -17,33 +17,83 @@ final class LocationService: NSObject, ObservableObject {
 
     private let manager = CLLocationManager()
     private(set) var running = false
+    private var background = false
     private var lastRequest = Date.distantPast
+    /// Callers of `freshFix()` waiting for the next fix.
+    private var waiting: [CheckedContinuation<CLLocation?, Never>] = []
 
     override init() {
         super.init()
         manager.delegate = self
-        setBackground(false)
+        manager.pausesLocationUpdatesAutomatically = false
+        manager.desiredAccuracy = kCLLocationAccuracyKilometer   // the weather's rough fix
     }
 
-    /// On screen: 100 m fixes every 25 m, for the live map. In the background: cell / Wi-Fi
-    /// fixes (no GPS) every 500 m, so sharing costs little battery and leaves the GPS to
-    /// navigation apps.
+    /// Like Find My: live 100 m updates only while the app is on screen. In the background
+    /// the system's own low-power watchers take over — significant changes (cell / Wi-Fi,
+    /// about every 500 m) and visits (arriving / leaving a place) — so sharing keeps no GPS
+    /// on and leaves it to navigation apps. A partner who opens the map asks for a fresh fix
+    /// with a background push (`freshFix()`).
     func setBackground(_ background: Bool) {
+        self.background = background
+        if running { applyMode() }
+    }
+
+    private func applyMode() {
+        // Significant changes and visits need "Always" access; with "While Using" the
+        // background falls back to cell / Wi-Fi updates (1 km, every 500 m) — still no GPS.
+        let lowPower = manager.authorizationStatus == .authorizedAlways
+            && CLLocationManager.significantLocationChangeMonitoringAvailable()
         manager.desiredAccuracy = background ? kCLLocationAccuracyKilometer : kCLLocationAccuracyHundredMeters
         manager.distanceFilter = background ? 500 : 25
+        if background && lowPower {
+            manager.stopUpdatingLocation()
+            manager.startMonitoringSignificantLocationChanges()
+            manager.startMonitoringVisits()
+        } else {
+            manager.stopMonitoringSignificantLocationChanges()
+            manager.stopMonitoringVisits()
+            manager.startUpdatingLocation()
+        }
     }
 
     func start() {
         guard !running else { return }
         running = true
         manager.requestWhenInUseAuthorization()
-        // Keep updating with the app in the background (it's kept running for the bracelet),
-        // so the partner's card shows live movement and speed, not where you were when you
-        // last opened the app.
         manager.allowsBackgroundLocationUpdates = true
-        manager.pausesLocationUpdatesAutomatically = false
-        manager.showsBackgroundLocationIndicator = true
-        manager.startUpdatingLocation()
+        manager.showsBackgroundLocationIndicator = false
+        applyMode()
+    }
+
+    func stop() {
+        running = false
+        manager.stopUpdatingLocation()
+        manager.stopMonitoringSignificantLocationChanges()
+        manager.stopMonitoringVisits()
+        manager.allowsBackgroundLocationUpdates = false
+    }
+
+    /// One fresh fix (100 m), for a partner's "where are you?" push: the latest one if it's
+    /// under a minute old, else a one-off request — given up after 10 s.
+    func freshFix() async -> CLLocation? {
+        if let last = lastLocation, Date().timeIntervalSince(last.timestamp) < 60 { return last }
+        guard manager.authorizationStatus == .authorizedWhenInUse || manager.authorizationStatus == .authorizedAlways else { return nil }
+        return await withCheckedContinuation { continuation in
+            waiting.append(continuation)
+            lastRequest = Date()
+            manager.desiredAccuracy = kCLLocationAccuracyHundredMeters
+            manager.requestLocation()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 10) { [weak self] in self?.finishWaiting(nil) }
+        }
+    }
+
+    private func finishWaiting(_ fix: CLLocation?) {
+        guard !waiting.isEmpty else { return }
+        let all = waiting
+        waiting = []
+        manager.desiredAccuracy = running && !background ? kCLLocationAccuracyHundredMeters : kCLLocationAccuracyKilometer
+        all.forEach { $0.resume(returning: fix ?? lastLocation) }
     }
 
     /// A rough position for the weather when live updates are off: the system's last known
@@ -60,12 +110,6 @@ final class LocationService: NSObject, ObservableObject {
             return known
         }
         return lastLocation
-    }
-
-    func stop() {
-        running = false
-        manager.stopUpdatingLocation()
-        manager.allowsBackgroundLocationUpdates = false
     }
 
     /// Watches the saved places (iOS wakes the app on arrival, even when it's closed). Needs
@@ -105,10 +149,21 @@ extension LocationService: CLLocationManagerDelegate {
             self.lastLocation = location
             self.coordinate = location.coordinate
             self.onUpdate?(location)
+            self.finishWaiting(location)
         }
     }
 
-    func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {}
+    /// Arrived at or left a place (background): counts as a fix.
+    func locationManager(_ manager: CLLocationManager, didVisit visit: CLVisit) {
+        let at = visit.departureDate == .distantFuture ? visit.arrivalDate : visit.departureDate
+        let fix = CLLocation(coordinate: visit.coordinate, altitude: 0, horizontalAccuracy: visit.horizontalAccuracy,
+                             verticalAccuracy: -1, timestamp: min(at, Date()))
+        self.locationManager(manager, didUpdateLocations: [fix])
+    }
+
+    func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+        DispatchQueue.main.async { self.finishWaiting(nil) }
+    }
 
     func locationManager(_ manager: CLLocationManager, didEnterRegion region: CLRegion) {
         guard region.identifier.hasPrefix(SavedPlace.prefix) else { return }
