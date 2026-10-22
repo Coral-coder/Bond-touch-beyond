@@ -18,7 +18,8 @@ final class BackgroundKeeper: NSObject, CLLocationManagerDelegate {
         super.init()
         manager.delegate = self
         manager.desiredAccuracy = kCLLocationAccuracyThreeKilometers
-        manager.distanceFilter = kCLDistanceFilterNone
+        // Only to keep the app running: one wake per 3 km is plenty.
+        manager.distanceFilter = 3000
         manager.pausesLocationUpdatesAutomatically = false
         manager.activityType = .other
     }

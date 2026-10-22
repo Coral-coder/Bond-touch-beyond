@@ -16,13 +16,21 @@ final class LocationService: NSObject, ObservableObject {
     var onArrive: ((String) -> Void)?
 
     private let manager = CLLocationManager()
-    private var running = false
+    private(set) var running = false
+    private var lastRequest = Date.distantPast
 
     override init() {
         super.init()
         manager.delegate = self
-        manager.desiredAccuracy = kCLLocationAccuracyHundredMeters
-        manager.distanceFilter = 25
+        setBackground(false)
+    }
+
+    /// On screen: 100 m fixes every 25 m, for the live map. In the background: cell / Wi-Fi
+    /// fixes (no GPS) every 500 m, so sharing costs little battery and leaves the GPS to
+    /// navigation apps.
+    func setBackground(_ background: Bool) {
+        manager.desiredAccuracy = background ? kCLLocationAccuracyKilometer : kCLLocationAccuracyHundredMeters
+        manager.distanceFilter = background ? 500 : 25
     }
 
     func start() {
@@ -39,11 +47,17 @@ final class LocationService: NSObject, ObservableObject {
     }
 
     /// A rough position for the weather when live updates are off: the system's last known
-    /// fix, and a one-off request for a fresh one (if location access was given).
+    /// fix, and a one-off request for a fresh one (if location access was given) when that is
+    /// over 30 minutes old — at most every 30 minutes.
     var roughFix: CLLocation? {
         if manager.authorizationStatus == .authorizedWhenInUse || manager.authorizationStatus == .authorizedAlways {
-            if !running { manager.requestLocation() }
-            return lastLocation ?? manager.location
+            let known = lastLocation ?? manager.location
+            if !running, Date().timeIntervalSince(known?.timestamp ?? .distantPast) > 30 * 60,
+               Date().timeIntervalSince(lastRequest) > 30 * 60 {
+                lastRequest = Date()
+                manager.requestLocation()
+            }
+            return known
         }
         return lastLocation
     }

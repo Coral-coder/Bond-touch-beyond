@@ -353,9 +353,14 @@ final class AppModel: ObservableObject {
         return !cloudPartners.isEmpty || (legacySignedIn && hasOriginalOnlyPartners)
     }
 
+    /// While live location sharing runs it already keeps the app running, so the keeper's
+    /// second location session would only cost battery.
     func updateKeepAlive() {
-        if needsBackgroundKeepAlive { keeper.start() } else { keeper.stop() }
+        if needsBackgroundKeepAlive && !location.running { keeper.start() } else { keeper.stop() }
     }
+
+    /// True while the app is in the background (kept running for the bracelet).
+    var inBackground: Bool { UIApplication.shared.applicationState == .background }
 
     // MARK: - Presence (live location)
 
@@ -369,6 +374,7 @@ final class AppModel: ObservableObject {
             location.stop()
             Task { await setOnline(true) }   // keep presence, drop the shared coordinates
         }
+        updateKeepAlive()
     }
 
     private func broadcastLocation(_ fix: CLLocation) async {
@@ -515,21 +521,26 @@ final class AppModel: ObservableObject {
     /// Foreground / background: presence on both backends, and the original backend's
     /// sync loop runs only while the app is active.
     func setActive(_ active: Bool) async {
+        location.setBackground(!active)
         if active {
             // Private Space messages and photos are kept 72 hours.
             var chats = messagesByBond
             if ChatArchive.expire(&chats) { messagesByBond = chats; ChatArchive.save(chats) }
             await refreshICloudStatus()   // the user may have just signed into iCloud
             updateKeepAlive()
+            // Restart the loops so they drop from the slow background pace straight away.
+            stopLegacySync()
+            stopCloudPolling()
             startLegacySync()
             await legacySetOnline(true)
             await setOnline(true)
             await refreshAll()
             startCloudPolling()
             await processWidgetRequests()   // sends the widget queued while the app wasn't running
-        } else if keeper.running {
-            // Kept alive in the background: keep syncing iCloud (pushes alone can be throttled
-            // or dropped) and stay online, so touches still reach the bracelet.
+        } else if keeper.running || (location.running && needsBackgroundKeepAlive) {
+            // Kept alive in the background: keep syncing (slowly — see the poll loops; pushes
+            // alone can be throttled or dropped) and stay online, so touches still reach the
+            // bracelet.
             startCloudPolling()
         } else {
             stopLegacySync()
@@ -581,8 +592,9 @@ final class AppModel: ObservableObject {
 
     /// Looks up the weather here (every 30 minutes at most) for the status snapshot.
     func refreshMyWeather() async {
-        guard UserDefaults.standard.object(forKey: "shareWeather") as? Bool ?? true, let fix = location.roughFix else { return }
+        guard UserDefaults.standard.object(forKey: "shareWeather") as? Bool ?? true else { return }
         if let w = myWeather, Date().timeIntervalSince(w.fetchedAt) < 30 * 60 { return }
+        guard let fix = location.roughFix else { return }
         if let w = await WeatherFetcher.shared.weather(at: fix, key: "me") { myWeather = w }
     }
 
@@ -606,9 +618,11 @@ final class AppModel: ObservableObject {
     /// is throttled to one every 15 s.
     func publishPresence(force: Bool) async {
         guard !cloudPartners.isEmpty else { return }
-        // Every 15 s while moving, every 2 min while still (unless something changed).
+        // On screen every 15 s while moving, every 2 min while still; in the background every
+        // 2 / 10 min (unless something changed).
         let moving = (location.speed ?? 0) > 0.5 && Date().timeIntervalSince(location.lastLocation?.timestamp ?? .distantPast) < 60
-        if !force, Date().timeIntervalSince(lastPresencePush) < (moving ? 15 : 120) { return }
+        let interval: TimeInterval = inBackground ? (moving ? 120 : 600) : (moving ? 15 : 120)
+        if !force, Date().timeIntervalSince(lastPresencePush) < interval { return }
         lastPresencePush = Date()
         await refreshMyWeather()
         await refreshBatteryIfDue()
@@ -658,9 +672,10 @@ final class AppModel: ObservableObject {
         guard cloudPollTask == nil, !cloudPartners.isEmpty || !cloudPending.isEmpty else { return }
         cloudPollTask = Task { [weak self] in
             while !Task.isCancelled {
-                // Every 4 s on screen; every 8 s kept running in the background (battery).
-                let background = UIApplication.shared.applicationState == .background
-                try? await Task.sleep(nanoseconds: background ? 8_000_000_000 : 4_000_000_000)
+                // Every 4 s on screen; every 60 s kept running in the background (battery —
+                // a partner's touch also arrives as a push).
+                let background = self?.inBackground ?? false
+                try? await Task.sleep(nanoseconds: background ? 60_000_000_000 : 4_000_000_000)
                 if Task.isCancelled { break }
                 await self?.refreshAll()
                 await self?.publishPresence(force: false)   // keeps location / speed fresh (throttled)
