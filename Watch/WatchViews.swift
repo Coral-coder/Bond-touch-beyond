@@ -235,17 +235,32 @@ struct WatchTouchBarScreen: View {
     }
 }
 
-/// A watch page: the partner header pinned at the top, the page's content below it (which
-/// scrolls on its own, under the header).
+/// A watch page, using the whole screen like the touch bar does. On watchOS 10 the partner
+/// header sits in the toolbar beside the clock and the page's content runs edge to edge,
+/// scrolling under it; on watchOS 9 the header sits at the top and the content fills the rest
+/// down to the bottom edge.
 struct WatchPage<Content: View>: View {
     let content: Content
 
     init(@ViewBuilder content: () -> Content) { self.content = content() }
 
     var body: some View {
-        VStack(spacing: 0) {
-            WatchPartnerHeader().padding(.bottom, 4)
-            content.frame(maxHeight: .infinity)
+        if #available(watchOS 10.0, *) {
+            NavigationStack {
+                content
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .ignoresSafeArea(edges: .bottom)
+                    .toolbar {
+                        ToolbarItem(placement: .topBarLeading) { WatchPartnerHeader() }
+                    }
+            }
+        } else {
+            VStack(spacing: 0) {
+                WatchPartnerHeader().padding(.bottom, 4)
+                content.frame(maxHeight: .infinity)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .ignoresSafeArea(edges: .bottom)
         }
     }
 }
@@ -327,6 +342,13 @@ struct WatchPartnerHeader: View {
     @EnvironmentObject var link: PhoneLink
     @State private var picking = false
 
+    /// In the toolbar (watchOS 10) it sizes to its content beside the clock instead of
+    /// spanning the screen.
+    private var compact: Bool {
+        if #available(watchOS 10.0, *) { return true }
+        return false
+    }
+
     var body: some View {
         Button { picking = true } label: {
             HStack(spacing: 5) {
@@ -336,7 +358,7 @@ struct WatchPartnerHeader: View {
                     .lineLimit(1)
                 if link.partners.count > 1 { Image(systemName: "chevron.down").font(.caption2) }
             }
-            .frame(maxWidth: .infinity)
+            .frame(maxWidth: compact ? nil : .infinity)
             .padding(.vertical, 2)
             .contentShape(Rectangle())
         }

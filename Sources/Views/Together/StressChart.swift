@@ -37,6 +37,12 @@ struct StressChart: View {
         return points.filter { domain.contains($0.at) }
     }
 
+    /// Smaller dots when many readings are in view, so a full day doesn't crowd.
+    private var pointSize: CGFloat {
+        let inView = Double(points.count) * min(span, 24) / 24
+        return inView > 120 ? 10 : inView > 60 ? 16 : 26
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
@@ -60,10 +66,20 @@ struct StressChart: View {
             } else {
                 Text("Stress — every reading").font(Theme.font(12, .bold)).foregroundStyle(Theme.subtitle)
                 Chart {
+                    // A soft filled line through every reading, each reading a dot in its
+                    // level's colour.
                     ForEach(shown) { p in
-                        BarMark(x: .value("Time", p.at), y: .value("Stress", p.stress), width: .fixed(7))
+                        AreaMark(x: .value("Time", p.at), y: .value("Stress", p.stress))
+                            .interpolationMethod(.catmullRom)
+                            .foregroundStyle(LinearGradient(colors: [Theme.ink.opacity(0.16), Theme.ink.opacity(0.01)],
+                                                            startPoint: .top, endPoint: .bottom))
+                        LineMark(x: .value("Time", p.at), y: .value("Stress", p.stress))
+                            .interpolationMethod(.catmullRom)
+                            .foregroundStyle(Theme.ink.opacity(0.35))
+                            .lineStyle(StrokeStyle(lineWidth: 1.5, lineCap: .round, lineJoin: .round))
+                        PointMark(x: .value("Time", p.at), y: .value("Stress", p.stress))
                             .foregroundStyle(Self.color(p.stress))
-                            .cornerRadius(3)
+                            .symbolSize(pointSize)
                     }
                     ForEach(marks.filter { domain.contains($0.at) }) { m in
                         PointMark(x: .value("Time", m.at), y: .value("Stress", 96))
