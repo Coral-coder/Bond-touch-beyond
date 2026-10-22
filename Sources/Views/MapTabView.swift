@@ -46,7 +46,7 @@ struct MapTabView: View {
                 MapAnnotation(coordinate: pin.coordinate) { annotation(pin) }
             }
             .ignoresSafeArea()
-            .onAppear { fitEveryone(animated: false) }
+            .onAppear { fitEveryone(animated: false); model.requestPartnerLocations() }
             .onChange(of: pins.count) { _ in if !didFit || focused == nil { fitEveryone(animated: true) } }
 
             VStack(spacing: 10) {
