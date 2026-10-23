@@ -202,6 +202,18 @@ enum WatchVibration {
         playWithVibration(vibrateID, nil, ["VibePattern": [true, 30] as [Any], "Intensity": 0.6] as NSDictionary)
     }
 
+    /// While drawing a touch: one steady vibration for as long as the finger is on the bar
+    /// (like holding the bracelet's bar), stopped the moment it lifts. Silent; nothing on a
+    /// watch without the exact-vibration call.
+    static func hold(_ down: Bool) {
+        guard let playWithVibration else { return }
+        playing += 1   // a touch being played back stops here
+        stopSound?(vibrateID)
+        if down {
+            playWithVibration(vibrateID, nil, ["VibePattern": [true, 15_000] as [Any], "Intensity": 0.7] as NSDictionary)
+        }
+    }
+
     /// A notification arriving on the wrist: the app's chime (not for heartbeats), then the
     /// touch itself, the motor driven directly in its exact rhythm and strength — nothing else.
     static func notify(_ t: WatchTouch?) {
