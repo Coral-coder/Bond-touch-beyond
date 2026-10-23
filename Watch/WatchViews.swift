@@ -37,7 +37,7 @@ struct WatchRootView: View {
 /// Records a touch like the Bond Touch More bar: the first touch opens the window, the bar
 /// is sampled every 50 ms for where the finger is on its 9 positions, sent when it ends.
 /// Finger changes are logged with their time and sampled from the log, so short taps count.
-/// Each landing and each new position gives a tiny silent tick, so you feel the bar.
+/// The watch vibrates steadily the whole time the finger is down, so you feel the touch.
 final class WatchRecorder: ObservableObject {
     @Published var position: CGFloat?
     @Published private(set) var recording = false
@@ -58,9 +58,9 @@ final class WatchRecorder: ObservableObject {
         guard recording else { return }
         let bar = f.map { [Int(($0 * CGFloat(TouchPattern.positions - 1)).rounded())] } ?? []
         guard bar != current else { return }
+        if bar.isEmpty != current.isEmpty { WatchVibration.hold(!bar.isEmpty) }   // landed or lifted
         current = bar
         events.append(.init(t: max(0, now - started), fingers: bar))
-        if !bar.isEmpty { WatchVibration.tick() }
     }
 
     private func start() {
@@ -79,6 +79,7 @@ final class WatchRecorder: ObservableObject {
     func finish() {
         guard recording else { return }
         let samples = TouchPattern.samples(from: events, duration: min(window, now - started))
+        if !current.isEmpty { WatchVibration.hold(false) }
         timer?.invalidate(); timer = nil
         recording = false; remaining = 0
         events = []; current = []
@@ -88,6 +89,7 @@ final class WatchRecorder: ObservableObject {
 
     /// Stops without sending (the bar was closed mid-touch).
     func cancel() {
+        if !current.isEmpty { WatchVibration.hold(false) }
         timer?.invalidate(); timer = nil
         recording = false; remaining = 0; position = nil
         events = []; current = []
