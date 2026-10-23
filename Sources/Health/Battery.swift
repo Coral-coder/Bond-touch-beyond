@@ -1,5 +1,6 @@
 import Foundation
 import HealthKit
+import UIKit
 
 /// How you're feeling, as shared with your partners (inside your sealed status snapshot).
 /// It updates quietly; partners only get a notification when you're stressed or overwhelmed.
@@ -71,9 +72,37 @@ final class BatteryService: ObservableObject {
     private let rhrType = HKQuantityType.quantityType(forIdentifier: .restingHeartRate)!
     private let sleepType = HKCategoryType.categoryType(forIdentifier: .sleepAnalysis)!
 
+    /// When Health last gave readings (nil until it has).
+    @Published private(set) var readAt: Date?
+
     init() {
         if let data = UserDefaults.standard.data(forKey: "moodEntries"),
            let list = try? JSONDecoder().decode([MoodEntry].self, from: data) { entries = list }
+        loadCache()
+    }
+
+    /// The last good Health reading, kept across launches: Health is locked while the phone
+    /// is, so a launch in the background (after an update, or from a push) reads nothing —
+    /// that mustn't blank what partners see.
+    private struct Cache: Codable {
+        var bodyBattery: Int?, hrv: Double?, hrvBaseline: Double?, sleepHours: Double?, restingHR: Double?
+        var series: [[Double]], readAt: Date
+    }
+    private static let cacheKey = "healthCache"
+
+    private func loadCache() {
+        guard let data = UserDefaults.standard.data(forKey: Self.cacheKey),
+              let c = try? JSONDecoder().decode(Cache.self, from: data) else { return }
+        bodyBattery = c.bodyBattery; hrv = c.hrv; hrvBaseline = c.hrvBaseline
+        sleepHours = c.sleepHours; restingHR = c.restingHR; readAt = c.readAt
+        series = c.series.compactMap { $0.count == 3 ? (at: Date(timeIntervalSince1970: $0[0]), hrv: $0[1], stress: $0[2]) : nil }
+    }
+
+    private func saveCache() {
+        let c = Cache(bodyBattery: bodyBattery, hrv: hrv, hrvBaseline: hrvBaseline, sleepHours: sleepHours,
+                      restingHR: restingHR, series: series.map { [$0.at.timeIntervalSince1970, $0.hrv, $0.stress] },
+                      readAt: readAt ?? Date())
+        if let data = try? JSONEncoder().encode(c) { UserDefaults.standard.set(data, forKey: Self.cacheKey) }
     }
 
     /// The battery to show and share: your latest log (if from the last 12 hours) blended
@@ -94,11 +123,15 @@ final class BatteryService: ObservableObject {
         if let data = try? JSONEncoder().encode(entries) { UserDefaults.standard.set(data, forKey: "moodEntries") }
     }
 
-    /// Reads the body side from Health (asks for access the first time).
-    func refresh() async {
+    /// Reads the body side from Health (asks for access the first time). Returns false when
+    /// Health couldn't be read (phone locked) — the last reading then stays as it was.
+    @discardableResult
+    func refresh() async -> Bool {
         // Demo mode runs unsigned in the simulator, without the HealthKit entitlement, where
         // asking for access ends the app.
-        guard HKHealthStore.isHealthDataAvailable(), !ProcessInfo.processInfo.arguments.contains("-demo") else { return }
+        guard HKHealthStore.isHealthDataAvailable(), !ProcessInfo.processInfo.arguments.contains("-demo") else { return false }
+        // Health's data is encrypted while the phone is locked: every query comes back empty.
+        guard UIApplication.shared.isProtectedDataAvailable else { return false }
         try? await store.requestAuthorization(toShare: [], read: [hrvType, rhrType, sleepType])
         let ms = HKUnit.secondUnit(with: .milli)
         let monthAgo = Date().addingTimeInterval(-30 * 86_400), dayAgo = Date().addingTimeInterval(-36 * 3600)
@@ -106,6 +139,9 @@ final class BatteryService: ObservableObject {
         let hrvRecent = hrvMonth.filter { $0.0 > dayAgo }.map(\.1)
         let rhrMonth = await quantities(rhrType, since: monthAgo, unit: HKUnit.count().unitDivided(by: .minute()))
         let sleep = await lastNightSleep()
+        // Nothing at all from a month of Health (locked mid-read, or no access): keep the last
+        // reading rather than wiping it.
+        if hrvMonth.isEmpty && rhrMonth.isEmpty && sleep == nil && readAt != nil { return false }
 
         hrv = hrvRecent.isEmpty ? nil : hrvRecent.reduce(0, +) / Double(hrvRecent.count)
         hrvBaseline = Self.median(hrvMonth.map(\.1))
@@ -121,7 +157,14 @@ final class BatteryService: ObservableObject {
         if let r = restingHR, let rBase = Self.median(rhrMonth.map(\.1)), rBase > 0 { score -= (r / rBase - 1) * 120 }
         if let s = sleep { score += (s - 7) * 6 }
         bodyBattery = (hrv == nil && sleep == nil) ? nil : Int(min(100, max(3, score)).rounded())
+        readAt = Date()
+        saveCache()
+        return true
     }
+
+    /// When the newest Health reading (HRV) was taken: how you tell "not wearing the watch"
+    /// from "nothing to share".
+    var lastReadingAt: Date? { series.last?.at }
 
     private func quantities(_ type: HKQuantityType, since: Date, unit: HKUnit) async -> [(Date, Double)] {
         await withCheckedContinuation { cont in

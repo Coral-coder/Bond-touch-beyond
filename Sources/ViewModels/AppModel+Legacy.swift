@@ -10,7 +10,7 @@ import Foundation
 /// receive, so it polls instead while in the foreground.
 extension AppModel {
     private static let pollSeconds: UInt64 = 4
-    private static let backgroundPollSeconds: UInt64 = 30
+    private static let backgroundPollSeconds: UInt64 = 15
     private static let seenTouchesKey = "LegacySeenTouchIDs"
 
     var legacySignedIn: Bool { store.useLegacyFirebase && !store.firebaseAuthToken.isEmpty }
@@ -37,7 +37,7 @@ extension AppModel {
             await self?.legacySetOnline(true)
             while !Task.isCancelled {
                 await self?.legacySyncOnce()
-                // Every 4 s on screen; every 30 s kept running in the background (battery).
+                // Every 4 s on screen; every 15 s kept running in the background.
                 let background = self?.inBackground ?? false
                 try? await Task.sleep(nanoseconds: (background ? Self.backgroundPollSeconds : Self.pollSeconds) * 1_000_000_000)
             }
@@ -242,7 +242,7 @@ extension AppModel {
 
     /// Pushes the user's location, at most every 30 seconds.
     func legacyPushLocation(_ coord: CLLocationCoordinate2D) async {
-        guard legacySignedIn, hasOriginalOnlyPartners, Date().timeIntervalSince(legacyLastLocationPush) > (inBackground ? 300 : 30),
+        guard legacySignedIn, hasOriginalOnlyPartners, Date().timeIntervalSince(legacyLastLocationPush) > (inBackground ? 120 : 30),
               let token = try? await legacyToken() else { return }
         legacyLastLocationPush = Date()
         try? await BondBackend.updateLocation(lat: coord.latitude, lng: coord.longitude, bearer: token)

@@ -64,7 +64,16 @@ struct StressChart: View {
                 Text(emptyText)
                     .font(Theme.font(12)).foregroundStyle(Theme.subtitle).frame(maxWidth: .infinity, minHeight: 120)
             } else {
-                Text("Stress — every reading").font(Theme.font(12, .bold)).foregroundStyle(Theme.subtitle)
+                HStack {
+                    Text("Stress — every reading").font(Theme.font(12, .bold)).foregroundStyle(Theme.subtitle)
+                    Spacer()
+                    // Recent → nothing new to share; hours old → the watch isn't being worn
+                    // (Apple Watch records HRV every few hours, more often while asleep).
+                    if let last = points.map(\.at).max() {
+                        Text("Last reading " + last.formatted(.relative(presentation: .named)))
+                            .font(Theme.font(11)).foregroundStyle(Date().timeIntervalSince(last) > 6 * 3600 ? Theme.amber : Theme.subtitle)
+                    }
+                }
                 Chart {
                     // A soft filled line through every reading, each reading a dot in its
                     // level's colour.

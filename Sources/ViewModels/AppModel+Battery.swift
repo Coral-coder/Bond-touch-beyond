@@ -27,8 +27,9 @@ extension AppModel {
     /// (at most every 6 hours).
     func refreshBatteryIfDue() async {
         guard Feature.stress.isOn, Date().timeIntervalSince(lastBatteryRead) > 30 * 60 else { return }
+        // Locked phone: nothing read, so try again next time rather than in 30 minutes.
+        guard await battery.refresh() else { return }
         lastBatteryRead = Date()
-        await battery.refresh()
         if let b = battery.bodyBattery, b < 15 {
             await alertPartnersForCare("is running on empty 🪫 — some love would help 💛")
         }
