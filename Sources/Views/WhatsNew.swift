@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// What's new: shown once after each update (a new build number), and any time from Settings →
-/// What's new. Lists everything since build 40, newest first.
+/// What's new: from Settings → What's new (it no longer pops up after updates). Lists
+/// everything since build 40, newest first.
 struct WhatsNewView: View {
     @Environment(\.dismiss) private var dismiss
 
@@ -154,24 +154,4 @@ struct WhatsNewView: View {
         let b = info?["CFBundleVersion"] as? String ?? ""
         return b.isEmpty ? v : "\(v) (\(b))"
     }
-}
-
-/// When to show What's new by itself: once for each new build, not on a first install (there's
-/// nothing to compare with yet), never in demo mode.
-@MainActor
-enum WhatsNew {
-    private static let key = "whatsNew.lastBuild"
-    private static var build: String { Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "" }
-
-    /// Whether to show it now; notes this build as seen either way. `existingUser`: a profile
-    /// is already set up (a brand-new install has nothing to catch up on).
-    static func check(existingUser: Bool) -> Bool {
-        guard !AppModel.isDemo, !build.isEmpty else { return false }
-        let last = UserDefaults.standard.string(forKey: key)
-        guard last != build else { return false }
-        markSeen()
-        return existingUser
-    }
-
-    static func markSeen() { UserDefaults.standard.set(build, forKey: key) }
 }
