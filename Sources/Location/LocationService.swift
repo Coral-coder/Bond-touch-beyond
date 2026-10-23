@@ -29,31 +29,24 @@ final class LocationService: NSObject, ObservableObject {
         manager.desiredAccuracy = kCLLocationAccuracyKilometer   // the weather's rough fix
     }
 
-    /// Like Find My: live 100 m updates only while the app is on screen. In the background
-    /// the system's own low-power watchers take over — significant changes (cell / Wi-Fi,
-    /// about every 500 m) and visits (arriving / leaving a place) — so sharing keeps no GPS
-    /// on and leaves it to navigation apps. A partner who opens the map asks for a fresh fix
-    /// with a background push (`freshFix()`).
+    /// Live 100 m updates all the time while sharing (every 25 m on screen, every 50 m in
+    /// the background), which also keeps the app running so partners see you online, with
+    /// your status and mood fresh. With "Always" access the system's significant-change and
+    /// visit watchers run too, so iOS relaunches the app if it was closed. A partner who opens
+    /// the app or the map asks for a fresh fix straight away with a silent push (`freshFix()`).
     func setBackground(_ background: Bool) {
         self.background = background
         if running { applyMode() }
     }
 
     private func applyMode() {
-        // Significant changes and visits need "Always" access; with "While Using" the
-        // background falls back to cell / Wi-Fi updates (1 km, every 500 m) — still no GPS.
-        let lowPower = manager.authorizationStatus == .authorizedAlways
-            && CLLocationManager.significantLocationChangeMonitoringAvailable()
-        manager.desiredAccuracy = background ? kCLLocationAccuracyKilometer : kCLLocationAccuracyHundredMeters
-        manager.distanceFilter = background ? 500 : 25
-        if background && lowPower {
-            manager.stopUpdatingLocation()
+        manager.desiredAccuracy = kCLLocationAccuracyHundredMeters
+        manager.distanceFilter = background ? 50 : 25
+        manager.startUpdatingLocation()
+        if manager.authorizationStatus == .authorizedAlways,
+           CLLocationManager.significantLocationChangeMonitoringAvailable() {
             manager.startMonitoringSignificantLocationChanges()
             manager.startMonitoringVisits()
-        } else {
-            manager.stopMonitoringSignificantLocationChanges()
-            manager.stopMonitoringVisits()
-            manager.startUpdatingLocation()
         }
     }
 
@@ -92,7 +85,7 @@ final class LocationService: NSObject, ObservableObject {
         guard !waiting.isEmpty else { return }
         let all = waiting
         waiting = []
-        manager.desiredAccuracy = running && !background ? kCLLocationAccuracyHundredMeters : kCLLocationAccuracyKilometer
+        manager.desiredAccuracy = running ? kCLLocationAccuracyHundredMeters : kCLLocationAccuracyKilometer
         all.forEach { $0.resume(returning: fix ?? lastLocation) }
     }
 
