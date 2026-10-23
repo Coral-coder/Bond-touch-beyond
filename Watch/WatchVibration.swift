@@ -90,7 +90,8 @@ enum WatchVibration {
     /// strong it is (0…1). It follows the touch exactly, at the bar's own 50 ms steps:
     ///  • a tap or press vibrates for exactly as long as the finger was down, at full strength;
     ///  • a slide vibrates the whole time the finger moves, stronger the higher it is on the
-    ///    bar (and a touch more with two fingers), so you feel it rise and fall;
+    ///    bar (and a touch more with two fingers), so you feel it rise and fall — in steps of
+    ///    about a third of the bar, so a held finger's wobble stays one steady vibration;
     ///  • a heartbeat beats lub-dub at its BPM.
     /// Capped at 10 s.
     static func segments(_ t: WatchTouch) -> [(at: Double, ms: Int, intensity: Double)] {
@@ -114,12 +115,16 @@ enum WatchVibration {
                 let base = 0.35 + 0.65 * Double(top) / Double(TouchPattern.positions - 1)
                 return min(1, base + (f.count > 1 ? 0.1 : 0))
             }
+            // A held finger wobbles between neighbouring positions; restarting the motor for
+            // each wobble felt like pulses. So a part only ends when the finger lifts or has
+            // moved about a third of the bar, and plays at its average strength.
             var i = 0
             while i < samples.count, Double(i) * step < 10 {
-                guard let l = level(samples[i]) else { i += 1; continue }
+                guard let first = level(samples[i]) else { i += 1; continue }
                 var j = i + 1
-                while j < samples.count, level(samples[j]) == l { j += 1 }
-                out.append((Double(i) * step, (j - i) * TouchPattern.sampleMs, l))
+                var sum = first
+                while j < samples.count, let l = level(samples[j]), abs(l - first) < 0.25 { sum += l; j += 1 }
+                out.append((Double(i) * step, (j - i) * TouchPattern.sampleMs, sum / Double(j - i)))
                 i = j
             }
             return out
