@@ -20,14 +20,13 @@ struct RootView: View {
     @AppStorage("paperInk") private var paperInk = PaperInk.aqua.rawValue
     @AppStorage(ThemeTints.key) private var themeTints = ""
     @State private var keyboardUp = false
-    @State private var showWhatsNew = false
     /// Bumped to start a tab's navigation afresh, so a tapped notification's screen opens from
     /// that tab's root rather than on top of whatever was open.
     @State private var stackReset = 0
-    /// What's new has been checked for this launch, so the tour knows whether to wait for it.
+    /// The root has appeared, so the tour can open.
     @State private var launchChecked = false
     /// The feature tour has been seen (or skipped); until then it opens once the profile is set
-    /// up, after What's new is closed.
+    /// up. (What's new no longer pops up by itself; it's in Settings.)
     @AppStorage(FeatureTour.seenKey) private var walkthroughSeen = false
 
     var body: some View {
@@ -62,22 +61,13 @@ struct RootView: View {
                 }
             }
         }
-        .fullScreenCover(isPresented: Binding(get: { launchChecked && store.profile.isComplete && !walkthroughSeen && !showWhatsNew && !AppModel.isDemo },
+        .fullScreenCover(isPresented: Binding(get: { launchChecked && store.profile.isComplete && !walkthroughSeen && !AppModel.isDemo },
                                               set: { if !$0 { walkthroughSeen = true } })) {
             FeatureTour { walkthroughSeen = true }
         }
         .preferredColorScheme(Theme.colorScheme)
         .tint(Theme.accent)
-        .onAppear {
-            if WhatsNew.check(existingUser: store.profile.isComplete) { showWhatsNew = true }
-            launchChecked = true
-        }
-        .sheet(isPresented: $showWhatsNew) {
-            NavigationStack {
-                WhatsNewView().screenBackground()
-                    .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { showWhatsNew = false } } }
-            }
-        }
+        .onAppear { launchChecked = true }
     }
 
     @ViewBuilder private var content: some View {
