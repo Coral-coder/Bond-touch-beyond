@@ -29,7 +29,7 @@ final class LocationService: NSObject, ObservableObject {
         manager.desiredAccuracy = kCLLocationAccuracyKilometer   // the weather's rough fix
     }
 
-    /// Live 100 m updates all the time while sharing (every 25 m on screen, every 50 m in
+    /// Live 100 m updates all the time while sharing (every 25 m on screen, every 100 m in
     /// the background), which also keeps the app running so partners see you online, with
     /// your status and mood fresh. With "Always" access the system's significant-change and
     /// visit watchers run too, so iOS relaunches the app if it was closed. A partner who opens
@@ -41,7 +41,7 @@ final class LocationService: NSObject, ObservableObject {
 
     private func applyMode() {
         manager.desiredAccuracy = kCLLocationAccuracyHundredMeters
-        manager.distanceFilter = background ? 50 : 25
+        manager.distanceFilter = background ? 100 : 25
         manager.startUpdatingLocation()
         if manager.authorizationStatus == .authorizedAlways,
            CLLocationManager.significantLocationChangeMonitoringAvailable() {

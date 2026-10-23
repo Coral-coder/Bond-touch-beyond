@@ -374,32 +374,35 @@ final class AppModel: ObservableObject {
         }
     }
 
-    // MARK: - "Where are you?" (Find My style)
+    // MARK: - Fresh status on demand (Find My style)
 
-    /// When each partner was last asked for a fresh fix.
-    private static var locateAsked: [String: Date] = [:]
+    /// When each partner was last asked for a fresh status.
+    private static var refreshAsked: [String: Date] = [:]
 
-    /// Asks partners whose shared location is over 2 minutes old for a fresh fix: a silent
-    /// push wakes their phone, which takes one fix and publishes it (`answerLocate`). Sent
-    /// when the map opens or the app comes to the front, at most every 5 minutes per partner,
-    /// so their phone can stay on its low-power background location.
+    /// Wakes partners whose status is over a minute old: a silent push makes their phone
+    /// publish its full status straight away — online, mood and HRV, battery, and a fresh
+    /// location fix if they share it (`answerRefresh`). Sent when the app comes to the front
+    /// or the map opens, at most every 2 minutes per partner. iOS may delay or drop silent
+    /// pushes; the partner's own background updates cover the rest.
     func requestPartnerLocations() {
         for partner in cloudPartners {
             guard let token = partnerPushTokens[partner.id], !token.isEmpty,
-                  let at = partner.presence?.locationAt, Date().timeIntervalSince(at) > 120,
-                  Date().timeIntervalSince(Self.locateAsked[partner.id] ?? .distantPast) > 300 else { continue }
-            Self.locateAsked[partner.id] = Date()
+                  Date().timeIntervalSince(partner.presence?.sentAt ?? .distantPast) > 60,
+                  Date().timeIntervalSince(Self.refreshAsked[partner.id] ?? .distantPast) > 120 else { continue }
+            Self.refreshAsked[partner.id] = Date()
             let locator = BondCrypto.locator(forCode: partner.id)
             Task { await APNsClient.shared.sendBackground(toDeviceToken: token, extra: ["bl": locator, "g": "loc"]) }
         }
     }
 
-    /// A partner asked where we are: one fresh fix, published straight away.
-    private func answerLocate(_ userInfo: [AnyHashable: Any]) async -> Bool {
+    /// A partner opened the app: publish everything fresh (with a new fix when sharing).
+    private func answerRefresh(_ userInfo: [AnyHashable: Any]) async -> Bool {
         guard userInfo["g"] as? String == "loc" else { return false }
-        guard sharingLocation, let locator = userInfo["bl"] as? String,
+        guard let locator = userInfo["bl"] as? String,
               cloudPartners.contains(where: { BondCrypto.locator(forCode: $0.id) == locator }) else { return true }
-        if await location.freshFix() != nil { await publishPresence(force: true) }
+        if sharingLocation { _ = await location.freshFix() }
+        await publishPresence(force: true)
+        await refreshAll()   // and pick up anything they sent
         return true
     }
 
@@ -564,8 +567,8 @@ final class AppModel: ObservableObject {
             requestPartnerLocations()
             startCloudPolling()
             await processWidgetRequests()   // sends the widget queued while the app wasn't running
-        } else if keeper.running {
-            // Kept alive in the background: keep syncing (slowly — see the poll loops; pushes
+        } else if keeper.running || location.running {
+            // Kept alive in the background (by the keep-alive, or by live location sharing): keep syncing (slowly — see the poll loops; pushes
             // alone can be throttled or dropped) and stay online, so touches still reach the
             // bracelet.
             startCloudPolling()
@@ -646,9 +649,9 @@ final class AppModel: ObservableObject {
     func publishPresence(force: Bool) async {
         guard !cloudPartners.isEmpty else { return }
         // On screen every 15 s while moving, every 2 min while still; in the background every
-        // 2 / 10 min (unless something changed).
+        // 30 s / 3 min (unless something changed).
         let moving = (location.speed ?? 0) > 0.5 && Date().timeIntervalSince(location.lastLocation?.timestamp ?? .distantPast) < 60
-        let interval: TimeInterval = inBackground ? (moving ? 120 : 600) : (moving ? 15 : 120)
+        let interval: TimeInterval = inBackground ? (moving ? 30 : 180) : (moving ? 15 : 120)
         if !force, Date().timeIntervalSince(lastPresencePush) < interval { return }
         lastPresencePush = Date()
         await refreshMyWeather()
@@ -699,10 +702,10 @@ final class AppModel: ObservableObject {
         guard cloudPollTask == nil, !cloudPartners.isEmpty || !cloudPending.isEmpty else { return }
         cloudPollTask = Task { [weak self] in
             while !Task.isCancelled {
-                // Every 4 s on screen; every 60 s kept running in the background (battery —
-                // a partner's touch also arrives as a push).
+                // Every 4 s on screen; every 20 s kept running in the background (a partner's
+                // touch also arrives as a push).
                 let background = self?.inBackground ?? false
-                try? await Task.sleep(nanoseconds: background ? 60_000_000_000 : 4_000_000_000)
+                try? await Task.sleep(nanoseconds: background ? 20_000_000_000 : 4_000_000_000)
                 if Task.isCancelled { break }
                 await self?.refreshAll()
                 await self?.publishPresence(force: false)   // keeps location / speed fresh (throttled)
@@ -1077,7 +1080,7 @@ final class AppModel: ObservableObject {
     /// then waits until the bracelet has the whole touch before letting iOS suspend the app.
     func handleRemoteNotification(_ userInfo: [AnyHashable: Any] = [:]) async {
         if !ready { await bootstrap() }
-        if await answerLocate(userInfo) { return }
+        if await answerRefresh(userInfo) { return }
         if let touch = touchFromPush(userInfo) {
             NetLog.shared.log(.recv, "Touch in push ← \(partners.first { $0.id == touch.bondID }?.displayName ?? "partner")")
             recordTouches([touch])
