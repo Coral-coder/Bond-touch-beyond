@@ -79,11 +79,11 @@ struct StressChart: View {
                     // level's colour.
                     ForEach(shown) { p in
                         AreaMark(x: .value("Time", p.at), y: .value("Stress", p.stress))
-                            .interpolationMethod(.catmullRom)
+                            .interpolationMethod(.monotone)
                             .foregroundStyle(LinearGradient(colors: [Theme.ink.opacity(0.16), Theme.ink.opacity(0.01)],
                                                             startPoint: .top, endPoint: .bottom))
                         LineMark(x: .value("Time", p.at), y: .value("Stress", p.stress))
-                            .interpolationMethod(.catmullRom)
+                            .interpolationMethod(.monotone)
                             .foregroundStyle(Theme.ink.opacity(0.35))
                             .lineStyle(StrokeStyle(lineWidth: 1.5, lineCap: .round, lineJoin: .round))
                         PointMark(x: .value("Time", p.at), y: .value("Stress", p.stress))
@@ -113,7 +113,7 @@ struct StressChart: View {
                 Text("HRV (ms) — higher is more rested").font(Theme.font(12, .bold)).foregroundStyle(Theme.subtitle)
                 Chart(shown) { p in
                     LineMark(x: .value("Time", p.at), y: .value("HRV", p.hrv))
-                        .foregroundStyle(Theme.accent).interpolationMethod(.catmullRom)
+                        .foregroundStyle(Theme.accent).interpolationMethod(.monotone)
                     PointMark(x: .value("Time", p.at), y: .value("HRV", p.hrv))
                         .foregroundStyle(Theme.accent).symbolSize(18)
                 }
