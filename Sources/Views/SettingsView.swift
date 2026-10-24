@@ -64,7 +64,7 @@ struct SettingsView: View {
                         Toggle(isOn: $store.watchStandsIn) {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text("Apple Watch stands in for the bracelet").foregroundStyle(Theme.title)
-                                Text("When your bracelet disconnects, your watch wakes up and plays every touch on your wrist. Stops when the bracelet is back. Uses watch battery while it stands in.")
+                                Text("When a connected bracelet drops off, the watch app opens once and plays every touch on your wrist. Stops when the bracelet is back; close the watch app to stop it sooner. Uses watch battery while it stands in.")
                                     .font(.caption).foregroundStyle(Theme.subtitle)
                             }
                         }
