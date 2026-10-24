@@ -133,9 +133,10 @@ struct TouchGlyph: View {
     }
 }
 
-/// The partner's photo (or initial) with an online dot.
+/// The partner's photo (or initial) with an online dot. Reads the app model directly rather
+/// than from the environment: it's drawn inside map pins, which are hosted outside the view
+/// hierarchy, and a missing environment object there crashes the app.
 struct PartnerFace: View {
-    @EnvironmentObject var model: AppModel
     let partner: Partner
     var size: CGFloat = 44
     var selected = false
@@ -143,7 +144,7 @@ struct PartnerFace: View {
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
             AvatarRing(name: partner.displayName, ringColor: Color(rgbInt: partner.colorRGB), size: size,
-                       photo: model.photo(forBond: partner.id), ringWidth: selected ? nil : 0)
+                       photo: AppModel.shared?.photo(forBond: partner.id), ringWidth: selected ? nil : 0)
             if partner.online {
                 Circle().fill(Theme.lime).frame(width: size * 0.24, height: size * 0.24)
                     .overlay(Circle().stroke(Theme.bgBottom, lineWidth: 1.5))
