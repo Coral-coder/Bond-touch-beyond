@@ -27,7 +27,18 @@ final class LocationService: NSObject, ObservableObject {
         manager.delegate = self
         manager.pausesLocationUpdatesAutomatically = false
         manager.desiredAccuracy = kCLLocationAccuracyKilometer   // the weather's rough fix
+        // The last fix survives a relaunch, so partners keep seeing where you were (and when)
+        // until a new one comes in.
+        if let saved = UserDefaults.standard.array(forKey: Self.lastFixKey) as? [Double], saved.count == 3 {
+            let fix = CLLocation(coordinate: CLLocationCoordinate2D(latitude: saved[0], longitude: saved[1]),
+                                 altitude: 0, horizontalAccuracy: 100, verticalAccuracy: -1,
+                                 timestamp: Date(timeIntervalSince1970: saved[2]))
+            lastLocation = fix
+            coordinate = fix.coordinate
+        }
     }
+
+    private static let lastFixKey = "lastLocationFix"
 
     /// Live 100 m updates all the time while sharing (every 25 m on screen, every 100 m in
     /// the background), which also keeps the app running so partners see you online, with
@@ -141,6 +152,8 @@ extension LocationService: CLLocationManagerDelegate {
             }
             self.lastLocation = location
             self.coordinate = location.coordinate
+            UserDefaults.standard.set([location.coordinate.latitude, location.coordinate.longitude,
+                                       location.timestamp.timeIntervalSince1970], forKey: Self.lastFixKey)
             self.onUpdate?(location)
             self.finishWaiting(location)
         }

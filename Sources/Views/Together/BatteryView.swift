@@ -155,7 +155,7 @@ struct PartnerMoodRow: View {
                     Text("\(m.emoji) \(m.label) · \(m.at.formatted(.relative(presentation: .named)))")
                         .font(Theme.font(12, .semibold)).foregroundStyle(m.needsCare ? Theme.amber : Theme.subtitle)
                 } else {
-                    Text("Not sharing yet").font(Theme.font(12)).foregroundStyle(Theme.subtitle)
+                    Text("No mood reported yet").font(Theme.font(12)).foregroundStyle(Theme.subtitle)
                 }
             }
             Spacer()
