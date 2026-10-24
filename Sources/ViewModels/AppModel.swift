@@ -429,6 +429,18 @@ final class AppModel: ObservableObject {
         return true
     }
 
+    /// An iCloud partner, showing their last report (kept on this phone) until a new one comes in.
+    private func cloudPartner(_ bond: Bond) -> Partner {
+        var partner = Partner(bond: bond)
+        if let last = PresenceCache.load(bond.id) {
+            partner.presence = last
+            partner.lastSeen = last.sentAt
+            partner.latitude = last.lat
+            partner.longitude = last.lng
+        }
+        return partner
+    }
+
     // MARK: - Watch standing in for the bracelet
 
     /// The bracelet has been connected since the watch was last woken. Waking starts a workout
@@ -528,7 +540,7 @@ final class AppModel: ObservableObject {
             for code in store.cloudBondCodes.keys where !bonds.contains(where: { $0.id == code }) {
                 store.cloudBondCodes[code] = nil
             }
-            cloudPartners = bonds.filter { !$0.pending }.map { Partner(bond: $0) }
+            cloudPartners = bonds.filter { !$0.pending }.map { cloudPartner($0) }
             cloudPartners.forEach { loadCachedPhoto(bondID: $0.id) }
             cloudPending = bonds.filter { $0.pending }
             migrateMeaningLibraries()
@@ -622,7 +634,8 @@ final class AppModel: ObservableObject {
         info.braceletLastConnected = bracelet.isReady ? Date() : bracelet.lastConnectedAt
         info.watchStandIn = watchStandIn
         if UserDefaults.standard.object(forKey: "shareWeather") as? Bool ?? true { info.weather = myWeather }
-        if UserDefaults.standard.object(forKey: "shareMood") as? Bool ?? true { info.mood = myMoodShare() }
+        if UserDefaults.standard.object(forKey: "shareMood") as? Bool ?? true { info.mood = myMoodShare() } else { info.moodOff = true }
+        if !sharingLocation { info.locationOff = true }
         let muted = NotificationKind.mutedGroups
         if !muted.isEmpty { info.muted = muted }
         return info
@@ -782,7 +795,7 @@ final class AppModel: ObservableObject {
             let bond = try await relay.joinBond(code: code, displayName: me,
                                                 colorRGB: store.profile.colorRGB, pushToken: myPushToken)
             store.cloudBondCodes[bond.id] = false
-            if !cloudPartners.contains(where: { $0.id == bond.id }) { cloudPartners.append(Partner(bond: bond)) }
+            if !cloudPartners.contains(where: { $0.id == bond.id }) { cloudPartners.append(cloudPartner(bond)) }
             cloudPending.removeAll { $0.id == bond.id }
             selectedPartnerID = bond.id
             profileSyncedBondIDs.remove(bond.id)
@@ -1111,7 +1124,7 @@ final class AppModel: ObservableObject {
             joined.pending = false
             joined.partnerName = name
             cloudPending.removeAll { $0.id == bond.id }
-            if !cloudPartners.contains(where: { $0.id == joined.id }) { cloudPartners.append(Partner(bond: joined)) }
+            if !cloudPartners.contains(where: { $0.id == joined.id }) { cloudPartners.append(cloudPartner(joined)) }
             if selectedPartnerID == nil { selectedPartnerID = joined.id }
             if pendingInviteURL.flatMap(CloudRelay.code(fromURL:)) == joined.id { pendingInviteURL = nil }
             NetLog.shared.log(.ok, "\(name) joined your invite (iCloud)")
@@ -1152,11 +1165,14 @@ final class AppModel: ObservableObject {
             if let seen = events.partnerSeenMessage { partnerSeenMessage[partner.id] = seen }
             if let shared = events.partnerMeanings { mergeMeanings(shared, bondID: partner.id) }
             receiveTogether(space: events.space, board: events.board, bondID: partner.id)
-            if let p = events.presence {
+            if let incoming = events.presence {
+                // Anything this snapshot lacks stays as last reported, with its own time.
+                let p = incoming.merged(over: cloudPartners[index].presence)
+                PresenceCache.save(p, for: partner.id)
                 cloudPartners[index].presence = p
                 cloudPartners[index].online = p.online
                 cloudPartners[index].lastSeen = p.sentAt
-                // Cleared when they stop sharing location.
+                // Kept until a newer fix; cleared only when they switch sharing off.
                 cloudPartners[index].latitude = p.lat
                 cloudPartners[index].longitude = p.lng
                 // Their bracelet — or their watch standing in for it — plays touches, so pushes

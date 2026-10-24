@@ -10,6 +10,7 @@ extension AppModel {
         var share = MoodShare(emoji: recent?.emoji ?? face.emoji, label: recent?.label ?? face.label,
                               battery: level, level: recent?.level ?? bodyLevel, at: recent?.at ?? Date())
         share.series = battery.series.suffix(60).map { [$0.at.timeIntervalSince1970.rounded(), ($0.hrv * 10).rounded() / 10, $0.stress.rounded()] }
+        share.heartRate = battery.heartRate.suffix(144).map { [$0.at.timeIntervalSince1970.rounded(), $0.bpm] }
         return share
     }
 

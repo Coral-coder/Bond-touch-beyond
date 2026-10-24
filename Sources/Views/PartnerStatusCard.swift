@@ -135,7 +135,7 @@ struct PartnerStatusCard: View {
     // MARK: - Location timer
 
     private func locationText(_ now: Date) -> String {
-        guard let at = p?.locationAt else { return "Not shared" }
+        guard let at = p?.locationAt else { return "None yet" }
         return "\(Self.elapsed(from: at, to: now)) ago"
     }
 

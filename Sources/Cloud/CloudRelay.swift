@@ -547,6 +547,54 @@ struct PresenceInfo: Codable, Equatable {
     var muted: [String]? = nil
     /// When this snapshot was written — the phone's last check-in.
     var sentAt = Date()
+    /// Sharing switched off on purpose (Map → Share my location, Stress & mood → Share). Only
+    /// then does the partner's phone forget the last location / mood it had; a snapshot that
+    /// simply lacks them (no fix yet, Health locked) keeps the last report showing.
+    var locationOff: Bool? = nil
+    var moodOff: Bool? = nil
+
+    /// This snapshot over the previous one: anything it doesn't carry stays as last reported
+    /// (with that report's own time), unless the partner switched sharing off.
+    func merged(over old: PresenceInfo?) -> PresenceInfo {
+        guard let old else { return self }
+        var out = self
+        if out.lat == nil, locationOff != true {
+            out.lat = old.lat; out.lng = old.lng; out.locationAt = old.locationAt; out.speed = old.speed
+        }
+        if moodOff != true {
+            if out.mood == nil { out.mood = old.mood }
+            else if var mood = out.mood {
+                if (mood.series ?? []).isEmpty { mood.series = old.mood?.series }
+                if (mood.heartRate ?? []).isEmpty { mood.heartRate = old.mood?.heartRate }
+                out.mood = mood
+            }
+        }
+        if out.weather == nil { out.weather = old.weather }
+        if out.phoneBattery == nil { out.phoneBattery = old.phoneBattery; out.phoneCharging = old.phoneCharging }
+        if out.braceletBattery == nil { out.braceletBattery = old.braceletBattery }
+        if out.braceletLastConnected == nil { out.braceletLastConnected = old.braceletLastConnected }
+        return out
+    }
+}
+
+/// Each partner's last status, kept on this phone across launches, so their last report (and
+/// its time) shows straight away rather than an empty card until the next one arrives.
+enum PresenceCache {
+    private static let key = "partnerPresence"
+
+    static func load(_ bondID: String) -> PresenceInfo? { all()[bondID] }
+
+    static func save(_ info: PresenceInfo, for bondID: String) {
+        var map = all()
+        map[bondID] = info
+        if let data = try? JSONEncoder().encode(map) { UserDefaults.standard.set(data, forKey: key) }
+    }
+
+    private static func all() -> [String: PresenceInfo] {
+        guard let data = UserDefaults.standard.data(forKey: key),
+              let map = try? JSONDecoder().decode([String: PresenceInfo].self, from: data) else { return [:] }
+        return map
+    }
 }
 private struct HeartbeatPayload: Codable { let bpm: Int; let sentAt: Date }
 /// A phone's newest touch / message numbers, and the partner's touches it has received

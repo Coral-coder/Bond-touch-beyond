@@ -14,6 +14,8 @@ struct MoodShare: Codable, Equatable {
     var at: Date
     /// The last 24 hours: [time (s since 1970), HRV (ms), stress 0–100] per Health reading.
     var series: [[Double]]? = nil
+    /// Heart rate over the same day: [time (s since 1970), bpm], one point per 10 minutes.
+    var heartRate: [[Double]]? = nil
 
     var needsCare: Bool { level == "stressed" || level == "overwhelmed" }
     var stress: Int { 100 - battery }
@@ -66,11 +68,14 @@ final class BatteryService: ObservableObject {
     @Published private(set) var entries: [MoodEntry] = []
     /// HRV readings over the last 24 hours, with the stress each one suggests.
     @Published private(set) var series: [(at: Date, hrv: Double, stress: Double)] = []
+    /// Heart rate over the same day, averaged per 10 minutes.
+    @Published private(set) var heartRate: [(at: Date, bpm: Double)] = []
 
     private let store = HKHealthStore()
     private let hrvType = HKQuantityType.quantityType(forIdentifier: .heartRateVariabilitySDNN)!
     private let rhrType = HKQuantityType.quantityType(forIdentifier: .restingHeartRate)!
     private let sleepType = HKCategoryType.categoryType(forIdentifier: .sleepAnalysis)!
+    private let hrType = HKQuantityType.quantityType(forIdentifier: .heartRate)!
 
     /// When Health last gave readings (nil until it has).
     @Published private(set) var readAt: Date?
@@ -87,6 +92,7 @@ final class BatteryService: ObservableObject {
     private struct Cache: Codable {
         var bodyBattery: Int?, hrv: Double?, hrvBaseline: Double?, sleepHours: Double?, restingHR: Double?
         var series: [[Double]], readAt: Date
+        var heartRate: [[Double]]? = nil
     }
     private static let cacheKey = "healthCache"
 
@@ -96,12 +102,14 @@ final class BatteryService: ObservableObject {
         bodyBattery = c.bodyBattery; hrv = c.hrv; hrvBaseline = c.hrvBaseline
         sleepHours = c.sleepHours; restingHR = c.restingHR; readAt = c.readAt
         series = c.series.compactMap { $0.count == 3 ? (at: Date(timeIntervalSince1970: $0[0]), hrv: $0[1], stress: $0[2]) : nil }
+        heartRate = (c.heartRate ?? []).compactMap { $0.count == 2 ? (at: Date(timeIntervalSince1970: $0[0]), bpm: $0[1]) : nil }
     }
 
     private func saveCache() {
         let c = Cache(bodyBattery: bodyBattery, hrv: hrv, hrvBaseline: hrvBaseline, sleepHours: sleepHours,
                       restingHR: restingHR, series: series.map { [$0.at.timeIntervalSince1970, $0.hrv, $0.stress] },
-                      readAt: readAt ?? Date())
+                      readAt: readAt ?? Date(),
+                      heartRate: heartRate.map { [$0.at.timeIntervalSince1970, $0.bpm] })
         if let data = try? JSONEncoder().encode(c) { UserDefaults.standard.set(data, forKey: Self.cacheKey) }
     }
 
@@ -132,22 +140,30 @@ final class BatteryService: ObservableObject {
         guard HKHealthStore.isHealthDataAvailable(), !ProcessInfo.processInfo.arguments.contains("-demo") else { return false }
         // Health's data is encrypted while the phone is locked: every query comes back empty.
         guard UIApplication.shared.isProtectedDataAvailable else { return false }
-        try? await store.requestAuthorization(toShare: [], read: [hrvType, rhrType, sleepType])
+        try? await store.requestAuthorization(toShare: [], read: [hrvType, rhrType, sleepType, hrType])
         let ms = HKUnit.secondUnit(with: .milli)
         let monthAgo = Date().addingTimeInterval(-30 * 86_400), dayAgo = Date().addingTimeInterval(-36 * 3600)
         let hrvMonth = await quantities(hrvType, since: monthAgo, unit: ms)
-        let hrvRecent = hrvMonth.filter { $0.0 > dayAgo }.map(\.1)
+        // The last day of readings — ending now, or at the newest reading when the watch hasn't
+        // been worn since — so there's always a last report to show and share.
+        let hrvEnd = hrvMonth.last?.0 ?? Date()
+        let hrvRecent = hrvMonth.filter { $0.0 > min(dayAgo, hrvEnd.addingTimeInterval(-36 * 3600)) }.map(\.1)
+        let bpm = HKUnit.count().unitDivided(by: .minute())
+        let hrRaw = await quantities(hrType, since: Date().addingTimeInterval(-7 * 86_400), unit: bpm)
         let rhrMonth = await quantities(rhrType, since: monthAgo, unit: HKUnit.count().unitDivided(by: .minute()))
         let sleep = await lastNightSleep()
         // Nothing at all from a month of Health (locked mid-read, or no access): keep the last
         // reading rather than wiping it.
-        if hrvMonth.isEmpty && rhrMonth.isEmpty && sleep == nil && readAt != nil { return false }
+        if hrvMonth.isEmpty && rhrMonth.isEmpty && hrRaw.isEmpty && sleep == nil && readAt != nil { return false }
 
         hrv = hrvRecent.isEmpty ? nil : hrvRecent.reduce(0, +) / Double(hrvRecent.count)
         hrvBaseline = Self.median(hrvMonth.map(\.1))
-        let dayStart = Date().addingTimeInterval(-24 * 3600)
+        let dayStart = min(Date(), hrvEnd).addingTimeInterval(-24 * 3600)
         if let base = hrvBaseline, base > 0 {
             series = hrvMonth.filter { $0.0 > dayStart }.map { (at: $0.0, hrv: $0.1, stress: Self.stress(hrv: $0.1, baseline: base)) }
+        }
+        if let hrLast = hrRaw.last?.0 {
+            heartRate = Self.tenMinuteAverages(hrRaw.filter { $0.0 > min(Date(), hrLast).addingTimeInterval(-24 * 3600) })
         }
         restingHR = rhrMonth.last?.1
         sleepHours = sleep
@@ -160,6 +176,21 @@ final class BatteryService: ObservableObject {
         readAt = Date()
         saveCache()
         return true
+    }
+
+    /// Heart-rate samples (a watch logs one every few seconds in a workout) as one average per
+    /// 10 minutes: at most 144 points a day.
+    private static func tenMinuteAverages(_ samples: [(Date, Double)]) -> [(at: Date, bpm: Double)] {
+        var buckets: [Int: (sum: Double, count: Int)] = [:]
+        for (at, v) in samples {
+            let key = Int(at.timeIntervalSince1970 / 600)
+            buckets[key, default: (0, 0)].sum += v
+            buckets[key, default: (0, 0)].count += 1
+        }
+        return buckets.keys.sorted().map { key in
+            let b = buckets[key]!
+            return (at: Date(timeIntervalSince1970: Double(key) * 600 + 300), bpm: (b.sum / Double(b.count)).rounded())
+        }
     }
 
     /// When the newest Health reading (HRV) was taken: how you tell "not wearing the watch"

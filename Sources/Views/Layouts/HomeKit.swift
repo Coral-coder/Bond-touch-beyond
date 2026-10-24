@@ -154,14 +154,14 @@ struct PartnerFace: View {
     }
 }
 
-/// How a partner's feeling, as an emoji on the corner of their photo (from the mood and
-/// stress they share; hidden when it's over a day old or Stress & mood is off).
+/// How a partner's feeling, as an emoji on the corner of their photo (their last shared mood,
+/// however old, until a new one replaces it; hidden when Stress & mood is off).
 struct MoodBadge: View {
     let partner: Partner
     var size: CGFloat = 44
 
     var body: some View {
-        if Feature.stress.isOn, let mood = partner.presence?.mood, Date().timeIntervalSince(mood.at) < 24 * 3600 {
+        if Feature.stress.isOn, let mood = partner.presence?.mood {
             let emoji = mood.emoji.isEmpty ? Stress.face(mood.stress).emoji : mood.emoji
             Text(emoji)
                 .font(.system(size: max(11, size * 0.3)))
