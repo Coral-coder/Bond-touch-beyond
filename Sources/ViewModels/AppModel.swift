@@ -302,11 +302,11 @@ final class AppModel: ObservableObject {
                 Task { @MainActor in self?.checkBraceletBattery(pct, charging: charging == true) }
             }
             .store(in: &statusWatch)
-        // The watch stands in for the bracelet: woken when the bracelet has been gone 20 s,
-        // stopped when it's back.
+        // The watch stands in for the bracelet: woken once when a connected bracelet has been
+        // gone 20 s, stopped when it's back.
         bracelet.$state.removeDuplicates()
             .debounce(for: .seconds(20), scheduler: DispatchQueue.main)
-            .sink { [weak self] state in Task { @MainActor in self?.updateWatchStandIn(braceletConnected: state == .connected) } }
+            .sink { [weak self] state in Task { @MainActor in self?.updateWatchStandIn(state: state) } }
             .store(in: &statusWatch)
         // The notification extension decrypts partners' touch pushes with the bond codes.
         store.$cloudBondCodes
@@ -431,16 +431,24 @@ final class AppModel: ObservableObject {
 
     // MARK: - Watch standing in for the bracelet
 
-    private static var lastWatchWake = Date.distantPast
+    /// The bracelet has been connected since the watch was last woken. Waking starts a workout
+    /// on the watch, which always brings its app to the front, so it happens once per real
+    /// drop-out: never while the phone just scans for a bracelet (or has none), never with
+    /// Bluetooth off, and not again after the watch app is closed until the bracelet has been
+    /// back and gone again.
+    private static var braceletWasConnected = false
 
-    func updateWatchStandIn(braceletConnected: Bool) {
+    func updateWatchStandIn(state: BraceletState) {
         guard store.watchStandsIn, !partners.isEmpty else { return }
-        if braceletConnected {
+        if state == .connected {
+            Self.braceletWasConnected = true
             if watchStandIn { watch.stopWatchStandIn() }
-        } else if !watchStandIn, Date().timeIntervalSince(Self.lastWatchWake) > 300 {
-            Self.lastWatchWake = Date()
-            watch.startWatchStandIn()
+            return
         }
+        guard state == .disconnected || state == .scanning || state == .connecting,
+              Self.braceletWasConnected, !watchStandIn else { return }
+        Self.braceletWasConnected = false
+        watch.startWatchStandIn()
     }
 
     // MARK: - Notification buttons

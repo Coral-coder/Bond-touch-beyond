@@ -17,6 +17,10 @@ final class StandIn: NSObject, ObservableObject, HKWorkoutSessionDelegate {
 
     private let store = HKHealthStore()
     private var session: HKWorkoutSession?
+    /// Stand-in shows as a workout on the watch: it ends by itself after an hour, so one the
+    /// phone never got to stop (or that was forgotten) doesn't run all day.
+    private var limit: Timer?
+    private static let maxDuration: TimeInterval = 60 * 60
 
     func toggle() { on ? stop() : start() }
 
@@ -36,6 +40,10 @@ final class StandIn: NSObject, ObservableObject, HKWorkoutSessionDelegate {
                     session.startActivity(with: Date())
                     self.session = session
                     self.set(true)
+                    self.limit?.invalidate()
+                    self.limit = Timer.scheduledTimer(withTimeInterval: Self.maxDuration, repeats: false) { [weak self] _ in
+                        self?.stop()
+                    }
                 } catch {
                     self.problem = "Couldn't start: \(error.localizedDescription)"
                 }
@@ -45,6 +53,8 @@ final class StandIn: NSObject, ObservableObject, HKWorkoutSessionDelegate {
 
     func stop() {
         guard on || session != nil else { return }
+        limit?.invalidate()
+        limit = nil
         session?.end()
         session = nil
         set(false)
