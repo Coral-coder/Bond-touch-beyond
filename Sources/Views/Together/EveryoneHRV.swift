@@ -30,11 +30,11 @@ struct EveryoneHRV: View {
 
     private func readings(_ person: Person) -> [Reading] { metric == .hrv ? person.hrv : person.heartRate }
 
-    private var end: Date {
-        let newest = people.compactMap { readings($0).last?.at }.max()
-        guard let newest, Date().timeIntervalSince(newest) > 24 * 3600 else { return Date() }
-        return newest.addingTimeInterval(15 * 60)
-    }
+    /// The day shown ends at the newest reading anyone has, not now: no new data, no moving
+    /// chart.
+    private var newest: Date? { people.compactMap { readings($0).last?.at }.max() }
+
+    private var end: Date { newest.map { $0.addingTimeInterval(5 * 60) } ?? Date() }
 
     private var domain: ClosedRange<Date> { end.addingTimeInterval(-24 * 3600)...end }
 
@@ -51,7 +51,8 @@ struct EveryoneHRV: View {
                 .pickerStyle(.segmented)
                 .frame(width: 180)
             }
-            Text(metric.caption).font(Theme.font(12, .bold)).foregroundStyle(Theme.subtitle)
+            Text(metric.caption + (newest.map { " · 24 hours to " + StressChart.when($0) } ?? ""))
+                .font(Theme.font(12, .bold)).foregroundStyle(Theme.subtitle)
             if shown.isEmpty {
                 Text("No \(metric == .hrv ? "heart-rate variability" : "heart rate") readings from anyone yet.")
                     .font(Theme.font(12)).foregroundStyle(Theme.subtitle).frame(maxWidth: .infinity, minHeight: 80)
@@ -94,7 +95,7 @@ struct EveryoneHRV: View {
                     Spacer()
                     if let last = readings(person).last {
                         Text("\(Int(last.value.rounded())) \(metric.unit)").font(Theme.font(13, .heavy)).foregroundStyle(Theme.title)
-                        Text(last.at.formatted(.relative(presentation: .named)))
+                        Text(StressChart.when(last.at))
                             .font(Theme.font(11))
                             .foregroundStyle(Date().timeIntervalSince(last.at) > 6 * 3600 ? Theme.amber : Theme.subtitle)
                     } else {

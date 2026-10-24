@@ -26,14 +26,23 @@ struct StressChart: View {
     /// Where the zoomed-in charts have slid to (the left edge), shared by both charts.
     @State private var scrollX = Date().addingTimeInterval(-24 * 3600)
 
+    /// "3:42 PM" today, "Yesterday 3:42 PM", else "Oct 22, 3:42 PM".
+    static func when(_ date: Date) -> String {
+        let cal = Calendar.current
+        let time = date.formatted(date: .omitted, time: .shortened)
+        if cal.isDateInToday(date) { return time }
+        if cal.isDateInYesterday(date) { return "yesterday " + time }
+        return date.formatted(.dateTime.month(.abbreviated).day().hour().minute())
+    }
+
     /// The newest reading of any kind.
     private var latest: Date? { [points.last?.at, beats.last?.at].compactMap { $0 }.max() }
 
-    /// Where the day shown ends: now, or the last readings when they're over a day old (the
-    /// last report stays on show until a new one replaces it).
+    /// Where the day shown ends: at the last reading, not now — with no new data the chart
+    /// stays put, showing the last report and its date until a newer one replaces it.
     private var end: Date {
-        guard let latest, Date().timeIntervalSince(latest) > 24 * 3600 else { return Date() }
-        return latest.addingTimeInterval(15 * 60)
+        guard let latest else { return Date() }
+        return latest.addingTimeInterval(5 * 60)
     }
 
     /// The whole day, which the charts slide along `span` hours at a time (iOS 17); on iOS 16,
@@ -65,7 +74,7 @@ struct StressChart: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text(Date().timeIntervalSince(end) > 3600 ? "24 hours to " + end.formatted(date: .abbreviated, time: .shortened) : "Last 24 hours")
+                Text(latest.map { "24 hours to " + Self.when($0) } ?? "Last 24 hours")
                     .font(Theme.font(16, .heavy)).foregroundStyle(Theme.title)
                     .lineLimit(1).minimumScaleFactor(0.7)
                 Spacer()
@@ -88,8 +97,7 @@ struct StressChart: View {
             // Recent → nothing new to share; hours old → the watch isn't being worn (Apple
             // Watch records HRV every few hours, more often while asleep).
             if let last = latest {
-                Text("Last reading " + last.formatted(.relative(presentation: .named))
-                     + (Date().timeIntervalSince(last) > 24 * 3600 ? " · " + last.formatted(date: .abbreviated, time: .shortened) : ""))
+                Text("Last reading " + Self.when(last) + " · " + last.formatted(.relative(presentation: .named)))
                     .font(Theme.font(11)).foregroundStyle(Date().timeIntervalSince(last) > 6 * 3600 ? Theme.amber : Theme.subtitle)
             }
             if !points.isEmpty {
