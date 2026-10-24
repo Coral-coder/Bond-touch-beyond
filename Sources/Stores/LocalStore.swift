@@ -68,7 +68,9 @@ final class LocalStore: ObservableObject {
     }
     /// When the bracelet disconnects, wake the Apple Watch to stand in for it (it plays touches
     /// on the wrist); stop when the bracelet is back. On by default.
-    @Published var watchStandsIn: Bool = (UserDefaults.standard.object(forKey: "watchStandsIn") as? Bool) ?? true {
+    /// Off unless switched on: Stand-in runs as a workout on the watch (with its timer in the
+    /// Smart Stack), which nobody should get without asking for it.
+    @Published var watchStandsIn: Bool = (UserDefaults.standard.object(forKey: "watchStandsIn") as? Bool) ?? false {
         didSet { UserDefaults.standard.set(watchStandsIn, forKey: "watchStandsIn") }
     }
     /// Saved places watched for arrival alerts.
