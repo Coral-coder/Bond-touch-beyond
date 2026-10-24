@@ -17,6 +17,7 @@ struct BatteryView: View {
             VStack(spacing: 14) {
                 myBattery
                 StressChart(battery: battery)
+                EveryoneHRV(model: model, battery: battery)
                 logCard
                 partnersCard
                 historyCard
