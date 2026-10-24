@@ -43,7 +43,8 @@ struct MapTabView: View {
     var body: some View {
         ZStack(alignment: .top) {
             Map(coordinateRegion: $region, annotationItems: allPins) { pin in
-                MapAnnotation(coordinate: pin.coordinate) { annotation(pin) }
+                // Pins are hosted outside this hierarchy: pass the model and store on to them.
+                MapAnnotation(coordinate: pin.coordinate) { annotation(pin).environmentObject(model).environmentObject(store) }
             }
             .ignoresSafeArea()
             .onAppear { fitEveryone(animated: false); model.requestPartnerLocations() }

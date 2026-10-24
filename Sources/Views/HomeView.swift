@@ -602,6 +602,8 @@ struct HomeView: View {
 
 /// A small non-interactive map framing you and your partner.
 struct PairMap: View {
+    @EnvironmentObject var model: AppModel
+    @EnvironmentObject var store: LocalStore
     let me: CLLocationCoordinate2D
     let partner: CLLocationCoordinate2D
     let meView: AnyView
@@ -624,8 +626,11 @@ struct PairMap: View {
     var body: some View {
         Map(coordinateRegion: .constant(region), interactionModes: [],
             annotationItems: [Pin(id: 0, coordinate: me), Pin(id: 1, coordinate: partner)]) { pin in
+            // Map pins are hosted outside this view's hierarchy and don't inherit its
+            // environment: hand the model and store on, or a face that reads them
+            // (PartnerFace) crashes.
             MapAnnotation(coordinate: pin.coordinate) {
-                pin.id == 0 ? meView : partnerView
+                (pin.id == 0 ? meView : partnerView).environmentObject(model).environmentObject(store)
             }
         }
         .colorScheme(Theme.colorScheme)
