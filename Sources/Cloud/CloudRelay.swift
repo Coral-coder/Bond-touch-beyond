@@ -28,6 +28,10 @@ import Foundation
 ///   Profile    L-R-wb        the shared whiteboard
 /// (The Us records reuse the Profile type — it only holds sealed bytes — so no schema change.)
 /// The schema (cloudkit.ckdb) gives every type one encrypted BYTES field, `payload`.
+///
+/// The same records can live in Firebase instead (FirebaseStore), so a partner on Android can
+/// bond with an iPhone: once Firebase is set up in the build, every new bond goes there, and a
+/// code is looked up in both places when joining. Existing iCloud bonds stay on iCloud.
 actor CloudRelay {
     static let ringSize = 50
 
@@ -96,8 +100,19 @@ actor CloudRelay {
     // MARK: - Account
 
     func currentUserID() async throws -> String {
-        if Self.offline { throw CKError(.notAuthenticated) }
-        return try await container.userRecordID().recordName
+        if !Self.offline, let id = try? await container.userRecordID().recordName { return id }
+        // No iCloud: Firebase bonds still work, so use a stable ID kept on this phone.
+        guard FirebaseStore.isConfigured else { throw CKError(.notAuthenticated) }
+        if let id = UserDefaults.standard.string(forKey: "relay.localUserID") { return id }
+        let id = UUID().uuidString
+        UserDefaults.standard.set(id, forKey: "relay.localUserID")
+        return id
+    }
+
+    /// Why pairing can't happen right now, or nil. Without iCloud, pairing still works over Firebase.
+    func pairingBlockedMessage() async -> String? {
+        let msg = await accountStatusMessage()
+        return FirebaseStore.isConfigured ? nil : msg
     }
 
     func accountStatusMessage() async -> String? {
@@ -117,7 +132,10 @@ actor CloudRelay {
 
     // MARK: - Codes & links
 
-    static func inviteURL(for code: String) -> URL { URL(string: "bondtouchbeyond://join?code=\(code)")! }
+    /// The invite link; `via=fb` marks a Firebase bond (Android phones open the same link).
+    static func inviteURL(for code: String) -> URL {
+        URL(string: "bondtouchbeyond://join?code=\(code)" + (usesFirebase(code) ? "&via=fb" : ""))!
+    }
 
     static func code(fromURL url: URL) -> String? {
         guard url.scheme == "bondtouchbeyond", url.host == "join",
@@ -140,12 +158,31 @@ actor CloudRelay {
     private struct Ref {
         let id: CKRecord.ID
         let kind: Kind
+        let code: String
     }
+
+    // MARK: - Which store a bond uses
+
+    private static let firebaseCodesKey = "relay.firebaseCodes"
+
+    /// Whether this bond's records are in Firebase (else iCloud).
+    static func usesFirebase(_ code: String) -> Bool {
+        Set(UserDefaults.standard.stringArray(forKey: firebaseCodesKey) ?? []).contains(code.uppercased())
+    }
+
+    private static func setFirebase(_ code: String, _ on: Bool) {
+        var codes = Set(UserDefaults.standard.stringArray(forKey: firebaseCodesKey) ?? [])
+        if on { codes.insert(code.uppercased()) } else { codes.remove(code.uppercased()) }
+        UserDefaults.standard.set(Array(codes), forKey: firebaseCodesKey)
+    }
+
+    /// Change tags of Firebase records (their server time), standing in for CloudKit's.
+    private var firebaseTags: [String: String] = [:]
 
     private static func role(_ isOwner: Bool) -> String { isOwner ? "A" : "B" }
 
     private func ref(_ code: String, _ suffix: String, _ kind: Kind) -> Ref {
-        Ref(id: CKRecord.ID(recordName: "\(BondCrypto.locator(forCode: code))-\(suffix)"), kind: kind)
+        Ref(id: CKRecord.ID(recordName: "\(BondCrypto.locator(forCode: code))-\(suffix)"), kind: kind, code: code)
     }
     private func bondRef(_ code: String) -> Ref { ref(code, "bond", .bond) }
     /// One of this phone's records in `bond`.
@@ -173,6 +210,10 @@ actor CloudRelay {
     /// Creates or overwrites one record. Throws the record's own error — `modifyRecords`
     /// reports per-record failures (schema, permissions) in its results, not by throwing.
     private func put(_ ref: Ref, _ payload: Data) async throws {
+        if Self.usesFirebase(ref.code) {
+            try await FirebaseStore.shared.put(ref.id.recordName, payload)
+            return
+        }
         let record = CKRecord(recordType: ref.kind.rawValue, recordID: ref.id)
         record["payload"] = payload as CKRecordValue
         let result = try await db.modifyRecords(saving: [record], deleting: [], savePolicy: .allKeys, atomically: false)
@@ -181,6 +222,30 @@ actor CloudRelay {
 
     /// Fetches records by name; ones that don't exist yet are simply absent from the result.
     private func get(_ refs: [Ref]) async throws -> [CKRecord.ID: CKRecord] {
+        guard !refs.isEmpty else { return [:] }
+        let inFirebase = refs.filter { Self.usesFirebase($0.code) }
+        guard inFirebase.isEmpty else {
+            var out = try await getCloud(refs.filter { !Self.usesFirebase($0.code) })
+            do {
+                let found = try await FirebaseStore.shared.get(inFirebase.map(\.id.recordName))
+                for ref in inFirebase {
+                    guard let rec = found[ref.id.recordName] else { continue }
+                    // A local record carrying the payload, so the rest of the relay reads it as usual.
+                    let record = CKRecord(recordType: ref.kind.rawValue, recordID: ref.id)
+                    record["payload"] = rec.payload as CKRecordValue
+                    firebaseTags[ref.id.recordName] = rec.tag
+                    out[ref.id] = record
+                }
+            } catch {
+                logOnce("Firebase read failed", error)
+                throw error
+            }
+            return out
+        }
+        return try await getCloud(refs)
+    }
+
+    private func getCloud(_ refs: [Ref]) async throws -> [CKRecord.ID: CKRecord] {
         guard !refs.isEmpty else { return [:] }
         do {
             let results = try await db.records(for: refs.map(\.id))
@@ -210,7 +275,7 @@ actor CloudRelay {
     /// True the first time a record's current version is seen (by change tag).
     private func isNew(_ record: CKRecord) -> Bool {
         let name = record.recordID.recordName
-        let tag = record.recordChangeTag ?? ""
+        let tag = record.recordChangeTag ?? firebaseTags[name] ?? ""
         if seenTags[name] == tag { return false }
         seenTags[name] = tag
         return true
@@ -223,8 +288,15 @@ actor CloudRelay {
     /// the moment they join.
     func createBond(displayName: String, myUserID: String, colorRGB: Int, pushToken: String) async throws -> (Bond, URL) {
         var code = Self.newCode()
-        if let found = try? await get([bondRef(code)]), !found.isEmpty { code = Self.newCode() }
-        log(.send, "iCloud: creating bond")
+        // New bonds go to Firebase when it's set up, so partners on Android can join too.
+        let firebase = FirebaseStore.isConfigured
+        Self.setFirebase(code, firebase)
+        if let found = try? await get([bondRef(code)]), !found.isEmpty {
+            Self.setFirebase(code, false)
+            code = Self.newCode()
+            Self.setFirebase(code, firebase)
+        }
+        log(.send, firebase ? "Firebase: creating bond" : "iCloud: creating bond")
         let bond = Bond(id: code, partnerName: "Pending…", isOwner: true, pending: true)
         do {
             try await put(bondRef(code), seal(BondPayload(name: displayName, ownerID: myUserID), code))
@@ -242,14 +314,27 @@ actor CloudRelay {
     /// away — that's how the inviter's phone learns we joined.
     func joinBond(code rawCode: String, displayName: String, colorRGB: Int, pushToken: String) async throws -> Bond {
         let code = Self.normalize(rawCode)
-        log(.send, "iCloud: joining bond")
-        let found: [CKRecord.ID: CKRecord]
-        do { found = try await get([bondRef(code)]) } catch {
-            log(.fail, "iCloud: couldn't look up the code", Self.detail(error))
-            throw error
+        log(.send, "Joining bond")
+        // The code may be a Firebase bond (made on Android, or by a newer iPhone build) or an
+        // iCloud one: look in Firebase first when it's set up, then iCloud.
+        var info: BondPayload?
+        var lastError: Error?
+        for firebase in (FirebaseStore.isConfigured ? [true, false] : [false]) {
+            Self.setFirebase(code, firebase)
+            do {
+                let found = try await get([bondRef(code)])
+                if let payload = open(BondPayload.self, found[bondRef(code).id], code) { info = payload; break }
+            } catch {
+                lastError = error
+            }
         }
-        guard let info = open(BondPayload.self, found[bondRef(code).id], code) else {
-            log(.fail, "iCloud: no bond with that code")
+        guard let info else {
+            Self.setFirebase(code, false)
+            if let lastError {
+                log(.fail, "Couldn't look up the code", Self.detail(lastError))
+                throw lastError
+            }
+            log(.fail, "No bond with that code")
             throw CloudRelayError.bondNotFound
         }
         let bond = Bond(id: code, partnerName: info.name, isOwner: false)
@@ -300,7 +385,11 @@ actor CloudRelay {
         refs += (0..<Self.ringSize).map { mine(bond, "t-\($0)", .touch) }
         refs += (0..<Self.ringSize).map { mine(bond, "m-\($0)", .message) }
         if bond.isOwner { refs.append(bondRef(bond.id)) }
-        _ = try? await db.modifyRecords(saving: [], deleting: refs.map(\.id), savePolicy: .allKeys, atomically: false)
+        if Self.usesFirebase(bond.id) {
+            await FirebaseStore.shared.delete(refs.map(\.id.recordName))
+        } else {
+            _ = try? await db.modifyRecords(saving: [], deleting: refs.map(\.id), savePolicy: .allKeys, atomically: false)
+        }
         for key in [seqKey(bond.id, .touch), seqKey(bond.id, .message), seenKey(bond.id, .touch), seenKey(bond.id, .message)] {
             UserDefaults.standard.removeObject(forKey: key)
         }

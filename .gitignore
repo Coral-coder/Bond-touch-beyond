@@ -2,3 +2,4 @@ ThirdParty/libsignal-ffi/
 *.xcodeproj/
 build/
 .claude/
+Sources/Resources/GoogleService-Info.plist

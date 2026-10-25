@@ -529,7 +529,7 @@ final class AppModel: ObservableObject {
         // Sharing stays as the user left it (on by default) — it isn't reset by an update.
         if sharingLocation { setLocationSharing(true) }
         iCloudStatus = await relay.accountStatusMessage()
-        guard iCloudStatus == nil else {
+        guard iCloudStatus == nil || FirebaseStore.isConfigured else {
             statusLine = "iCloud is not signed in."
             return
         }
@@ -756,7 +756,7 @@ final class AppModel: ObservableObject {
     func createBond(forExistingPartner: Bool = false) async -> String? {
         if !forExistingPartner, let full = partnerLimitMessage { return full }
         iCloudStatus = await relay.accountStatusMessage()
-        if let msg = iCloudStatus { return msg }
+        if let msg = await relay.pairingBlockedMessage() { return msg }
         if myUserID.isEmpty { myUserID = (try? await relay.currentUserID()) ?? "" }
         do {
             let (bond, url) = try await relay.createBond(
@@ -788,7 +788,7 @@ final class AppModel: ObservableObject {
             return nil
         }
         iCloudStatus = await relay.accountStatusMessage()
-        if let msg = iCloudStatus { return msg }
+        if let msg = await relay.pairingBlockedMessage() { return msg }
         if myUserID.isEmpty { myUserID = (try? await relay.currentUserID()) ?? "" }
         do {
             let me = store.profile.name.isEmpty ? "Me" : store.profile.name
