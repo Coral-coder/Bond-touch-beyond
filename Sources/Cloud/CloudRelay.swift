@@ -178,6 +178,8 @@ actor CloudRelay {
 
     /// Change tags of Firebase records (their server time), standing in for CloudKit's.
     private var firebaseTags: [String: String] = [:]
+    /// Firebase: the partner's record counters already fetched (by record name).
+    private var seenRevs: [String: Int] = [:]
 
     private static func role(_ isOwner: Bool) -> String { isOwner ? "A" : "B" }
 
@@ -302,6 +304,7 @@ actor CloudRelay {
             try await put(bondRef(code), seal(BondPayload(name: displayName, ownerID: myUserID), code))
             try await put(mine(bond, "pf", .profile), seal(ProfilePayload(name: displayName, colorRGB: colorRGB,
                                                                           pushToken: pushToken, photoHash: nil), code))
+            try await announce("pf", bond)
         } catch {
             log(.fail, "iCloud: couldn't create bond", Self.detail(error))
             throw error
@@ -341,6 +344,7 @@ actor CloudRelay {
         do {
             try await put(mine(bond, "pf", .profile), seal(ProfilePayload(name: displayName, colorRGB: colorRGB,
                                                                           pushToken: pushToken, photoHash: nil), code))
+            try await announce("pf", bond)
         } catch {
             log(.fail, "iCloud: couldn't join bond", Self.detail(error))
             throw error
@@ -421,6 +425,7 @@ actor CloudRelay {
 
     func sendHeartbeat(bpm: Int, bond: Bond, senderID: String) async throws {
         try await put(mine(bond, "hb", .heartbeat), seal(HeartbeatPayload(bpm: bpm, sentAt: Date()), bond.id))
+        try await announce("hb", bond)
     }
 
     /// Writes this phone's full status snapshot for the partner (it replaces the previous one).
@@ -428,6 +433,7 @@ actor CloudRelay {
         var info = info
         info.sentAt = Date()
         try await put(mine(bond, "pr", .presence), seal(info, bond.id))
+        try await announce("pr", bond)
     }
 
     func sendProfile(name: String, colorRGB: Int, photo: URL?, pushToken: String? = nil,
@@ -441,15 +447,39 @@ actor CloudRelay {
         try await put(mine(bond, "pf", .profile), seal(ProfilePayload(name: name, colorRGB: colorRGB,
                                                                       pushToken: pushToken, photoHash: hash,
                                                                       meanings: meanings), bond.id))
+        try await announce("pf", bond)
     }
 
     /// This phone's copy of the Us space / whiteboard (the partner merges it into theirs).
     func sendSpace(_ space: TogetherSpace, bond: Bond) async throws {
         try await put(mine(bond, "sx", .profile), seal(space, bond.id))
+        try await announce("sx", bond)
     }
 
     func sendBoard(_ board: Whiteboard, bond: Bond) async throws {
         try await put(mine(bond, "wb", .profile), seal(board, bond.id))
+        try await announce("wb", bond)
+    }
+
+    // MARK: - Change counters (Firebase)
+
+    /// Firebase's free plan allows 50 000 reads a day, so a Firebase bond's partner polls only
+    /// the cursor: it carries a counter per record (`rev`), bumped on every write, and the
+    /// partner fetches a record only when its counter moved. iCloud bonds read everything.
+    private func revKey(_ code: String) -> String { "relay.rev.\(code)" }
+
+    private func revs(_ code: String) -> [String: Int] {
+        UserDefaults.standard.dictionary(forKey: revKey(code)) as? [String: Int] ?? [:]
+    }
+
+    /// After writing record `what`: bumps its counter and rewrites the cursor (Firebase only).
+    private func announce(_ what: String, _ bond: Bond) async throws {
+        guard Self.usesFirebase(bond.id) else { return }
+        var r = revs(bond.id)
+        r[what, default: 0] += 1
+        UserDefaults.standard.set(r, forKey: revKey(bond.id))
+        await loadCounters(bond)
+        try await writeCursor(bond)
     }
 
     private static func hash(_ data: Data) -> String {
@@ -487,7 +517,8 @@ actor CloudRelay {
         let cursor = CursorPayload(touch: UserDefaults.standard.integer(forKey: seqKey(bond.id, .touch)),
                                    message: UserDefaults.standard.integer(forKey: seqKey(bond.id, .message)),
                                    seenTouch: UserDefaults.standard.integer(forKey: seenKey(bond.id, .touch)),
-                                   seenMessage: UserDefaults.standard.integer(forKey: seenKey(bond.id, .message)))
+                                   seenMessage: UserDefaults.standard.integer(forKey: seenKey(bond.id, .message)),
+                                   rev: Self.usesFirebase(bond.id) ? revs(bond.id) : nil)
         try await put(mine(bond, "cur", .cursor), seal(cursor, bond.id))
     }
 
@@ -532,7 +563,27 @@ actor CloudRelay {
         let cursorRef = theirs(bond, "cur", .cursor), heartbeatRef = theirs(bond, "hb", .heartbeat)
         let presenceRef = theirs(bond, "pr", .presence), profileRef = theirs(bond, "pf", .profile)
         let spaceRef = theirs(bond, "sx", .profile), boardRef = theirs(bond, "wb", .profile)
-        let found = try await get([cursorRef, heartbeatRef, presenceRef, profileRef, spaceRef, boardRef])
+        var found: [CKRecord.ID: CKRecord]
+        if Self.usesFirebase(code) {
+            // The cursor alone, then only the records whose counters moved since this launch
+            // last fetched them.
+            found = try await get([cursorRef])
+            let rev = open(CursorPayload.self, found[cursorRef.id], code)?.rev
+            let others = [("hb", heartbeatRef), ("pr", presenceRef), ("pf", profileRef), ("sx", spaceRef), ("wb", boardRef)]
+            // Without counters (no cursor yet), read everything; with them, a record with no
+            // counter hasn't been written.
+            let changed = others.filter { entry in
+                guard let rev else { return true }
+                guard let n = rev[entry.0] else { return false }
+                return seenRevs[entry.1.id.recordName] != n
+            }
+            if !changed.isEmpty {
+                found.merge(try await get(changed.map(\.1))) { _, new in new }
+            }
+            for entry in changed { seenRevs[entry.1.id.recordName] = rev?[entry.0] }
+        } else {
+            found = try await get([cursorRef, heartbeatRef, presenceRef, profileRef, spaceRef, boardRef])
+        }
         if let rec = found[spaceRef.id], isNew(rec) { events.space = open(TogetherSpace.self, rec, code) }
         if let rec = found[boardRef.id], isNew(rec) { events.board = open(Whiteboard.self, rec, code) }
 
@@ -690,6 +741,8 @@ private struct HeartbeatPayload: Codable { let bpm: Int; let sentAt: Date }
 /// (so the partner can mark theirs Seen; optional so older builds read it).
 private struct CursorPayload: Codable {
     let touch: Int; let message: Int; var seenTouch: Int? = nil; var seenMessage: Int? = nil
+    /// Firebase bonds: a change counter per record (hb, pr, pf, sx, wb).
+    var rev: [String: Int]? = nil
 }
 private struct TouchPayload: Codable {
     var seq = 0
