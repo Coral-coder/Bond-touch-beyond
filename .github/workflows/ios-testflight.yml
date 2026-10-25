@@ -181,6 +181,25 @@ jobs:
           } > Sources/Push/APNsSecrets.swift
           echo "APNs key injected (kid $KID) — direct push enabled for this build."
 
+      - name: Add the Firebase config (bonds shared with Android)
+        # GOOGLE_SERVICE_INFO_PLIST: the iOS app's GoogleService-Info.plist from the Firebase
+        # console, raw or base64. Without it the app stays iCloud-only.
+        env:
+          PLIST: ${{ secrets.GOOGLE_SERVICE_INFO_PLIST }}
+        run: |
+          if [ -z "$PLIST" ]; then
+            echo "::warning::GOOGLE_SERVICE_INFO_PLIST not set — new bonds stay on iCloud (no Android pairing)."
+            exit 0
+          fi
+          mkdir -p Sources/Resources
+          if printf '%s' "$PLIST" | grep -q '<plist'; then
+            printf '%s' "$PLIST" > Sources/Resources/GoogleService-Info.plist
+          else
+            printf '%s' "$PLIST" | base64 --decode > Sources/Resources/GoogleService-Info.plist
+          fi
+          plutil -lint Sources/Resources/GoogleService-Info.plist
+          echo "Firebase config bundled — new bonds use Firebase."
+
       - name: Select Xcode 26 or later
         run: |
           xcode=$(ls -d /Applications/Xcode_2[6-9]*.app /Applications/Xcode_[3-9][0-9]*.app 2>/dev/null | sort -V | tail -1)
