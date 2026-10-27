@@ -49,6 +49,14 @@ extension AppModel {
         var jo = Partner(bond: Bond(id: "DEMOJO", partnerName: "Jo", isOwner: false), colorRGB: 0xECA94B, online: false,
                          lastSeen: Date().addingTimeInterval(-3600))
         jo.presence = PresenceInfo(online: false, bracelet: false)
+        // Stress & mood: Alex reported a minute ago; Jo's watch has been off for six hours.
+        let alexDay = MoodShare.demoDay(end: Date().addingTimeInterval(-60), seed: 2.4)
+        alex.presence?.mood = MoodShare(emoji: "😌", label: "Calm", battery: 78, level: "calm",
+                                        at: Date().addingTimeInterval(-60), series: alexDay.series, heartRate: alexDay.heartRate)
+        let joDay = MoodShare.demoDay(end: Date().addingTimeInterval(-6 * 3600), seed: 4.1)
+        jo.presence?.mood = MoodShare(emoji: "😴", label: "Tired", battery: 41, level: "low",
+                                      at: Date().addingTimeInterval(-6 * 3600), series: joDay.series, heartRate: joDay.heartRate)
+        battery.loadDemo()
         cloudPartners = [alex, jo]
         selectedPartnerID = alex.id
 

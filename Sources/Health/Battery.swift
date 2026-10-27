@@ -18,6 +18,23 @@ struct MoodShare: Codable, Equatable {
     var heartRate: [[Double]]? = nil
 
     var needsCare: Bool { level == "stressed" || level == "overwhelmed" }
+
+    /// Demo mode: 24 hours of HRV (every 90 min) and heart rate (every 10 min) up to `end`.
+    static func demoDay(end: Date, seed: Double) -> (series: [[Double]], heartRate: [[Double]]) {
+        let t0 = end.timeIntervalSince1970 - 24 * 3600
+        let series = (0...16).map { i -> [Double] in
+            let t = t0 + Double(i) * 5400
+            let hrv = 46 + 12 * sin(Double(i) * 0.7 + seed) + 5 * sin(Double(i) * 1.9 + seed * 2)
+            return [t, hrv.rounded(), max(5, min(95, 50 - (hrv / 46 - 1) * 90)).rounded()]
+        }
+        let heartRate = (0..<144).map { i -> [Double] in
+            let t = t0 + Double(i) * 600
+            let hour = (t / 3600).truncatingRemainder(dividingBy: 24)
+            let asleep = hour < 6 || hour > 23
+            return [t, ((asleep ? 56 : 72) + 9 * sin(Double(i) * 0.21 + seed) + 4 * sin(Double(i) * 0.9)).rounded()]
+        }
+        return (series, heartRate)
+    }
     var stress: Int { 100 - battery }
 }
 
@@ -111,6 +128,15 @@ final class BatteryService: ObservableObject {
                       readAt: readAt ?? Date(),
                       heartRate: heartRate.map { [$0.at.timeIntervalSince1970, $0.bpm] })
         if let data = try? JSONEncoder().encode(c) { UserDefaults.standard.set(data, forKey: Self.cacheKey) }
+    }
+
+    /// Demo mode (screenshots): a believable day of readings ending now.
+    func loadDemo() {
+        let day = MoodShare.demoDay(end: Date(), seed: 1)
+        series = day.series.map { (at: Date(timeIntervalSince1970: $0[0]), hrv: $0[1], stress: $0[2]) }
+        heartRate = day.heartRate.map { (at: Date(timeIntervalSince1970: $0[0]), bpm: $0[1]) }
+        hrv = 48; hrvBaseline = 44; restingHR = 58; sleepHours = 7.4; bodyBattery = 72; readAt = Date()
+        entries = [MoodEntry(at: Date().addingTimeInterval(-3 * 3600), emoji: "🙂", label: "Good", level: "ok", energy: 70, battery: 72)]
     }
 
     /// The battery to show and share: your latest log (if from the last 12 hours) blended
