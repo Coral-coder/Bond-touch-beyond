@@ -152,8 +152,18 @@ final class PhoneLink: NSObject, ObservableObject, WCSessionDelegate {
 
     var selected: WatchPartner? { partners.first { $0.id == selectedID } ?? partners.first }
 
+    /// Demo mode (screenshots, launch argument `-demo`): sample partners, meanings and
+    /// touches, no phone needed.
+    static let isDemo = ProcessInfo.processInfo.arguments.contains("-demo")
+    static func demoArgument(_ name: String) -> String? {
+        let args = ProcessInfo.processInfo.arguments
+        guard let i = args.firstIndex(of: name), i + 1 < args.count else { return nil }
+        return args[i + 1]
+    }
+
     override init() {
         super.init()
+        if Self.isDemo { loadDemo(); return }
         if WCSession.isSupported() {
             WCSession.default.delegate = self
             WCSession.default.activate()
@@ -197,6 +207,32 @@ final class PhoneLink: NSObject, ObservableObject, WCSessionDelegate {
         } else {
             session.transferUserInfo(message)
         }
+    }
+
+    private func loadDemo() {
+        let now = Date().timeIntervalSince1970
+        let slide = [1, 3, 7, 15, 31, 63, 127, 255, 511, 255, 127, 63, 31, 15, 7, 3, 1]
+        let partners: [[String: Any]] = [
+            ["id": "A", "name": "Alex", "color": 0xEC5A89, "online": true],
+            ["id": "J", "name": "Jo", "color": 0xECA94B, "online": false],
+            ["id": "R", "name": "Riley", "color": 0x6C8CFF, "online": true],
+            ["id": "M", "name": "Max", "color": 0x57C3BB, "online": true],
+            ["id": "K", "name": "Kai", "color": 0xB173DF, "online": false],
+        ]
+        let meanings: [[String: Any]] = [
+            ["name": "Love you", "pattern": [140, 120, 140, 120, 520], "gen": 2, "start": 0xEC5A89, "end": 0xB173DF, "fav": true],
+            ["name": "Miss you", "pattern": slide, "gen": 3, "start": 0x57C3BB, "end": 0xB173DF],
+            ["name": "Goodnight", "pattern": [600, 300, 600], "gen": 2, "start": 0xB173DF, "end": 0x57C3BB],
+            ["name": "Hug", "pattern": [1200], "gen": 2, "start": 0xECA94B, "end": 0xECA94B],
+        ]
+        let history: [[String: Any]] = [
+            ["id": "h1", "bond": "A", "pattern": slide, "gen": 3, "start": 0x57C3BB, "end": 0xB173DF, "at": now - 1500, "mine": true, "label": "Miss you"],
+            ["id": "h2", "bond": "A", "pattern": [140, 120, 140, 120, 520], "gen": 2, "start": 0xEC5A89, "end": 0xB173DF, "at": now - 600, "label": "Love you"],
+            ["id": "h3", "bond": "A", "pattern": Array(slide.reversed()), "gen": 3, "start": 0xEC5A89, "end": 0xEC5A89, "at": now - 120],
+        ]
+        var meaningsByBond: [String: [[String: Any]]] = [:]
+        for p in partners { meaningsByBond[p["id"] as! String] = meanings }
+        apply(["partners": partners, "meanings": meaningsByBond, "history": ["A": history], "selected": "A", "window": 5.0])
     }
 
     private func apply(_ context: [String: Any]) {

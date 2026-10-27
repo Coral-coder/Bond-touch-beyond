@@ -9,6 +9,10 @@ on:
       only:
         description: "Only these demo screens (space separated); empty = everything"
         required: false
+      watch:
+        description: "Also screenshot the Apple Watch app"
+        type: boolean
+        default: true
   push:
     paths:
       - ".github/workflows/ios-screenshots.yml"
@@ -125,6 +129,43 @@ jobs:
           for s in chat games pool chess checkers backgammon battleship whiteboard todo notes likes dates radar battery jar love roulette question agreements repair memories polycal metamours story wavelength compose draw partner weather homeCards people private; do
             shot "screen-$s" -appStyle aero -demoScreen "$s"
           done
+
+      # The watch app in its own demo mode (sample partners, meanings and touches; no phone).
+      - name: Watch screenshots
+        if: ${{ !cancelled() && (github.event_name != 'workflow_dispatch' || inputs.watch) }}
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          xcodebuild -project BondTouchBeyond.xcodeproj -target BondTouchBeyondWatch -sdk watchsimulator \
+            -configuration Debug CODE_SIGNING_ALLOWED=NO SYMROOT="$PWD/build/watch" build | tail -5
+          APP=$(find build/watch -maxdepth 2 -name "BondTouchBeyondWatch.app" | head -1)
+          echo "Watch app: $APP"
+          WUDID=$(xcrun simctl list devices available -j | python3 -c '
+          import json,sys
+          d=json.load(sys.stdin)["devices"]
+          cands=[x for rt,devs in d.items() if "watchOS" in rt for x in devs]
+          pref=[x for x in cands if "46mm" in x["name"] or "45mm" in x["name"]] or cands
+          print(pref[-1]["udid"] if pref else "")')
+          [ -n "$WUDID" ] || { echo "::warning::No Apple Watch simulator on this runner"; exit 0; }
+          xcrun simctl boot "$WUDID" || true
+          xcrun simctl bootstatus "$WUDID" -b
+          xcrun simctl status_bar "$WUDID" override --time 9:41 || true
+          WID=com.lightwave.beyond.watchkitapp
+          xcrun simctl install "$WUDID" "$APP"
+          mkdir -p shots
+          wshot() {
+            name="$1"; shift
+            xcrun simctl terminate "$WUDID" "$WID" 2>/dev/null || true
+            xcrun simctl launch "$WUDID" "$WID" -demo "$@" >/dev/null
+            sleep 8
+            xcrun simctl io "$WUDID" screenshot "shots/$name.png" >/dev/null 2>&1
+            echo "shot $name"
+          }
+          wshot watch-touch -demoPage 0
+          wshot watch-meanings -demoPage 1
+          wshot watch-history -demoPage 2
+          wshot watch-standin -demoPage 3
+          wshot watch-partners -demoPage 0 -demoPicker 1
 
       - name: Contact sheets
         continue-on-error: true

@@ -57,7 +57,27 @@ extension AppModel {
         jo.presence?.mood = MoodShare(emoji: "😴", label: "Tired", battery: 41, level: "low",
                                       at: Date().addingTimeInterval(-6 * 3600), series: joDay.series, heartRate: joDay.heartRate)
         battery.loadDemo()
-        cloudPartners = [alex, jo]
+        // Three more partners, so multi-partner screens show a fuller picture.
+        func extra(_ id: String, _ name: String, _ rgb: Int, online: Bool, lat: Double, lng: Double,
+                   emoji: String, label: String, battery: Int, level: String, hoursAgo: Double, seed: Double) -> Partner {
+            var p = Partner(bond: Bond(id: id, partnerName: name, isOwner: true), colorRGB: rgb, online: online,
+                            lastSeen: Date().addingTimeInterval(online ? 0 : -hoursAgo * 3600), latitude: lat, longitude: lng)
+            let at = Date().addingTimeInterval(-hoursAgo * 3600)
+            let day = MoodShare.demoDay(end: at, seed: seed)
+            p.presence = PresenceInfo(online: online, lat: lat, lng: lng, locationAt: at, speed: 0,
+                                      phoneBattery: Double(battery) / 100, phoneCharging: false, bracelet: online,
+                                      braceletBattery: online ? 67 : nil)
+            p.presence?.mood = MoodShare(emoji: emoji, label: label, battery: battery, level: level, at: at,
+                                         series: day.series, heartRate: day.heartRate)
+            return p
+        }
+        let riley = extra("DEMORILEY", "Riley", 0x6C8CFF, online: true, lat: 51.5072, lng: -0.1276,
+                          emoji: "🤩", label: "Excited", battery: 84, level: "calm", hoursAgo: 0.1, seed: 0.7)
+        let maxP = extra("DEMOMAX", "Max", 0x57C3BB, online: true, lat: 40.7128, lng: -74.006,
+                        emoji: "😟", label: "Anxious", battery: 34, level: "stressed", hoursAgo: 0.5, seed: 3.3)
+        let kai = extra("DEMOKAI", "Kai", 0xB173DF, online: false, lat: 35.6762, lng: 139.6503,
+                        emoji: "😴", label: "Tired", battery: 52, level: "low", hoursAgo: 3, seed: 5.2)
+        cloudPartners = [alex, jo, riley, maxP, kai]
         selectedPartnerID = alex.id
 
         let love = TouchMeaning(label: "Love you", emoji: "💗", colorRGB: 0xEC5A89, endColorRGB: 0xB173DF,

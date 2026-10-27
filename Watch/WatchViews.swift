@@ -12,6 +12,8 @@ private let accent = Color(rgb: 0x3ED9CE)
 
 struct WatchRootView: View {
     @EnvironmentObject var link: PhoneLink
+    /// Demo mode can open on a given page (`-demoPage 0…4`).
+    @State private var page = Int(PhoneLink.demoArgument("-demoPage") ?? "") ?? 0
 
     var body: some View {
         if link.partners.isEmpty {
@@ -22,12 +24,12 @@ struct WatchRootView: View {
             }
             .padding()
         } else {
-            TabView {
-                WatchTouchBarView()
-                WatchMeaningsView()
-                WatchHistoryView()
-                WatchStandInView()
-                WatchTapLabView()
+            TabView(selection: $page) {
+                WatchTouchBarView().tag(0)
+                WatchMeaningsView().tag(1)
+                WatchHistoryView().tag(2)
+                WatchStandInView().tag(3)
+                WatchTapLabView().tag(4)
             }
             .tabViewStyle(.page)
         }
@@ -342,7 +344,8 @@ struct WatchHistoryView: View {
 /// The selected partner, pinned at the top of every watch screen: tap to switch partners.
 struct WatchPartnerHeader: View {
     @EnvironmentObject var link: PhoneLink
-    @State private var picking = false
+    /// Demo mode can open with the partner picker showing (`-demoPicker 1`).
+    @State private var picking = PhoneLink.demoArgument("-demoPicker") == "1"
 
     /// In the toolbar (watchOS 10) it sizes to its content beside the clock instead of
     /// spanning the screen.
