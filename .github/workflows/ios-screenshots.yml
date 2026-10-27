@@ -126,7 +126,7 @@ jobs:
           for s in games partner dates todo likes radar love roulette repair memories metamours agreements jar battery people notes; do
             shot "bottom-$s" -appStyle aero -demoScreen "$s" -demoScrollBottom 1
           done
-          for s in chat games pool chess checkers backgammon battleship whiteboard todo notes likes dates radar battery jar love roulette question agreements repair memories polycal metamours story wavelength compose draw partner weather homeCards people private; do
+          for s in everyone chat games pool chess checkers backgammon battleship whiteboard todo notes likes dates radar battery jar love roulette question agreements repair memories polycal metamours story wavelength compose draw partner weather homeCards people private; do
             shot "screen-$s" -appStyle aero -demoScreen "$s"
           done
 
