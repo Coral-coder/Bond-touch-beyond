@@ -5,6 +5,10 @@ name: iOS screenshots
 
 on:
   workflow_dispatch:
+    inputs:
+      only:
+        description: "Only these demo screens (space separated); empty = everything"
+        required: false
   push:
     paths:
       - ".github/workflows/ios-screenshots.yml"
@@ -54,6 +58,7 @@ jobs:
       - name: Screenshot every screen
         env:
           UDID: ${{ steps.sim.outputs.udid }}
+          ONLY: ${{ inputs.only }}
         run: |
           APP=build/Build/Products/Debug-iphonesimulator/BondTouchBeyond.app
           ID=com.lightwave.beyond
@@ -92,6 +97,10 @@ jobs:
             sips -Z 1000 "shots/$name.png" >/dev/null
             echo "shot $name"
           }
+          if [ -n "$ONLY" ]; then
+            for s in $ONLY; do shot "screen-$s" -appStyle aero -demoScreen "$s"; done
+            exit 0
+          fi
           for t in aero neon pastel mono aurora paper chalk bubble raindrop citrus; do
             shot "theme-$t" -appStyle "$t" -homeLayout classic -classicCards ""
           done

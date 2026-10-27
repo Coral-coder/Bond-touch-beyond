@@ -165,6 +165,15 @@ private struct DemoScreen: View {
                 case "games": GamesView()
                 case "radar": RadarView()
                 case "battery": BatteryView()
+                case "everyone":
+                    ScrollView {
+                        VStack(spacing: 14) {
+                            EveryoneHRV(model: model, battery: model.battery)
+                            StressChart(battery: model.battery)
+                        }
+                        .padding(16)
+                    }
+                    .navigationTitle("Everyone")
                 case "pool": PoolView()
                 case "checkers": CheckersView()
                 case "backgammon": BackgammonView()
