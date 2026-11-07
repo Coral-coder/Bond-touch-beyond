@@ -52,7 +52,7 @@ struct MemoryLaneView: View {
 
     private func card(_ m: Memory, highlight: Bool) -> some View {
         HStack(alignment: .top, spacing: 12) {
-            Text(m.emoji).font(.system(size: 30))
+            Text(m.emoji).font(.system(size: Theme.s(30)))
             VStack(alignment: .leading, spacing: 3) {
                 Text(m.title).font(Theme.font(16, .bold)).foregroundStyle(Theme.title)
                 Text(m.date.formatted(date: .long, time: .omitted)).font(Theme.font(12)).foregroundStyle(highlight ? Theme.accent : Theme.subtitle)
@@ -262,7 +262,7 @@ struct WavelengthView: View {
                 let opts = Wavelength.questions[q]
                 HStack {
                     Image(systemName: a == b ? "checkmark.circle.fill" : "arrow.left.arrow.right")
-                        .font(.system(size: 13)).foregroundStyle(a == b ? Theme.lime : Theme.subtitle)
+                        .font(.system(size: Theme.s(13))).foregroundStyle(a == b ? Theme.lime : Theme.subtitle)
                     Text(a == b ? (a == 0 ? opts.0 : opts.1) : "You: \(a == 0 ? opts.0 : opts.1) · Them: \(b == 0 ? opts.0 : opts.1)")
                         .font(Theme.font(13)).foregroundStyle(Theme.title)
                     Spacer()

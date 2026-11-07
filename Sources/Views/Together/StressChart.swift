@@ -121,7 +121,7 @@ struct StressChart: View {
                     ForEach(marks.filter { domain.contains($0.at) }) { m in
                         PointMark(x: .value("Time", m.at), y: .value("Stress", 96))
                             .opacity(0)
-                            .annotation(position: .overlay) { Text(m.emoji).font(.system(size: 15)) }
+                            .annotation(position: .overlay) { Text(m.emoji).font(.system(size: Theme.s(15))) }
                     }
                 }
                 .chartXScale(domain: domain)

@@ -29,7 +29,7 @@ struct HeartView: View {
                             .overlay(Circle().stroke(.white.opacity(0.5), lineWidth: 2))
                             .shadow(color: Theme.pink.opacity(0.6), radius: model.sendingHeartbeat ? 30 : 14)
                         VStack(spacing: 4) {
-                            Image(systemName: "heart.fill").font(.system(size: 54)).foregroundStyle(.white)
+                            Image(systemName: "heart.fill").font(.system(size: Theme.s(54))).foregroundStyle(.white)
                             Text(model.sendingHeartbeat ? "\(sentBPM ?? heart.currentBPM ?? 0) BPM" : "Send my heartbeat")
                                 .font(Theme.font(17, .heavy)).foregroundStyle(.white)
                         }

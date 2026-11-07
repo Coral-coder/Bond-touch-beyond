@@ -8,7 +8,7 @@ struct ConnectView: View {
     var body: some View {
         VStack(spacing: 24) {
             Image(systemName: icon)
-                .font(.system(size: 72))
+                .font(.system(size: Theme.s(72)))
                 .foregroundStyle(tint)
             Text(title).font(.title3.weight(.semibold))
             Text(detail).foregroundStyle(.secondary).multilineTextAlignment(.center)

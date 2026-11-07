@@ -55,7 +55,7 @@ struct MapTabView: View {
                     sharingCard
                     Button { focused = nil; fitEveryone(animated: true) } label: {
                         Image(systemName: "arrow.up.left.and.arrow.down.right")
-                            .font(.system(size: 16, weight: .bold)).foregroundStyle(Theme.title)
+                            .font(.system(size: Theme.s(16), weight: .bold)).foregroundStyle(Theme.title)
                             .frame(width: 50, height: 50).glass(Circle())
                     }
                     .buttonStyle(.plain)
@@ -72,7 +72,7 @@ struct MapTabView: View {
                     if let me = model.location.coordinate {
                         Button { focused = nil; zoom(to: Pin(id: "me", partner: nil, coordinate: me)) } label: {
                             Image(systemName: "location.fill")
-                                .font(.system(size: 15, weight: .bold)).foregroundStyle(Theme.title)
+                                .font(.system(size: Theme.s(15), weight: .bold)).foregroundStyle(Theme.title)
                                 .frame(width: 44, height: 44).glass(Circle())
                         }
                         .buttonStyle(.plain)
@@ -98,7 +98,7 @@ struct MapTabView: View {
     @ViewBuilder private func annotation(_ pin: Pin) -> some View {
         if let place = pin.place {
             VStack(spacing: 2) {
-                Image(systemName: "mappin.circle.fill").font(.system(size: 22)).foregroundStyle(Theme.accent)
+                Image(systemName: "mappin.circle.fill").font(.system(size: Theme.s(22))).foregroundStyle(Theme.accent)
                 Text(place.name).font(Theme.font(10, .bold)).foregroundStyle(Theme.title)
                     .padding(.horizontal, 6).padding(.vertical, 2).background(Capsule().fill(.black.opacity(0.5)))
             }
@@ -151,7 +151,7 @@ struct MapTabView: View {
             if lookAround != nil {
                 Button { showLookAround = true } label: {
                     Image(systemName: "binoculars.fill")
-                        .font(.system(size: 16, weight: .bold)).foregroundStyle(Theme.title)
+                        .font(.system(size: Theme.s(16), weight: .bold)).foregroundStyle(Theme.title)
                         .frame(width: 42, height: 42).glass(Circle())
                 }
                 .buttonStyle(.plain)

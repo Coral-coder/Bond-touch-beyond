@@ -40,7 +40,7 @@ struct LoveLanguageView: View {
                             let on = (levels[l.rawValue] ?? 0) >= n && n > 0
                             Button { levels[l.rawValue] = n; saved = false } label: {
                                 Image(systemName: n == 0 ? "xmark.circle" : (on ? "heart.fill" : "heart"))
-                                    .font(.system(size: 20)).foregroundStyle(on ? Theme.pink : Theme.subtitle)
+                                    .font(.system(size: Theme.s(20))).foregroundStyle(on ? Theme.pink : Theme.subtitle)
                             }
                             .buttonStyle(.plain)
                         }
@@ -87,7 +87,7 @@ struct LoveLanguageView: View {
 
     private func meter(_ n: Int?) -> some View {
         Text(n.map { String(repeating: "♥", count: $0) + String(repeating: "·", count: 5 - $0) } ?? "—")
-            .font(.system(size: 12, weight: .bold)).foregroundStyle(Theme.pink)
+            .font(.system(size: Theme.s(12), weight: .bold)).foregroundStyle(Theme.pink)
     }
 
     private var history: some View {
@@ -148,7 +148,7 @@ struct AppreciationJarView: View {
                     .buttonStyle(AccentButtonStyle(height: 50)).disabled(unopened.isEmpty)
                 if let shown {
                     VStack(spacing: 8) {
-                        Image(systemName: "envelope.open.fill").font(.system(size: 30)).foregroundStyle(Theme.pink)
+                        Image(systemName: "envelope.open.fill").font(.system(size: Theme.s(30))).foregroundStyle(Theme.pink)
                         Text(shown.text).font(Theme.font(18, .bold)).foregroundStyle(Theme.title).multilineTextAlignment(.center)
                         Text(shown.created.formatted(date: .abbreviated, time: .omitted)).font(Theme.font(12)).foregroundStyle(Theme.subtitle)
                     }
@@ -171,7 +171,7 @@ struct AppreciationJarView: View {
                 .frame(width: 170, height: 200)
             VStack(spacing: -6) {
                 ForEach(0..<min(12, unopened.count), id: \.self) { i in
-                    Image(systemName: i % 2 == 0 ? "envelope.fill" : "heart.fill").font(.system(size: 22))
+                    Image(systemName: i % 2 == 0 ? "envelope.fill" : "heart.fill").font(.system(size: Theme.s(22)))
                         .foregroundStyle([Theme.pink, Theme.amber, Theme.magenta, Theme.accent][i % 4])
                         .rotationEffect(.degrees(Double((i * 37) % 50) - 25))
                         .offset(x: CGFloat((i * 23) % 60) - 30)

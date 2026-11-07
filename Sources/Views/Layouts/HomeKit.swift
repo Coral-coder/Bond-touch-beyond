@@ -220,7 +220,7 @@ struct MeaningChip: View {
                                                  startPoint: .leading, endPoint: .trailing))
                         .frame(width: 12, height: 12)
                 } else {
-                    Text(meaning.emoji).font(.system(size: 14))
+                    Text(meaning.emoji).font(.system(size: Theme.s(14)))
                 }
                 Text(meaning.label).font(Theme.font(14, .bold)).foregroundStyle(Theme.title).lineLimit(1)
             }

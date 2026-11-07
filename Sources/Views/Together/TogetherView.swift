@@ -85,7 +85,7 @@ struct TogetherView: View {
         VStack(spacing: 12) {
             HStack(spacing: -10) {
                 MyFace(size: 74)
-                Image(systemName: "heart.fill").font(.system(size: 22)).foregroundStyle(Theme.pink)
+                Image(systemName: "heart.fill").font(.system(size: Theme.s(22))).foregroundStyle(Theme.pink)
                     .padding(8).background(Circle().fill(Theme.bgBottom)).zIndex(1)
                 PartnerFace(partner: p, size: 74)
             }
@@ -120,7 +120,7 @@ struct TogetherView: View {
                     Text("All").font(Theme.font(13, .bold)).foregroundStyle(Theme.accent)
                 }
                 Button { addingDate = true } label: {
-                    Image(systemName: "plus.circle.fill").font(.system(size: 20)).foregroundStyle(Theme.accent)
+                    Image(systemName: "plus.circle.fill").font(.system(size: Theme.s(20))).foregroundStyle(Theme.accent)
                 }
                 .accessibilityLabel("Add a date")
             }
@@ -141,7 +141,7 @@ struct TogetherView: View {
     private func likesCard(_ p: Partner) -> some View {
         NavigationLink { UsProfilesView().screenBackground() } label: {
             HStack(spacing: 12) {
-                Image(systemName: "person.2.fill").font(.system(size: 20)).foregroundStyle(Theme.amber)
+                Image(systemName: "person.2.fill").font(.system(size: Theme.s(20))).foregroundStyle(Theme.amber)
                 VStack(alignment: .leading, spacing: 2) {
                     Text("You & \(p.displayName)").font(Theme.font(17, .heavy)).foregroundStyle(Theme.title)
                     let mine = store.profile.about?.items.count ?? 0
@@ -226,7 +226,7 @@ struct TogetherView: View {
                     if arranging {
                         tileFace(t)
                             .overlay(alignment: .topTrailing) {
-                                Image(systemName: "line.3.horizontal").font(.system(size: 14, weight: .bold))
+                                Image(systemName: "line.3.horizontal").font(.system(size: Theme.s(14), weight: .bold))
                                     .foregroundStyle(Theme.subtitle).padding(10)
                             }
                             .opacity(dragging == t.id ? 0.4 : 1)
@@ -247,7 +247,7 @@ struct TogetherView: View {
 
     private func tileFace(_ t: Tile) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Image(systemName: t.icon).font(.system(size: 24, weight: .semibold)).foregroundStyle(t.tint)
+            Image(systemName: t.icon).font(.system(size: Theme.s(24), weight: .semibold)).foregroundStyle(t.tint)
             Spacer(minLength: 0)
             Text(t.title).font(Theme.font(17, .heavy)).foregroundStyle(Theme.title)
             Text(t.sub).font(Theme.font(12)).foregroundStyle(Theme.subtitle).lineLimit(2)
@@ -375,7 +375,7 @@ struct TogetherChip: View {
     var body: some View {
         if let since = together.space(model.selectedPartnerID).togetherSince {
             HStack(spacing: 5) {
-                Image(systemName: "heart.fill").font(.system(size: 10)).foregroundStyle(Theme.pink)
+                Image(systemName: "heart.fill").font(.system(size: Theme.s(10))).foregroundStyle(Theme.pink)
                 Text("\(TogetherSpace.days(since: since).formatted()) days together")
                     .font(Theme.font(12, .bold)).foregroundStyle(Theme.title)
                 if let next = together.space(model.selectedPartnerID).dates.filter({ !$0.deleted }).min(by: { $0.daysUntil() < $1.daysUntil() }),
@@ -399,7 +399,7 @@ struct TogetherHomeCard: View {
         let space = together.space(model.selectedPartnerID)
         let next = space.dates.filter { !$0.deleted }.min { $0.daysUntil() < $1.daysUntil() }
         HStack(spacing: 12) {
-            Image(systemName: "heart.fill").font(.system(size: 22)).foregroundStyle(Theme.pink)
+            Image(systemName: "heart.fill").font(.system(size: Theme.s(22))).foregroundStyle(Theme.pink)
             VStack(alignment: .leading, spacing: 2) {
                 if let since = space.togetherSince {
                     Text("\(TogetherSpace.days(since: since).formatted()) days together").font(Theme.font(16, .heavy)).foregroundStyle(Theme.title)
@@ -480,7 +480,7 @@ struct SpecialDateRow: View {
     var body: some View {
         let days = date.daysUntil()
         HStack(spacing: 12) {
-            Image(systemName: date.kind.icon).font(.system(size: 20))
+            Image(systemName: date.kind.icon).font(.system(size: Theme.s(20)))
                 .foregroundStyle(date.kind == .birthday ? Theme.amber : Theme.pink).frame(width: 30)
             VStack(alignment: .leading, spacing: 1) {
                 Text(date.title).font(Theme.font(15, .bold)).foregroundStyle(Theme.title)

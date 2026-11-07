@@ -124,7 +124,7 @@ struct WhatsNewView: View {
                         ForEach(section.items) { item in
                             HStack(alignment: .top, spacing: 14) {
                                 Image(systemName: item.icon)
-                                    .font(.system(size: 18, weight: .semibold))
+                                    .font(.system(size: Theme.s(18), weight: .semibold))
                                     .foregroundStyle(Theme.accent)
                                     .frame(width: 28)
                                 VStack(alignment: .leading, spacing: 3) {

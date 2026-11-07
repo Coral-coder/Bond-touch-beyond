@@ -118,18 +118,18 @@ struct PartnerDetailView: View {
                             // The glass panels everywhere: how see-through, and how deep a shadow.
                             HStack(spacing: 12) {
                                 Text("Glass").font(Theme.font(14, .bold)).foregroundStyle(Theme.title).frame(width: 64, alignment: .leading)
-                                Image(systemName: "square.fill").font(.system(size: 11)).foregroundStyle(Theme.subtitle)
+                                Image(systemName: "square.fill").font(.system(size: Theme.s(11))).foregroundStyle(Theme.subtitle)
                                 Slider(value: $glassClarity, in: 0...1).tint(Theme.accent)
                                     .accessibilityLabel("Glass transparency")
-                                Image(systemName: "square").font(.system(size: 11)).foregroundStyle(Theme.subtitle)
+                                Image(systemName: "square").font(.system(size: Theme.s(11))).foregroundStyle(Theme.subtitle)
                             }
                             .padding(.bottom, 10)
                             HStack(spacing: 12) {
                                 Text("Shadow").font(Theme.font(14, .bold)).foregroundStyle(Theme.title).frame(width: 64, alignment: .leading)
-                                Image(systemName: "circle").font(.system(size: 11)).foregroundStyle(Theme.subtitle)
+                                Image(systemName: "circle").font(.system(size: Theme.s(11))).foregroundStyle(Theme.subtitle)
                                 Slider(value: $glassShadow, in: 0...1).tint(Theme.accent)
                                     .accessibilityLabel("Glass shadow")
-                                Image(systemName: "circle.fill").font(.system(size: 11)).foregroundStyle(Theme.subtitle)
+                                Image(systemName: "circle.fill").font(.system(size: Theme.s(11))).foregroundStyle(Theme.subtitle)
                             }
                             .padding(.bottom, 12)
                             if photo == nil {

@@ -25,7 +25,7 @@ struct WeatherCard: View {
             if compact { compactView(w) } else { fullView(w) }
         } else {
             HStack(spacing: 10) {
-                Image(systemName: "cloud.sun.fill").symbolRenderingMode(.multicolor).font(.system(size: 24))
+                Image(systemName: "cloud.sun.fill").symbolRenderingMode(.multicolor).font(.system(size: Theme.s(24)))
                 Text("\(partner.displayName)'s weather shows up here when they share their location (Map tab) or their weather.")
                     .font(Theme.font(12)).foregroundStyle(Theme.subtitle)
             }
@@ -44,7 +44,7 @@ struct WeatherCard: View {
 
     private func compactView(_ w: WeatherInfo) -> some View {
         HStack(spacing: 10) {
-            Image(systemName: w.symbol).symbolRenderingMode(.multicolor).font(.system(size: 26))
+            Image(systemName: w.symbol).symbolRenderingMode(.multicolor).font(.system(size: Theme.s(26)))
             VStack(alignment: .leading, spacing: 1) {
                 Text("\(WeatherInfo.degrees(w.temp)) · \(w.summary)").font(Theme.font(15, .heavy)).foregroundStyle(Theme.title)
                 Text([w.place, localTime(w).map { "\($0) there" }].compactMap { $0 }.joined(separator: " · "))
@@ -68,7 +68,7 @@ struct WeatherCard: View {
                 if let t = localTime(w) { Text("\(t) there").font(Theme.font(12, .semibold)).foregroundStyle(Theme.subtitle) }
             }
             HStack(spacing: 12) {
-                Image(systemName: w.symbol).symbolRenderingMode(.multicolor).font(.system(size: 40))
+                Image(systemName: w.symbol).symbolRenderingMode(.multicolor).font(.system(size: Theme.s(40)))
                 VStack(alignment: .leading, spacing: 0) {
                     Text(WeatherInfo.degrees(w.temp)).font(Theme.font(34, .heavy)).foregroundStyle(Theme.title)
                     Text(w.summary).font(Theme.font(13, .semibold)).foregroundStyle(Theme.subtitle)
@@ -79,7 +79,7 @@ struct WeatherCard: View {
                         HStack(spacing: 6) {
                             Text(d.date.formatted(.dateTime.weekday(.abbreviated))).font(Theme.font(11, .bold)).foregroundStyle(Theme.subtitle)
                                 .frame(width: 30, alignment: .leading)
-                            Image(systemName: d.symbol).symbolRenderingMode(.multicolor).font(.system(size: 13))
+                            Image(systemName: d.symbol).symbolRenderingMode(.multicolor).font(.system(size: Theme.s(13)))
                             Text("\(WeatherInfo.degrees(d.high)) \(WeatherInfo.degrees(d.low))").font(Theme.font(11, .semibold))
                                 .foregroundStyle(Theme.title).monospacedDigit()
                         }
@@ -90,7 +90,7 @@ struct WeatherCard: View {
                 ForEach(w.hours.prefix(7), id: \.at) { h in
                     VStack(spacing: 4) {
                         Text(hourLabel(h.at, w)).font(Theme.font(10, .bold)).foregroundStyle(Theme.subtitle)
-                        Image(systemName: h.symbol).symbolRenderingMode(.multicolor).font(.system(size: 15))
+                        Image(systemName: h.symbol).symbolRenderingMode(.multicolor).font(.system(size: Theme.s(15)))
                         Text(WeatherInfo.degrees(h.temp)).font(Theme.font(12, .heavy)).foregroundStyle(Theme.title)
                     }
                     .frame(maxWidth: .infinity)

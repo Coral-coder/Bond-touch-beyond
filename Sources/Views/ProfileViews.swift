@@ -208,7 +208,7 @@ struct UsProfilesView: View {
                         VStack(alignment: .leading, spacing: 6) {
                             HStack(spacing: 6) {
                                 Text(label).font(Theme.font(12, .heavy)).foregroundStyle(Theme.subtitle)
-                                if same { Image(systemName: "heart.fill").font(.system(size: 10)).foregroundStyle(Theme.accent) }
+                                if same { Image(systemName: "heart.fill").font(.system(size: Theme.s(10))).foregroundStyle(Theme.accent) }
                             }
                             HStack(alignment: .top, spacing: 12) {
                                 Text(a.isEmpty ? "—" : a).frame(maxWidth: .infinity, alignment: .leading)

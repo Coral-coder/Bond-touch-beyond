@@ -34,7 +34,7 @@ struct JSONNode: View {
                 if let key { Text(key).foregroundStyle(Theme.accent).bold() }
                 Text(summary).foregroundStyle(Theme.subtitle)
             }
-            .font(.system(size: 12.5, design: .monospaced))
+            .font(.system(size: Theme.s(12.5), design: .monospaced))
         }
         .tint(Theme.accent)
     }
@@ -44,7 +44,7 @@ struct JSONNode: View {
             if let key { Text(key + ":").foregroundStyle(Theme.accent).bold() }
             Text(leafText).foregroundStyle(leafColor).textSelection(.enabled)
         }
-        .font(.system(size: 12.5, design: .monospaced))
+        .font(.system(size: Theme.s(12.5), design: .monospaced))
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 

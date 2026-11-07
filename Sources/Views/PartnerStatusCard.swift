@@ -40,7 +40,7 @@ struct PartnerStatusCard: View {
 
     private func row(icon: String, tint: Color, title: String, value: String) -> some View {
         HStack(spacing: 12) {
-            Image(systemName: icon).font(.system(size: 16, weight: .semibold)).foregroundStyle(tint)
+            Image(systemName: icon).font(.system(size: Theme.s(16), weight: .semibold)).foregroundStyle(tint)
                 .frame(width: 26)
             Text(title).font(Theme.font(15, .bold)).foregroundStyle(Theme.title)
             Spacer(minLength: 8)

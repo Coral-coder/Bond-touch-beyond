@@ -11,7 +11,7 @@ struct OnboardingView: View {
     var body: some View {
         VStack(spacing: 28) {
             Spacer()
-            Image(systemName: "heart.circle.fill").font(.system(size: 84)).foregroundStyle(.pink)
+            Image(systemName: "heart.circle.fill").font(.system(size: Theme.s(84))).foregroundStyle(.pink)
             Text("Welcome to Bond Touch Beyond").font(.title2.bold())
             Text("Stay close with a partner — send a touch, a message, or your heartbeat to their bracelet.")
                 .multilineTextAlignment(.center).foregroundStyle(.secondary)

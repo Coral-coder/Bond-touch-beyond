@@ -31,6 +31,7 @@ struct SettingsView: View {
                 VStack(spacing: 12) {
                     ThemePickerCard().id("themeCard")
                     LayoutPickerCard()
+                    DisplaySizeCard()
                     FeaturesCard()
                     row("My profile", "") { MyProfileView() }
                     row("Notifications", "") { NotificationSettingsView() }
@@ -663,7 +664,7 @@ private struct LayoutPickerCard: View {
                             layout = l.rawValue
                         } label: {
                             HStack(spacing: 12) {
-                                Image(systemName: l.icon).font(.system(size: 18, weight: .semibold))
+                                Image(systemName: l.icon).font(.system(size: Theme.s(18), weight: .semibold))
                                     .foregroundStyle(on ? Theme.onAccent : Theme.title)
                                     .frame(width: 40, height: 40)
                                     .background(RoundedRectangle(cornerRadius: 12, style: .continuous)
@@ -875,6 +876,26 @@ private struct NeonStyleCard: View {
                 }
                 Button("Reset") { width = 1; glow = 1 }
                     .font(.caption.weight(.semibold)).foregroundStyle(Theme.accent)
+            }
+        }
+    }
+}
+
+/// Settings → Display size: how big text and icons are across the app.
+private struct DisplaySizeCard: View {
+    @AppStorage("displayScale") private var displayScale = 0.92
+    private static let sizes: [(String, Double)] = [("Smaller", 0.86), ("Small", 0.92), ("Standard", 1.0)]
+
+    var body: some View {
+        GlassCard(padding: 20) {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Display size").foregroundStyle(Theme.title)
+                Picker("Display size", selection: $displayScale) {
+                    ForEach(Self.sizes, id: \.1) { Text($0.0).tag($0.1) }
+                }
+                .pickerStyle(.segmented)
+                Text("Text and icons everywhere in the app.")
+                    .font(.caption).foregroundStyle(Theme.subtitle)
             }
         }
     }

@@ -24,7 +24,7 @@ struct EncountersView: View {
                     if let days = daysLeft {
                         VStack(spacing: 6) {
                             Text(days == 0 ? "Today" : "\(days)")
-                                .font(.system(size: 64, weight: .heavy, design: .rounded))
+                                .font(.system(size: Theme.s(64), weight: .heavy, design: .rounded))
                                 .foregroundStyle(Theme.accent)
                             Text(days == 0 ? "You meet today" : "days until you meet again")
                                 .foregroundStyle(Theme.subtitle)

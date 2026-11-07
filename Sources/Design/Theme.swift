@@ -302,8 +302,18 @@ enum Theme {
     static var background: some View { ThemeBackdrop().ignoresSafeArea() }
 
     static func font(_ size: CGFloat, _ weight: Font.Weight = .regular) -> Font {
-        font(size, weight, style: style)
+        font(s(size), weight, style: style)
     }
+
+    /// Display size (Settings → Display size): every font and icon size is scaled by it.
+    /// Slightly smaller than the original design by default, which read too large.
+    static var scale: CGFloat {
+        let v = UserDefaults.standard.double(forKey: "displayScale")
+        return v > 0 ? v : 0.92
+    }
+
+    /// `size` at the chosen display size.
+    static func s(_ size: CGFloat) -> CGFloat { (size * scale * 2).rounded() / 2 }
 
     static func font(_ size: CGFloat, _ weight: Font.Weight, style: AppStyle) -> Font {
         switch style {

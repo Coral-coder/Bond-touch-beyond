@@ -200,7 +200,7 @@ private struct DataDumpView: View {
                             .listRowBackground(Theme.ink.opacity(0.04))
                     } else {
                         Text(item.pretty)
-                            .font(.system(size: 11, design: .monospaced)).foregroundStyle(Theme.title)
+                            .font(.system(size: Theme.s(11), design: .monospaced)).foregroundStyle(Theme.title)
                             .textSelection(.enabled)
                             .listRowBackground(Theme.ink.opacity(0.04))
                     }
@@ -283,7 +283,7 @@ private struct EndpointEditorView: View {
     var body: some View {
         VStack(spacing: 12) {
             TextEditor(text: $text)
-                .font(.system(size: 12, design: .monospaced)).foregroundStyle(Theme.title)
+                .font(.system(size: Theme.s(12), design: .monospaced)).foregroundStyle(Theme.title)
                 .scrollContentBackground(.hidden)
                 .padding(8).background(Theme.ink.opacity(0.06))
                 .clipShape(RoundedRectangle(cornerRadius: Metric.cornerMedium))
@@ -296,7 +296,7 @@ private struct EndpointEditorView: View {
             .buttonStyle(.plain).disabled(busy)
             if !result.isEmpty {
                 ScrollView {
-                    Text(result).font(.system(size: 11, design: .monospaced)).foregroundStyle(Theme.title)
+                    Text(result).font(.system(size: Theme.s(11), design: .monospaced)).foregroundStyle(Theme.title)
                         .textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .frame(maxHeight: 180)

@@ -20,7 +20,7 @@ struct MoodCheckInSheet: View {
                             let m = Moods.all[i]
                             Button { picked = i; UISelectionFeedbackGenerator().selectionChanged() } label: {
                                 VStack(spacing: 2) {
-                                    Text(m.emoji).font(.system(size: 30))
+                                    Text(m.emoji).font(.system(size: Theme.s(30)))
                                     Text(m.label).font(Theme.font(10, .bold)).foregroundStyle(Theme.title)
                                         .lineLimit(1).minimumScaleFactor(0.7)
                                 }

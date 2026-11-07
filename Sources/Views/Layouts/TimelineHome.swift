@@ -59,7 +59,7 @@ struct TimelineHome: View {
                 HStack(spacing: 10) {
                     HeartbeatButton(size: 54)
                     Button { compose = true } label: {
-                        Image(systemName: "hand.tap.fill").font(.system(size: 24, weight: .bold)).foregroundStyle(Theme.onAccent)
+                        Image(systemName: "hand.tap.fill").font(.system(size: Theme.s(24), weight: .bold)).foregroundStyle(Theme.onAccent)
                             .frame(width: 64, height: 64)
                             .background(Circle().fill(LinearGradient(colors: [Theme.p.accentTop, Theme.accentDeep], startPoint: .top, endPoint: .bottom)))
                             .shadow(color: Theme.accent.opacity(0.5), radius: 14, y: 6)

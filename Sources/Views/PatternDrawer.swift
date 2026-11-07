@@ -102,7 +102,7 @@ struct PatternDrawer: View {
     private func tool(_ icon: String, _ label: String, _ on: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             VStack(spacing: 3) {
-                Image(systemName: icon).font(.system(size: 17, weight: .semibold))
+                Image(systemName: icon).font(.system(size: Theme.s(17), weight: .semibold))
                 Text(label).font(Theme.font(10, .bold))
             }
             .foregroundStyle(on ? Theme.onAccent : Theme.title)

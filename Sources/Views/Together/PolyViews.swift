@@ -66,7 +66,7 @@ struct PolyCalendarView: View {
         let me = model.myRole(r.partner.id)
         return HStack(spacing: 10) {
             RoundedRectangle(cornerRadius: 3).fill(Color(rgbInt: r.partner.colorRGB)).frame(width: 5)
-            Text(e.emoji).font(.system(size: 24))
+            Text(e.emoji).font(.system(size: Theme.s(24)))
             VStack(alignment: .leading, spacing: 2) {
                 Text(e.title).font(Theme.font(15, .bold)).foregroundStyle(Theme.title)
                 Text("\(e.start.formatted(date: .omitted, time: .shortened)) – \(e.end.formatted(date: Calendar.current.isDate(e.start, inSameDayAs: e.end) ? .omitted : .abbreviated, time: .shortened)) · with \(e.with == "Us" ? r.partner.displayName : e.with)")
@@ -167,7 +167,7 @@ struct MetamoursView: View {
             if items.isEmpty { Text(empty).font(Theme.font(13)).foregroundStyle(Theme.subtitle) }
             ForEach(items) { m in
                 HStack(alignment: .top, spacing: 10) {
-                    Text(m.emoji).font(.system(size: 26))
+                    Text(m.emoji).font(.system(size: Theme.s(26)))
                     VStack(alignment: .leading, spacing: 2) {
                         Text(m.name).font(Theme.font(15, .bold)).foregroundStyle(Theme.title)
                         if !m.notes.isEmpty { Text(m.notes).font(Theme.font(13)).foregroundStyle(Theme.subtitle) }
