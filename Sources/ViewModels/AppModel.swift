@@ -143,6 +143,8 @@ final class AppModel: ObservableObject {
     /// background the phone can't run its own vibration, so the touch is held for the
     /// bracelet and the push notification is what buzzes.
     func feel(_ touch: TouchMessage) {
+        // totwoo jewellery lights in the touch's colour, whatever else plays it.
+        totwoo.play(touch)
         if let bpm = touch.heartbeatBPM { feelHeartbeat(touch, bpm: bpm); return }
         let foreground = UIApplication.shared.applicationState == .active
         if bracelet.play(touch, holdIfOffline: !foreground) { return }
@@ -210,6 +212,8 @@ final class AppModel: ObservableObject {
     var viewingChatBondID: String?
     /// Bond Heart: the pendant and the heartbeat library (AppModel+BondHeart).
     let pendant = HeartPendant()
+    /// totwoo jewellery, worn instead of (or as well as) a Bond Touch bracelet.
+    let totwoo = TotwooBracelet()
     let heartLibrary = HeartLibrary()
     let location = LocationService()
     let relay = CloudRelay()
@@ -251,6 +255,14 @@ final class AppModel: ObservableObject {
                 let target = slotBondID.flatMap { id in self.partners.contains { $0.id == id } ? id : nil }
                 await self.sendTouch(pattern: pattern, generation: generation,
                                      colorRGB: self.store.profile.colorRGB, toBondID: target)
+            }
+        }
+        // A tap on totwoo jewellery: a touch for the selected partner, in your colour.
+        totwoo.onTap = { [weak self] in
+            Task { @MainActor in
+                guard let self else { return }
+                _ = await self.sendTouch(pattern: [300], generation: 2, colorRGB: self.store.profile.colorRGB,
+                                         matchMeaning: false)
             }
         }
         // The bracelet's partner slots follow the partner list: one slot per partner (up to

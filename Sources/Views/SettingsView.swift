@@ -37,6 +37,7 @@ struct SettingsView: View {
                     row("My Bond Touch Bracelet", "") { BraceletSettingsView() }
                     row("Bracelet firmware (recovery)", "") { FirmwareSettingsView() }
                     row("Bond Heart", "") { BondHeartView() }
+                    row("totwoo jewellery", "") { TotwooView() }
                     row("What's new", "") { WhatsNewView() }
                     row("Tutorials", "") { HelpView() }
                     FeatureTourRow()
