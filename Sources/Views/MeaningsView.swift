@@ -39,7 +39,7 @@ struct MeaningsView: View {
                             Button { drawing = true } label: { Label("Draw a touch", systemImage: "scribble") }
                         } label: {
                             Image(systemName: "plus")
-                                .font(.system(size: 18, weight: .bold))
+                                .font(.system(size: Theme.s(18), weight: .bold))
                                 .foregroundStyle(Theme.accent)
                                 .frame(width: 46, height: 46)
                                 .glass(Circle())
@@ -121,7 +121,7 @@ struct MeaningsView: View {
                                             endColorRGB: meaning.endColorRGB,
                                             meaningLabel: meaning.label, meaningEmoji: meaning.emoji))
                 } label: {
-                    Image(systemName: "play.circle.fill").font(.system(size: 26)).foregroundStyle(Theme.accent)
+                    Image(systemName: "play.circle.fill").font(.system(size: Theme.s(26))).foregroundStyle(Theme.accent)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Play \(meaning.label) on your bracelet")
@@ -131,14 +131,14 @@ struct MeaningsView: View {
                         if meaning.isNew { newBadge }
                         Button { toggleFavourite(meaning) } label: {
                             Image(systemName: meaning.favourite == true ? "star.fill" : "star")
-                                .font(.system(size: 14, weight: .bold))
+                                .font(.system(size: Theme.s(14), weight: .bold))
                                 .foregroundStyle(meaning.favourite == true ? Theme.amber : Theme.subtitle)
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel(meaning.favourite == true ? "Remove \(meaning.label) from favourites" : "Favourite \(meaning.label)")
                         Button { editing = meaning } label: {
                             Image(systemName: "pencil.circle.fill")
-                                .font(.system(size: 18, weight: .semibold)).foregroundStyle(Theme.subtitle)
+                                .font(.system(size: Theme.s(18), weight: .semibold)).foregroundStyle(Theme.subtitle)
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel("Edit \(meaning.label)")
@@ -168,7 +168,7 @@ struct MeaningsView: View {
         GlassCard {
             HStack(spacing: 12) {
                 Button { model.feel(model.rainbowWaveTouch()) } label: {
-                    Image(systemName: "play.circle.fill").font(.system(size: 26)).foregroundStyle(Theme.accent)
+                    Image(systemName: "play.circle.fill").font(.system(size: Theme.s(26))).foregroundStyle(Theme.accent)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Play the rainbow wave on your bracelet")

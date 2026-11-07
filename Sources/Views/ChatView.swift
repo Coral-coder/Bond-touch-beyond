@@ -103,7 +103,7 @@ struct ChatView: View {
                         if !atBottom {
                             Button { scrollToBottom(proxy, animated: true) } label: {
                                 Image(systemName: "chevron.down")
-                                    .font(.system(size: 16, weight: .bold)).foregroundStyle(Theme.title)
+                                    .font(.system(size: Theme.s(16), weight: .bold)).foregroundStyle(Theme.title)
                                     .frame(width: 44, height: 44).glass(Circle())
                             }
                             .buttonStyle(.plain)
@@ -209,7 +209,7 @@ struct ChatView: View {
                     }
                     .frame(width: 150)
                     Button { model.feel(t) } label: {
-                        Image(systemName: "play.fill").font(.system(size: 11, weight: .bold)).foregroundStyle(.white)
+                        Image(systemName: "play.fill").font(.system(size: Theme.s(11), weight: .bold)).foregroundStyle(.white)
                             .frame(width: 28, height: 28).background(Circle().fill(.white.opacity(0.16)))
                     }
                     .buttonStyle(.plain)
@@ -299,7 +299,7 @@ struct ChatView: View {
                 Task { await model.sendChatText(text) }
             } label: {
                 Image(systemName: "arrow.up")
-                    .font(.system(size: 18, weight: .bold)).foregroundStyle(.white)
+                    .font(.system(size: Theme.s(18), weight: .bold)).foregroundStyle(.white)
                     .frame(width: 40, height: 40)
                     .background(Circle().fill(draft.trimmingCharacters(in: .whitespaces).isEmpty
                                               ? Color.white.opacity(0.12) : Theme.accent))

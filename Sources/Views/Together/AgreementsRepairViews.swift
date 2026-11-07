@@ -146,7 +146,7 @@ struct RepairView: View {
         let active = notes.filter { $0.kind == .timeout && ($0.until ?? .distantPast) > Date() }
         ForEach(active) { t in
             HStack(spacing: 12) {
-                Image(systemName: "cup.and.saucer.fill").font(.system(size: 24)).foregroundStyle(Theme.accent)
+                Image(systemName: "cup.and.saucer.fill").font(.system(size: Theme.s(24))).foregroundStyle(Theme.accent)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(t.by == me ? "You're taking a breather" : "\(partnerName) is taking a breather")
                         .font(Theme.font(15, .heavy)).foregroundStyle(Theme.title)
@@ -237,7 +237,7 @@ struct RepairView: View {
             ForEach(notes.filter { $0.kind != .timeout }.prefix(20)) { n in
                 HStack(alignment: .top, spacing: 8) {
                     Image(systemName: n.kind == .feeling ? "text.bubble.fill" : n.kind == .repair ? "heart.fill" : "checkmark.circle.fill")
-                        .font(.system(size: 14)).foregroundStyle(n.kind == .resolved ? Theme.lime : Theme.pink)
+                        .font(.system(size: Theme.s(14))).foregroundStyle(n.kind == .resolved ? Theme.lime : Theme.pink)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(n.text).font(Theme.font(14)).foregroundStyle(Theme.title)
                         Text("\(n.by == me ? "You" : partnerName) · \(n.created.formatted(.relative(presentation: .named)))")

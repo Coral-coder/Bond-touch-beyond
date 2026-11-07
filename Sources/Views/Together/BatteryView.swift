@@ -40,7 +40,7 @@ struct BatteryView: View {
         let level = battery.battery
         let face = level.map { Stress.face(100 - $0) }
         return VStack(spacing: 8) {
-            Text(face?.emoji ?? "🫥").font(.system(size: 84))
+            Text(face?.emoji ?? "🫥").font(.system(size: Theme.s(84)))
             Text(face?.label ?? "—").font(Theme.font(28, .heavy)).foregroundStyle(Theme.title)
             Text(level.map { "Stress \(100 - $0) / 100 · energy \($0)%" } ?? "").font(Theme.font(13, .bold)).foregroundStyle(Theme.accent)
             Text(levelText(level)).font(Theme.font(14, .semibold)).foregroundStyle(Theme.subtitle)
@@ -80,7 +80,7 @@ struct BatteryView: View {
                     let m = Moods.all[i]
                     Button { picked = i; UISelectionFeedbackGenerator().selectionChanged() } label: {
                         VStack(spacing: 2) {
-                            Text(m.emoji).font(.system(size: 26))
+                            Text(m.emoji).font(.system(size: Theme.s(26)))
                             Text(m.label).font(Theme.font(10, .bold)).foregroundStyle(Theme.title).lineLimit(1).minimumScaleFactor(0.7)
                         }
                         .frame(maxWidth: .infinity).padding(.vertical, 8)
@@ -128,7 +128,7 @@ struct BatteryView: View {
                 Text("Your log").font(Theme.font(17, .heavy)).foregroundStyle(Theme.title)
                 ForEach(battery.entries.suffix(12).reversed()) { e in
                     HStack(spacing: 10) {
-                        Text(e.emoji).font(.system(size: 22))
+                        Text(e.emoji).font(.system(size: Theme.s(22)))
                         VStack(alignment: .leading, spacing: 1) {
                             Text("\(e.label) · \(e.energy)% energy").font(Theme.font(14, .bold)).foregroundStyle(Theme.title)
                             if !e.note.isEmpty { Text(e.note).font(Theme.font(12)).foregroundStyle(Theme.subtitle).lineLimit(2) }
@@ -159,9 +159,10 @@ struct PartnerMoodRow: View {
                 }
             }
             Spacer()
+            PulseButton(partner: partner, compact: true)
             if let m = partner.presence?.mood {
                 VStack(spacing: 0) {
-                    Text(Stress.face(m.stress).emoji).font(.system(size: 30))
+                    Text(Stress.face(m.stress).emoji).font(.system(size: Theme.s(30)))
                     Text(Stress.face(m.stress).label).font(Theme.font(9, .bold)).foregroundStyle(Theme.subtitle)
                 }
             }
@@ -187,5 +188,43 @@ struct BatteryGauge: View {
             RoundedRectangle(cornerRadius: size * 0.04).fill(Theme.title.opacity(0.7)).frame(width: size * 0.07, height: size * 0.22)
         }
         .accessibilityLabel(level.map { "Battery \($0) percent" } ?? "Battery unknown")
+    }
+}
+
+/// A partner's pulse (their latest heart rate, or the last heartbeat they sent): tap to feel it
+/// beat on your bracelet, phone and watch. Missing them? This is them, right now-ish.
+struct PulseButton: View {
+    @EnvironmentObject var model: AppModel
+    let partner: Partner
+    var compact = false
+
+    var body: some View {
+        if let pulse = model.partnerPulse(partner.id) {
+            Button { model.feelPulse(partner.id) } label: {
+                if compact {
+                    VStack(spacing: 0) {
+                        Image(systemName: "heart.fill").font(.system(size: Theme.s(20))).foregroundStyle(Theme.pink)
+                        Text("\(pulse.bpm)").font(Theme.font(11, .heavy)).foregroundStyle(Theme.title)
+                    }
+                    .frame(width: 44, height: 44)
+                    .glass(Circle())
+                } else {
+                    HStack(spacing: 12) {
+                        Image(systemName: "heart.fill").font(.system(size: Theme.s(26))).foregroundStyle(Theme.pink)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Feel \(partner.displayName)'s pulse").font(Theme.font(16, .heavy)).foregroundStyle(Theme.title)
+                            Text("\(pulse.bpm) BPM · \(pulse.at.formatted(.relative(presentation: .named))) · on your bracelet, phone and watch")
+                                .font(Theme.font(12)).foregroundStyle(Theme.subtitle)
+                        }
+                        Spacer()
+                        Image(systemName: "hand.tap.fill").foregroundStyle(Theme.accent)
+                    }
+                    .padding(16)
+                    .glass(cornerRadius: 22)
+                }
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Feel \(partner.displayName)'s pulse, \(pulse.bpm) beats per minute")
+        }
     }
 }

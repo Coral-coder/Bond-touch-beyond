@@ -189,6 +189,29 @@ final class AppModel: ObservableObject {
         }
     }
 
+    /// A partner's pulse: their latest heart rate from Health, or the last heartbeat they sent,
+    /// whichever is newer, with when it was taken.
+    func partnerPulse(_ bondID: String) -> (bpm: Int, at: Date)? {
+        var best: (bpm: Int, at: Date)?
+        if let hr = partners.first(where: { $0.id == bondID })?.presence?.mood?.heartRate?.last, hr.count == 2, hr[1] > 0 {
+            best = (Int(hr[1].rounded()), Date(timeIntervalSince1970: hr[0]))
+        }
+        if let beat = history.last(where: { $0.bondID == bondID && $0.heartbeatBPM != nil && !isMine($0) }),
+           let bpm = beat.heartbeatBPM, beat.sentAt > (best?.at ?? .distantPast) {
+            best = (bpm, beat.sentAt)
+        }
+        return best
+    }
+
+    /// Feel a partner's pulse now: it beats on the bracelet, the phone and the watch, with the
+    /// live EKG on screen. Only here; nothing is sent to them.
+    func feelPulse(_ bondID: String) {
+        guard let pulse = partnerPulse(bondID) else { return }
+        let touch = heartbeatTouch(bpm: pulse.bpm, bondID: bondID, senderID: "pulse-\(bondID)")
+        feelHeartbeat(touch, bpm: pulse.bpm)
+        watch.play(touch)
+    }
+
     func dismissHeartbeat() {
         heartbeatShow = nil
     }
@@ -544,6 +567,7 @@ final class AppModel: ObservableObject {
             cloudPartners.forEach { loadCachedPhoto(bondID: $0.id) }
             cloudPending = bonds.filter { $0.pending }
             migrateMeaningLibraries()
+            migrateLikesToProfile()
             if selectedPartnerID == nil { selectedPartnerID = partners.first?.id }
             ready = true
             statusLine = "Ready."
@@ -1002,7 +1026,7 @@ final class AppModel: ObservableObject {
         for partner in cloudPartners {
             try? await relay.sendProfile(name: p.name, colorRGB: p.colorRGB, photo: myPhotoFileURL,
                                          pushToken: myPushToken, meanings: sharedLibrary(partner.id),
-                                         bond: partner.bond, senderID: myUserID)
+                                         about: p.about, bond: partner.bond, senderID: myUserID)
         }
     }
 
@@ -1138,7 +1162,7 @@ final class AppModel: ObservableObject {
                 do {
                     try await relay.sendProfile(name: p.name.isEmpty ? "Me" : p.name, colorRGB: p.colorRGB,
                                                 photo: myPhotoFileURL, pushToken: myPushToken,
-                                                meanings: sharedLibrary(partner.id),
+                                                meanings: sharedLibrary(partner.id), about: p.about,
                                                 bond: partner.bond, senderID: myUserID)
                     profileSyncedBondIDs.insert(partner.id)   // only once it actually landed
                 } catch {
@@ -1164,6 +1188,7 @@ final class AppModel: ObservableObject {
             if let seen = events.partnerSeenTouch { markSeen(bondID: partner.id, upTo: seen) }
             if let seen = events.partnerSeenMessage { partnerSeenMessage[partner.id] = seen }
             if let shared = events.partnerMeanings { mergeMeanings(shared, bondID: partner.id) }
+            if let about = events.partnerAbout, store.partnerAbout[partner.id] != about { store.partnerAbout[partner.id] = about }
             receiveTogether(space: events.space, board: events.board, bondID: partner.id)
             if let incoming = events.presence {
                 // Anything this snapshot lacks stays as last reported, with its own time.

@@ -23,7 +23,7 @@ struct PartnerDeckHome: View {
             if model.partners.isEmpty {
                 Button { people = true } label: {
                     VStack(spacing: 10) {
-                        Image(systemName: "plus").font(.system(size: 34, weight: .semibold))
+                        Image(systemName: "plus").font(.system(size: Theme.s(34), weight: .semibold))
                         Text("Add someone").font(Theme.font(18, .heavy))
                     }
                     .foregroundStyle(Theme.title)
@@ -54,7 +54,7 @@ struct PartnerDeckHome: View {
                             .accessibilityLabel("Replay touch from \(t.sentAt.formatted(date: .omitted, time: .shortened))")
                         }
                         Button { history = true } label: {
-                            Image(systemName: "list.bullet").font(.system(size: 16, weight: .bold)).foregroundStyle(Theme.title)
+                            Image(systemName: "list.bullet").font(.system(size: Theme.s(16), weight: .bold)).foregroundStyle(Theme.title)
                                 .frame(width: 50, height: 50).glass(cornerRadius: 16)
                         }
                         .buttonStyle(.plain).accessibilityLabel("All recent touches")

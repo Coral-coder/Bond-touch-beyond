@@ -39,7 +39,7 @@ struct FloatingTabBar: View {
                     selection = tab
                 } label: {
                     VStack(spacing: 2) {
-                        Image(systemName: tab.icon).font(.system(size: 19, weight: .semibold))
+                        Image(systemName: tab.icon).font(.system(size: Theme.s(19), weight: .semibold))
                         Text(tab.title).font(Theme.font(10, .bold))
                     }
                     .foregroundStyle(selection == tab ? Theme.title : Theme.subtitle.opacity(0.8))

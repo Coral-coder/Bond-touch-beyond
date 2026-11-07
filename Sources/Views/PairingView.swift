@@ -16,7 +16,7 @@ struct PairingView: View {
         ScrollView {
         VStack(spacing: 24) {
             Image(systemName: "heart.circle.fill")
-                .font(.system(size: 72))
+                .font(.system(size: Theme.s(72)))
                 .foregroundStyle(.pink)
             Text("Pair with someone. Touches, messages and your heartbeat sync privately through iCloud — end-to-end encrypted, no account, no server.")
                 .multilineTextAlignment(.center)

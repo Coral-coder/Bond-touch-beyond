@@ -48,7 +48,7 @@ struct BubbleHome: View {
 
                         bubble(at: (0.1, 0.37), size: w * 0.15, t: t, phase: 0.7, w: w, h: h) {
                             Button { people = true } label: {
-                                Image(systemName: "person.2.fill").font(.system(size: 17, weight: .semibold)).foregroundStyle(Theme.title)
+                                Image(systemName: "person.2.fill").font(.system(size: Theme.s(17), weight: .semibold)).foregroundStyle(Theme.title)
                                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                             }
                             .buttonStyle(.plain).accessibilityLabel("People")
@@ -68,7 +68,7 @@ struct BubbleHome: View {
                                     Task { await model.sendMeaning(m) }
                                 } label: {
                                     VStack(spacing: 1) {
-                                        if !m.emoji.isEmpty { Text(m.emoji).font(.system(size: 18)) }
+                                        if !m.emoji.isEmpty { Text(m.emoji).font(.system(size: Theme.s(18))) }
                                         Text(m.label).font(Theme.font(12, .heavy)).foregroundStyle(Theme.title)
                                             .lineLimit(2).minimumScaleFactor(0.6).multilineTextAlignment(.center)
                                     }

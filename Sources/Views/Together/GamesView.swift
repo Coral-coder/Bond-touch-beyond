@@ -32,7 +32,7 @@ struct GamesView: View {
                                @ViewBuilder destination: @escaping () -> D) -> some View {
         NavigationLink { destination().screenBackground() } label: {
             VStack(alignment: .leading, spacing: 8) {
-                Image(systemName: icon).font(.system(size: 34, weight: .semibold)).foregroundStyle(.white)
+                Image(systemName: icon).font(.system(size: Theme.s(34), weight: .semibold)).foregroundStyle(.white)
                 Spacer(minLength: 0)
                 Text(title).font(Theme.font(18, .heavy)).foregroundStyle(.white)
                 Text(status).font(Theme.font(12, .semibold)).foregroundStyle(.white.opacity(0.85))

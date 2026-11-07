@@ -31,8 +31,9 @@ struct SettingsView: View {
                 VStack(spacing: 12) {
                     ThemePickerCard().id("themeCard")
                     LayoutPickerCard()
+                    DisplaySizeCard()
                     FeaturesCard()
-                    row("Personal details", "") { PersonalDetailsView() }
+                    row("My profile", "") { MyProfileView() }
                     row("Notifications", "") { NotificationSettingsView() }
                     row("My Bond Touch Bracelet", "") { BraceletSettingsView() }
                     row("Bracelet firmware (recovery)", "") { FirmwareSettingsView() }
@@ -141,26 +142,6 @@ struct SettingsView: View {
         case .scanning, .connecting: return "Connecting…"
         case .bluetoothOff: return "Bluetooth off"
         case .disconnected: return "Not connected"
-        }
-    }
-}
-
-private struct PersonalDetailsView: View {
-    @EnvironmentObject var model: AppModel
-    @EnvironmentObject var store: LocalStore
-    @State private var color: Color = .pink
-    var body: some View {
-        Form {
-            TextField("Name", text: $store.profile.name)
-            ColorPicker("Your colour", selection: $color)
-        }
-        .scrollContentBackground(.hidden)
-        .navigationTitle("Personal details")
-        .onAppear { color = Color(rgbInt: store.profile.colorRGB) }
-        .onChange(of: color) {
-            store.profile.colorRGB = $0.rgbInt
-            model.bracelet.setUserColor($0.rgbInt)
-            Task { await model.publishProfile() }
         }
     }
 }
@@ -683,7 +664,7 @@ private struct LayoutPickerCard: View {
                             layout = l.rawValue
                         } label: {
                             HStack(spacing: 12) {
-                                Image(systemName: l.icon).font(.system(size: 18, weight: .semibold))
+                                Image(systemName: l.icon).font(.system(size: Theme.s(18), weight: .semibold))
                                     .foregroundStyle(on ? Theme.onAccent : Theme.title)
                                     .frame(width: 40, height: 40)
                                     .background(RoundedRectangle(cornerRadius: 12, style: .continuous)
@@ -895,6 +876,26 @@ private struct NeonStyleCard: View {
                 }
                 Button("Reset") { width = 1; glow = 1 }
                     .font(.caption.weight(.semibold)).foregroundStyle(Theme.accent)
+            }
+        }
+    }
+}
+
+/// Settings → Display size: how big text and icons are across the app.
+private struct DisplaySizeCard: View {
+    @AppStorage("displayScale") private var displayScale = 0.92
+    private static let sizes: [(String, Double)] = [("Smaller", 0.86), ("Small", 0.92), ("Standard", 1.0)]
+
+    var body: some View {
+        GlassCard(padding: 20) {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Display size").foregroundStyle(Theme.title)
+                Picker("Display size", selection: $displayScale) {
+                    ForEach(Self.sizes, id: \.1) { Text($0.0).tag($0.1) }
+                }
+                .pickerStyle(.segmented)
+                Text("Text and icons everywhere in the app.")
+                    .font(.caption).foregroundStyle(Theme.subtitle)
             }
         }
     }

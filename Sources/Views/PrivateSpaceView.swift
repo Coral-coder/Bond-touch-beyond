@@ -65,7 +65,7 @@ struct PrivateSpaceView: View {
     private var introView: some View {
         VStack(spacing: 20) {
             Spacer()
-            Image(systemName: "lock.shield.fill").font(.system(size: 64)).foregroundStyle(.white)
+            Image(systemName: "lock.shield.fill").font(.system(size: Theme.s(64))).foregroundStyle(.white)
             Text("Welcome to Private Space!").font(.title2.bold()).foregroundStyle(.white)
             Text("This is a safe space just for you two. Use it to share messages and photos privately.")
                 .multilineTextAlignment(.center).foregroundStyle(.white.opacity(0.9))
@@ -183,7 +183,7 @@ struct PrivateSpaceView: View {
                     .font(.caption).foregroundStyle(.white.opacity(0.85))
                 Spacer()
                 Button { phase = .locked } label: {
-                    Image(systemName: "lock").font(.system(size: 15, weight: .bold)).foregroundStyle(.white)
+                    Image(systemName: "lock").font(.system(size: Theme.s(15), weight: .bold)).foregroundStyle(.white)
                 }
                 .accessibilityLabel("Lock Private Space")
             }
@@ -233,7 +233,7 @@ private struct PrivateGallery: View {
         ScrollView {
             if photos.isEmpty {
                 VStack(spacing: 10) {
-                    Image(systemName: "photo.on.rectangle.angled").font(.system(size: 40)).foregroundStyle(.white)
+                    Image(systemName: "photo.on.rectangle.angled").font(.system(size: Theme.s(40))).foregroundStyle(.white)
                     Text("Shared gallery").font(.headline).foregroundStyle(.white)
                     Text("Photos you send each other in Private Space show here for 72 hours.")
                         .font(.footnote).foregroundStyle(.white.opacity(0.85)).multilineTextAlignment(.center)
@@ -287,7 +287,7 @@ private struct PhotoViewer: View {
                 Image(uiImage: image).resizable().scaledToFit().frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             Button { dismiss() } label: {
-                Image(systemName: "xmark.circle.fill").font(.system(size: 30)).foregroundStyle(.white.opacity(0.85))
+                Image(systemName: "xmark.circle.fill").font(.system(size: Theme.s(30))).foregroundStyle(.white.opacity(0.85))
             }
             .padding()
             .accessibilityLabel("Close")

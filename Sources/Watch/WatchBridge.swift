@@ -108,6 +108,21 @@ final class WatchBridge: NSObject, WCSessionDelegate {
         }
     }
 
+    /// Plays a touch on the watch now, whether or not its app is open (a partner's pulse you
+    /// asked to feel). Not listed in its history.
+    @MainActor
+    func play(_ touch: TouchMessage) {
+        guard let model, WCSession.default.activationState == .activated,
+              WCSession.default.isPaired, WCSession.default.isWatchAppInstalled else { return }
+        var message = Self.encode(touch, model: model)
+        message["type"] = "play"
+        if WCSession.default.isReachable {
+            WCSession.default.sendMessage(message, replyHandler: nil) { _ in WCSession.default.transferUserInfo(message) }
+        } else {
+            WCSession.default.transferUserInfo(message)
+        }
+    }
+
     @MainActor
     private static func encode(_ t: TouchMessage, model: AppModel) -> [String: Any] {
         let mine = t.senderID == model.myUserID || t.senderID == ChatMessage.legacySelf

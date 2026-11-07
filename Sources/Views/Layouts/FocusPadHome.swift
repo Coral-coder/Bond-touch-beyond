@@ -50,7 +50,7 @@ struct FocusPadHome: View {
                         Text(last.sentAt.formatted(.relative(presentation: .named)))
                             .font(Theme.font(11)).foregroundStyle(Theme.subtitle)
                         TouchGlyph(touch: last, height: 30).frame(maxWidth: .infinity)
-                        Image(systemName: "chevron.up").font(.system(size: 12, weight: .bold)).foregroundStyle(Theme.subtitle)
+                        Image(systemName: "chevron.up").font(.system(size: Theme.s(12), weight: .bold)).foregroundStyle(Theme.subtitle)
                     }
                     .padding(.horizontal, 16).frame(height: 54)
                     .glass(cornerRadius: 22)

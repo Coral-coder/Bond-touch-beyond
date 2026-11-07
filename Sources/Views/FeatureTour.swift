@@ -75,7 +75,7 @@ struct FeatureTour: View {
     private func card(_ p: Page) -> some View {
         VStack(spacing: 20) {
             Image(systemName: p.icon)
-                .font(.system(size: 64, weight: .semibold))
+                .font(.system(size: Theme.s(64), weight: .semibold))
                 .foregroundStyle(Theme.accent)
                 .frame(height: 80)
             Text(p.title)

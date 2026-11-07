@@ -49,7 +49,7 @@ struct DateRouletteView: View {
     private var wheel: some View {
         let shown = spinning ? pool[safe: flicker % max(1, pool.count)] : pick
         return VStack(spacing: 8) {
-            Image(systemName: "dice.fill").font(.system(size: 48)).foregroundStyle(Theme.accent)
+            Image(systemName: "dice.fill").font(.system(size: Theme.s(48))).foregroundStyle(Theme.accent)
                 .rotationEffect(.degrees(spinning ? Double(flicker * 40) : 0))
             Text(shown?.text ?? "Spin for a date idea").font(Theme.font(20, .heavy)).foregroundStyle(Theme.title)
                 .multilineTextAlignment(.center).frame(minHeight: 56)

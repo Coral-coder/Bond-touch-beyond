@@ -39,7 +39,7 @@ enum Feature: String, CaseIterable, Identifiable {
         switch self {
         case .us: return "Us tab"
         case .dates: return "Special dates & reminders"
-        case .likes: return "What we like"
+        case .likes: return "Profiles side by side"
         case .todos: return "Shared to-dos"
         case .notes: return "Shared notes"
         case .whiteboard: return "Whiteboard"
@@ -64,7 +64,7 @@ enum Feature: String, CaseIterable, Identifiable {
         switch self {
         case .us: return "heart.circle.fill"
         case .dates: return "calendar"
-        case .likes: return "sparkles"
+        case .likes: return "person.2.fill"
         case .todos: return "checklist"
         case .notes: return "note.text"
         case .whiteboard: return "scribble.variable"

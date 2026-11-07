@@ -233,3 +233,34 @@ extension AppModel {
         }
     }
 }
+
+// MARK: - Profiles
+
+extension AppModel {
+    /// Once: what you'd added about yourself under each partner's What we like moves into your
+    /// profile, which every partner sees.
+    func migrateLikesToProfile() {
+        let key = "LikesMovedToProfile"
+        guard !UserDefaults.standard.bool(forKey: key), !cloudPartners.isEmpty else { return }
+        var about = store.profile.about ?? AboutMe()
+        for p in cloudPartners {
+            let me = myRole(p.id)
+            for like in together.space(p.id).likes where !like.deleted && like.owner == me
+                && !about.items.contains(where: { $0.label.lowercased() == like.label.lowercased() }) {
+                about.items.append(AboutMe.AboutItem(label: like.label, value: like.value))
+            }
+        }
+        if !about.isEmpty { store.profile.about = about }
+        UserDefaults.standard.set(true, forKey: key)
+    }
+
+    /// A partner's profile: what they share about themselves, or (from an older build) what
+    /// they'd added under What we like.
+    func partnerAbout(_ bondID: String) -> AboutMe? {
+        if let about = store.partnerAbout[bondID], !about.isEmpty { return about }
+        let them = myRole(bondID) == "A" ? "B" : "A"
+        let items = together.space(bondID).likes.filter { !$0.deleted && $0.owner == them }
+            .map { AboutMe.AboutItem(label: $0.label, value: $0.value) }
+        return items.isEmpty ? nil : AboutMe(items: items)
+    }
+}

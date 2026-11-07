@@ -73,7 +73,7 @@ struct RecoveryBanner: View {
                                      @ViewBuilder actions: () -> Actions) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .top, spacing: 10) {
-                Image(systemName: icon).foregroundStyle(tint).font(.system(size: 18, weight: .bold))
+                Image(systemName: icon).foregroundStyle(tint).font(.system(size: Theme.s(18), weight: .bold))
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title).font(Theme.font(15, .heavy)).foregroundStyle(Theme.title)
                     Text(detail).font(Theme.font(12)).foregroundStyle(Theme.subtitle)

@@ -19,6 +19,8 @@ struct RootView: View {
     @AppStorage("appStyle") private var appStyle = AppStyle.aero.rawValue
     @AppStorage("paperInk") private var paperInk = PaperInk.aqua.rawValue
     @AppStorage(ThemeTints.key) private var themeTints = ""
+    /// Settings → Display size: scales every font and icon (see `Theme.scale`).
+    @AppStorage("displayScale") private var displayScale = 0.92
     @State private var keyboardUp = false
     /// Bumped to start a tab's navigation afresh, so a tapped notification's screen opens from
     /// that tab's root rather than on top of whatever was open.
@@ -35,7 +37,9 @@ struct RootView: View {
             content
         }
         .modifier(ThemeFonts())
-        .id(appStyle + paperInk + themeTints)
+        .id(appStyle + paperInk + themeTints + "\(displayScale)")
+        // System text styles (captions, titles) follow the display size too.
+        .dynamicTypeSize(...(displayScale < 0.9 ? DynamicTypeSize.small : displayScale < 0.97 ? .medium : .accessibility5))
         .overlay(alignment: .top) { RecoveryBanner().padding(.top, 60) }
         .overlay(alignment: .top) { BraceletPromptBanner().padding(.top, 60) }
         // A heartbeat arriving (or replayed): the live EKG, over whatever screen is open.
@@ -171,7 +175,8 @@ private struct DemoScreen: View {
                 case "whiteboard": WhiteboardView()
                 case "todo": TodoListView()
                 case "notes": SharedNotesView()
-                case "likes": LikesView()
+                case "likes": UsProfilesView()
+                case "profile": MyProfileView()
                 case "dates": SpecialDatesView()
                 case "compose": ComposeTouchView()
                 case "draw": PatternDrawer(initial: AppModel.demoSlide, colorRGB: 0xEC5A89, endColorRGB: 0xB173DF) { _ in }

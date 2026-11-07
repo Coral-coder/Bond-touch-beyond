@@ -73,6 +73,16 @@ final class LocalStore: ObservableObject {
     @Published var watchStandsIn: Bool = (UserDefaults.standard.object(forKey: "watchStandsIn") as? Bool) ?? false {
         didSet { UserDefaults.standard.set(watchStandsIn, forKey: "watchStandsIn") }
     }
+    /// Each partner's shared profile (what they wrote about themselves), by bond.
+    @Published var partnerAbout: [String: AboutMe] = LocalStore.loadPartnerAbout() {
+        didSet {
+            if let data = try? JSONEncoder().encode(partnerAbout) { UserDefaults.standard.set(data, forKey: "partnerAbout") }
+        }
+    }
+    private static func loadPartnerAbout() -> [String: AboutMe] {
+        guard let data = UserDefaults.standard.data(forKey: "partnerAbout") else { return [:] }
+        return (try? JSONDecoder().decode([String: AboutMe].self, from: data)) ?? [:]
+    }
     /// Saved places watched for arrival alerts.
     @Published var savedPlaces: [SavedPlace] {
         didSet { save(savedPlaces, for: .savedPlaces) }

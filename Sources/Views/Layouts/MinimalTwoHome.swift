@@ -98,7 +98,7 @@ struct MinimalTwoHome: View {
                 }
                 .frame(width: 96, alignment: .leading)
                 TouchGlyph(touch: last, height: 34).frame(maxWidth: .infinity)
-                Image(systemName: "chevron.right").font(.system(size: 12, weight: .bold)).foregroundStyle(Theme.subtitle)
+                Image(systemName: "chevron.right").font(.system(size: Theme.s(12), weight: .bold)).foregroundStyle(Theme.subtitle)
             }
             .padding(.horizontal, 18).padding(.vertical, 16)
             .glass(cornerRadius: Theme.cardCorner)

@@ -127,7 +127,7 @@ struct BackgammonView: View {
     }
 
     private func die(_ n: Int) -> some View {
-        Text(["⚀", "⚁", "⚂", "⚃", "⚄", "⚅"][max(0, min(5, n - 1))]).font(.system(size: 40)).foregroundStyle(Theme.title)
+        Text(["⚀", "⚁", "⚂", "⚃", "⚄", "⚅"][max(0, min(5, n - 1))]).font(.system(size: Theme.s(40))).foregroundStyle(Theme.title)
     }
 
     // MARK: Play

@@ -71,8 +71,8 @@ struct BattleshipView: View {
         grid(cell: { c in
             switch mine[c] {
             case "m": return AnyView(ZStack { waterCell; Circle().fill(.white.opacity(0.7)).frame(width: 7, height: 7) })
-            case .some(let r) where r.hasPrefix("s"): return AnyView(ZStack { Rectangle().fill(Color(rgbInt: 0x7A1E2A)); Image(systemName: "xmark").font(.system(size: 12, weight: .heavy)).foregroundStyle(.white) })
-            case "h": return AnyView(ZStack { waterCell; Image(systemName: "flame.fill").font(.system(size: 13)).foregroundStyle(Color(rgbInt: 0xFF7A2E)) })
+            case .some(let r) where r.hasPrefix("s"): return AnyView(ZStack { Rectangle().fill(Color(rgbInt: 0x7A1E2A)); Image(systemName: "xmark").font(.system(size: Theme.s(12), weight: .heavy)).foregroundStyle(.white) })
+            case "h": return AnyView(ZStack { waterCell; Image(systemName: "flame.fill").font(.system(size: Theme.s(13))).foregroundStyle(Color(rgbInt: 0xFF7A2E)) })
             default:
                 let pending = g.shots(by: me).contains(c)
                 return AnyView(ZStack { waterCell; if pending { ProgressView().scaleEffect(0.6) } })
@@ -84,7 +84,7 @@ struct BattleshipView: View {
             return AnyView(ZStack {
                 ship ? AnyView(shipCell) : AnyView(waterCell)
                 if theirs.contains(c) {
-                    if ship { Image(systemName: "flame.fill").font(.system(size: 11)).foregroundStyle(Color(rgbInt: 0xFF7A2E)) } else { Circle().fill(.white.opacity(0.7)).frame(width: 7, height: 7) }
+                    if ship { Image(systemName: "flame.fill").font(.system(size: Theme.s(11))).foregroundStyle(Color(rgbInt: 0xFF7A2E)) } else { Circle().fill(.white.opacity(0.7)).frame(width: 7, height: 7) }
                 }
             })
         }, tap: nil, small: true)

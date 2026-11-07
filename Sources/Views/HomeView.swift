@@ -107,7 +107,7 @@ struct HomeView: View {
                 if Feature.stress.isOn {
                     Button { showMoodCheckIn = true } label: {
                         Image(systemName: "face.smiling")
-                            .font(.system(size: 17, weight: .semibold)).foregroundStyle(Theme.title)
+                            .font(.system(size: Theme.s(17), weight: .semibold)).foregroundStyle(Theme.title)
                             .frame(width: 38, height: 44)
                     }
                     .buttonStyle(.plain)
@@ -125,7 +125,7 @@ struct HomeView: View {
                 Button { showPeople = true } label: { Label("People", systemImage: "person.2") }
             } label: {
                 Image(systemName: "ellipsis")
-                    .font(.system(size: 17, weight: .bold))
+                    .font(.system(size: Theme.s(17), weight: .bold))
                     .foregroundStyle(Theme.title)
                     .frame(width: 44, height: 44)
                     .glass(Circle())
@@ -141,7 +141,7 @@ struct HomeView: View {
     private var heartButton: some View {
         TimelineView(.animation(paused: !model.sendingHeartbeat)) { ctx in
             Image(systemName: "heart.fill")
-                .font(.system(size: 17, weight: .semibold))
+                .font(.system(size: Theme.s(17), weight: .semibold))
                 .foregroundStyle(model.sendingHeartbeat ? Theme.pink : Theme.title)
                 .scaleEffect(model.sendingHeartbeat ? heartScale(ctx.date) : 1)
                 .frame(width: 38, height: 44)
@@ -181,7 +181,7 @@ struct HomeView: View {
             }
         } label: {
             Text(kissSent ? "✓" : "💋")
-                .font(.system(size: 18))
+                .font(.system(size: Theme.s(18)))
                 .foregroundStyle(Theme.title)
                 .frame(width: 38, height: 44)
                 .scaleEffect(kissSent ? 1.12 : 1)
@@ -252,7 +252,7 @@ struct HomeView: View {
         .overlay(alignment: .topTrailing) {
             if partner != nil {
                 Button { showPartner = true } label: {
-                    Image(systemName: "info").font(.system(size: 14, weight: .heavy)).foregroundStyle(Theme.title)
+                    Image(systemName: "info").font(.system(size: Theme.s(14), weight: .heavy)).foregroundStyle(Theme.title)
                         .frame(width: 34, height: 34).glass(Circle())
                 }
                 .buttonStyle(.plain).padding(12)
@@ -285,7 +285,7 @@ struct HomeView: View {
                         ZStack {
                             Circle().strokeBorder(style: StrokeStyle(lineWidth: 2, dash: [6]))
                                 .foregroundStyle(Theme.subtitle)
-                            Image(systemName: "plus").font(.system(size: 26, weight: .semibold)).foregroundStyle(Theme.title)
+                            Image(systemName: "plus").font(.system(size: Theme.s(26), weight: .semibold)).foregroundStyle(Theme.title)
                         }
                         .frame(width: 76, height: 76)
                     }
@@ -315,7 +315,7 @@ struct HomeView: View {
     private var sendTouchButton: some View {
         Button { showCompose = true } label: {
             HStack(spacing: 12) {
-                Image(systemName: "hand.tap.fill").font(.system(size: 20, weight: .bold))
+                Image(systemName: "hand.tap.fill").font(.system(size: Theme.s(20), weight: .bold))
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Send a touch").font(Theme.font(17, .heavy))
                     Text(partner == nil ? "Pick a partner first"
@@ -323,7 +323,7 @@ struct HomeView: View {
                         .font(Theme.font(12)).foregroundStyle(Theme.onAccent.opacity(0.75))
                 }
                 Spacer()
-                Image(systemName: "chevron.right").font(.system(size: 15, weight: .bold))
+                Image(systemName: "chevron.right").font(.system(size: Theme.s(15), weight: .bold))
             }
             .foregroundStyle(Theme.onAccent)
             .padding(.horizontal, 18).frame(height: 66)
@@ -477,16 +477,16 @@ struct HomeView: View {
         if mine, let delivery = touch.delivery {
             switch delivery {
             case .sending:
-                Image(systemName: "clock").font(.system(size: 10, weight: .bold)).foregroundStyle(Theme.subtitle)
+                Image(systemName: "clock").font(.system(size: Theme.s(10), weight: .bold)).foregroundStyle(Theme.subtitle)
                     .accessibilityLabel("Sending")
             case .sent:
-                Image(systemName: "checkmark").font(.system(size: 10, weight: .heavy)).foregroundStyle(Theme.subtitle)
+                Image(systemName: "checkmark").font(.system(size: Theme.s(10), weight: .heavy)).foregroundStyle(Theme.subtitle)
                     .accessibilityLabel("Sent")
             case .seen:
                 HStack(spacing: -4) {
                     Image(systemName: "checkmark"); Image(systemName: "checkmark")
                 }
-                .font(.system(size: 10, weight: .heavy)).foregroundStyle(Theme.accent)
+                .font(.system(size: Theme.s(10), weight: .heavy)).foregroundStyle(Theme.accent)
                 .accessibilityElement(children: .ignore).accessibilityLabel("Seen")
             case .failed:
                 Button { Task { await model.resend(touch) } } label: {
@@ -497,7 +497,7 @@ struct HomeView: View {
                 .accessibilityLabel("Failed to send. Tap to retry.")
             }
         } else if !mine, touch.missed == true {
-            Image(systemName: "bell.slash.fill").font(.system(size: 10, weight: .bold)).foregroundStyle(Theme.amber)
+            Image(systemName: "bell.slash.fill").font(.system(size: Theme.s(10), weight: .bold)).foregroundStyle(Theme.amber)
                 .accessibilityLabel("Missed: this touch arrived but didn't play")
         }
     }
@@ -557,7 +557,7 @@ struct HomeView: View {
                 // words, lifted off the drawing by a soft shadow (no pill around them).
                 if touch.heartbeatBPM == nil, let meaning {
                     HStack(spacing: 6) {
-                        if !meaning.emoji.isEmpty { Text(meaning.emoji).font(.system(size: 17)) }
+                        if !meaning.emoji.isEmpty { Text(meaning.emoji).font(.system(size: Theme.s(17))) }
                         Text(meaning.label).font(Theme.font(16, .heavy)).lineLimit(1).minimumScaleFactor(0.7)
                     }
                     .foregroundStyle(Theme.title)
@@ -577,7 +577,7 @@ struct HomeView: View {
                         .font(Theme.font(11)).foregroundStyle(Theme.subtitle)
                 }
                 Button { model.feel(touch) } label: {
-                    Image(systemName: "play.fill").font(.system(size: 12, weight: .bold)).foregroundStyle(Theme.title)
+                    Image(systemName: "play.fill").font(.system(size: Theme.s(12), weight: .bold)).foregroundStyle(Theme.title)
                         .frame(width: 32, height: 32).background(Circle().fill(Theme.ink.opacity(0.16)))
                 }
                 .buttonStyle(.plain)
@@ -701,7 +701,7 @@ private struct SwipeToSave<Content: View>: View {
         ZStack(alignment: .trailing) {
             Button(action: fire) {
                 VStack(spacing: 3) {
-                    Image(systemName: "star.fill").font(.system(size: 16, weight: .bold))
+                    Image(systemName: "star.fill").font(.system(size: Theme.s(16), weight: .bold))
                     Text("Meaning").font(Theme.font(11, .bold))
                 }
                 .foregroundStyle(Theme.onAccent)
