@@ -74,7 +74,7 @@ struct TogetherView: View {
     @ViewBuilder private func part(_ id: String) -> some View {
         switch id {
         case "dates": SpecialDatesView()
-        case "likes": LikesView()
+        case "likes": UsProfilesView()
         default: allTiles.first { $0.id == id }?.destination()
         }
     }
@@ -139,14 +139,14 @@ struct TogetherView: View {
     // MARK: Likes
 
     private func likesCard(_ p: Partner) -> some View {
-        NavigationLink { LikesView().screenBackground() } label: {
+        NavigationLink { UsProfilesView().screenBackground() } label: {
             HStack(spacing: 12) {
-                Image(systemName: "sparkles").font(.system(size: 22)).foregroundStyle(Theme.amber)
+                Image(systemName: "person.2.fill").font(.system(size: 20)).foregroundStyle(Theme.amber)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("What we like").font(Theme.font(17, .heavy)).foregroundStyle(Theme.title)
-                    let mine = space.likes.filter { !$0.deleted && $0.owner == model.myRole(p.id) }.count
-                    let theirs = space.likes.filter { !$0.deleted && $0.owner != model.myRole(p.id) }.count
-                    Text("You: \(mine) · \(p.displayName): \(theirs) — favourites, sizes, love languages…")
+                    Text("You & \(p.displayName)").font(Theme.font(17, .heavy)).foregroundStyle(Theme.title)
+                    let mine = store.profile.about?.items.count ?? 0
+                    let theirs = model.partnerAbout(p.id)?.items.count ?? 0
+                    Text("Your profiles side by side · you: \(mine) · \(p.displayName): \(theirs)")
                         .font(Theme.font(12)).foregroundStyle(Theme.subtitle).lineLimit(2)
                 }
                 Spacer()
@@ -597,77 +597,6 @@ struct SpecialDateEditor: View {
 }
 
 // MARK: - Likes
-
-struct LikesView: View {
-    @EnvironmentObject var model: AppModel
-    @EnvironmentObject var together: TogetherStore
-    @State private var addingFor: String?
-    @State private var label = ""
-    @State private var value = ""
-
-    private static let ideas = ["Favourite food", "Favourite flowers", "Favourite colour", "Coffee order", "Love language",
-                                "Clothes size", "Shoe size", "Ring size", "Favourite film", "Favourite song",
-                                "Dream trip", "Allergies", "Pet peeve", "Comfort snack"]
-
-    var body: some View {
-        let id = model.selectedPartnerID
-        let me = model.myRole(id), them = me == "A" ? "B" : "A"
-        let likes = together.space(id).likes.filter { !$0.deleted }
-        List {
-            section("You", me, likes.filter { $0.owner == me })
-            section(model.selectedPartner?.displayName ?? "Them", them, likes.filter { $0.owner == them })
-        }
-        .scrollContentBackground(.hidden)
-        .navigationTitle("What we like")
-        .alert("Add", isPresented: Binding(get: { addingFor != nil }, set: { if !$0 { addingFor = nil } })) {
-            TextField("What, e.g. Favourite flowers", text: $label)
-            TextField("e.g. Peonies", text: $value)
-            Button("Add") {
-                guard let owner = addingFor, !label.isEmpty || !value.isEmpty else { return }
-                together.edit(id, note: "added something to What we like ✨") { $0.likes.append(Preference(owner: owner, label: label, value: value)) }
-                label = ""; value = ""
-            }
-            Button("Cancel", role: .cancel) { label = ""; value = "" }
-        }
-    }
-
-    private func section(_ title: String, _ owner: String, _ items: [Preference]) -> some View {
-        Section {
-            ForEach(items) { p in
-                HStack(alignment: .firstTextBaseline) {
-                    Text(p.label).font(Theme.font(14, .semibold)).foregroundStyle(Theme.subtitle)
-                    Spacer()
-                    Text(p.value).font(Theme.font(15, .bold)).foregroundStyle(Theme.title).multilineTextAlignment(.trailing)
-                }
-                .listRowBackground(Theme.ink.opacity(0.06))
-                .swipeActions {
-                    Button(role: .destructive) {
-                        together.edit(model.selectedPartnerID) { s in
-                            if let i = s.likes.firstIndex(where: { $0.id == p.id }) { s.likes[i].deleted = true; s.likes[i].edited = Date() }
-                        }
-                    } label: { Label("Delete", systemImage: "trash") }
-                }
-            }
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 6) {
-                    ForEach(Self.ideas.filter { idea in !items.contains { $0.label == idea } }, id: \.self) { idea in
-                        Button(idea) { label = idea; value = ""; addingFor = owner }
-                            .font(Theme.font(12, .bold)).foregroundStyle(Theme.title)
-                            .padding(.horizontal, 10).padding(.vertical, 6)
-                            .background(Capsule().fill(Theme.ink.opacity(0.1)))
-                            .buttonStyle(.plain)
-                    }
-                    Button { label = ""; value = ""; addingFor = owner } label: { Image(systemName: "plus") }
-                        .buttonStyle(.plain).foregroundStyle(Theme.accent)
-                }
-            }
-            .noTabBarGap()
-            .listRowBackground(Color.clear)
-        } header: {
-            Text(title).font(Theme.font(15, .heavy)).foregroundStyle(Theme.title)
-        }
-    }
-}
 
 // MARK: - To-do
 

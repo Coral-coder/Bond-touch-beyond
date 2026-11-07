@@ -32,7 +32,7 @@ struct SettingsView: View {
                     ThemePickerCard().id("themeCard")
                     LayoutPickerCard()
                     FeaturesCard()
-                    row("Personal details", "") { PersonalDetailsView() }
+                    row("My profile", "") { MyProfileView() }
                     row("Notifications", "") { NotificationSettingsView() }
                     row("My Bond Touch Bracelet", "") { BraceletSettingsView() }
                     row("Bracelet firmware (recovery)", "") { FirmwareSettingsView() }
@@ -141,26 +141,6 @@ struct SettingsView: View {
         case .scanning, .connecting: return "Connecting…"
         case .bluetoothOff: return "Bluetooth off"
         case .disconnected: return "Not connected"
-        }
-    }
-}
-
-private struct PersonalDetailsView: View {
-    @EnvironmentObject var model: AppModel
-    @EnvironmentObject var store: LocalStore
-    @State private var color: Color = .pink
-    var body: some View {
-        Form {
-            TextField("Name", text: $store.profile.name)
-            ColorPicker("Your colour", selection: $color)
-        }
-        .scrollContentBackground(.hidden)
-        .navigationTitle("Personal details")
-        .onAppear { color = Color(rgbInt: store.profile.colorRGB) }
-        .onChange(of: color) {
-            store.profile.colorRGB = $0.rgbInt
-            model.bracelet.setUserColor($0.rgbInt)
-            Task { await model.publishProfile() }
         }
     }
 }

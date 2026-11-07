@@ -171,7 +171,8 @@ private struct DemoScreen: View {
                 case "whiteboard": WhiteboardView()
                 case "todo": TodoListView()
                 case "notes": SharedNotesView()
-                case "likes": LikesView()
+                case "likes": UsProfilesView()
+                case "profile": MyProfileView()
                 case "dates": SpecialDatesView()
                 case "compose": ComposeTouchView()
                 case "draw": PatternDrawer(initial: AppModel.demoSlide, colorRGB: 0xEC5A89, endColorRGB: 0xB173DF) { _ in }

@@ -387,7 +387,7 @@ extension AppModel {
         do {
             try await relay.sendProfile(name: p.name.isEmpty ? "Me" : p.name, colorRGB: p.colorRGB,
                                         photo: myPhotoFileURL, pushToken: myPushToken,
-                                        meanings: sharedLibrary(bondID), bond: bond, senderID: myUserID)
+                                        meanings: sharedLibrary(bondID), about: p.about, bond: bond, senderID: myUserID)
         } catch {
             NetLog.shared.log(.fail, "iCloud: Touch Language not sent", error.localizedDescription)
         }

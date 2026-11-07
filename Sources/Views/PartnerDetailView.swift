@@ -90,6 +90,10 @@ struct PartnerDetailView: View {
                         }
                         .padding(16).glass(cornerRadius: 22)
 
+                        AboutCard(name: partner.displayName, about: model.partnerAbout(partner.id))
+
+                        PulseButton(partner: partner)
+
                         PartnerMoodRow(partner: partner).padding(16).glass(cornerRadius: 22)
                         if Feature.stress.isOn {
                             StressChart(mood: partner.presence?.mood, name: partner.displayName)

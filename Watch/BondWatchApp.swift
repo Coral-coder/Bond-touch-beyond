@@ -251,6 +251,11 @@ final class PhoneLink: NSObject, ObservableObject, WCSessionDelegate {
             DispatchQueue.main.async { StandIn.shared.stop() }
             return
         }
+        // A partner's pulse the user asked to feel: it beats on the wrist now.
+        if message["type"] as? String == "play", let touch = WatchTouch(message) {
+            DispatchQueue.main.async { WatchHaptics.play(touch, again: true) }
+            return
+        }
         guard message["type"] as? String == "received", let touch = WatchTouch(message) else { return }
         DispatchQueue.main.async {
             var list = self.history[touch.bondID] ?? []

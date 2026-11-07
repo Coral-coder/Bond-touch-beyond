@@ -52,6 +52,8 @@ actor CloudRelay {
         var partnerSeenMessage: Int?
         /// The partner's copy of the shared Touch Language, when their profile changed.
         var partnerMeanings: [TouchMeaning]?
+        /// The partner's shared profile, when their profile changed.
+        var partnerAbout: AboutMe?
         /// The partner's copy of the Us space and whiteboard, when they changed.
         var space: TogetherSpace?
         var board: Whiteboard?
@@ -437,7 +439,7 @@ actor CloudRelay {
     }
 
     func sendProfile(name: String, colorRGB: Int, photo: URL?, pushToken: String? = nil,
-                     meanings: [TouchMeaning]? = nil, bond: Bond, senderID: String) async throws {
+                     meanings: [TouchMeaning]? = nil, about: AboutMe? = nil, bond: Bond, senderID: String) async throws {
         let photoData = photo.flatMap { try? Data(contentsOf: $0) }
         let hash = photoData.map(Self.hash)
         if let photoData, let hash, writtenPhotoHash[bond.id] != hash {
@@ -446,7 +448,7 @@ actor CloudRelay {
         }
         try await put(mine(bond, "pf", .profile), seal(ProfilePayload(name: name, colorRGB: colorRGB,
                                                                       pushToken: pushToken, photoHash: hash,
-                                                                      meanings: meanings), bond.id))
+                                                                      meanings: meanings, about: about), bond.id))
         try await announce("pf", bond)
     }
 
@@ -597,6 +599,7 @@ actor CloudRelay {
             events.partnerColorRGB = p.colorRGB
             events.partnerPushToken = p.pushToken
             events.partnerMeanings = p.meanings
+            events.partnerAbout = p.about
             let photoRef = theirs(bond, "ph", .photo)
             if let hash = p.photoHash, hash != seenPhotoHash[code],
                let photo = try? await get([photoRef]),
@@ -655,6 +658,8 @@ private struct ProfilePayload: Codable {
     let name: String; let colorRGB: Int; let pushToken: String?; let photoHash: String?
     /// The Touch Language this phone shares with the partner (optional: older builds).
     var meanings: [TouchMeaning]? = nil
+    /// What this person shares about themselves (optional: older builds).
+    var about: AboutMe? = nil
 }
 private struct PhotoPayload: Codable { let data: Data }
 /// A phone's status snapshot, shared (encrypted) with its partner and shown on their card.
