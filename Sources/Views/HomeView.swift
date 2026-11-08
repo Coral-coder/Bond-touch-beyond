@@ -164,7 +164,7 @@ struct HomeView: View {
         .accessibilityAddTraits(.isButton)
     }
 
-    /// Sends a kiss: the partner's phone (and watch) plays just the kiss sound, "Thinking of you".
+    /// Sends a kiss: the partner's phone (and watch) plays the kiss sound, "{name} kissed you! 💋".
     private var kissButton: some View {
         Button {
             UIImpactFeedbackGenerator(style: .soft).impactOccurred()

@@ -119,6 +119,18 @@ targets:
         LSSupportsOpeningDocumentsInPlace: false
         # The Keychain group shared with the notification extension (Sources/Shared/SharedBonds.swift).
         BTKeychainGroup: $(AppIdentifierPrefix)$(APP_BUNDLE_ID).shared
+        # Kisses and touches as communication notifications (the sender's name, Siri reads
+        # them out, CarPlay shows them) — NotificationService/NotificationService.swift.
+        NSUserActivityTypes:
+          - INSendMessageIntent
+        # CarPlay: recent kisses, touches and heartbeats, with Kiss back and Send a touch
+        # (Sources/CarPlay/CarPlaySceneDelegate.swift). The phone's own window stays SwiftUI's.
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: true
+          UISceneConfigurations:
+            CPTemplateApplicationSceneSessionRoleApplication:
+              - UISceneConfigurationName: CarPlay
+                UISceneDelegateClassName: $(PRODUCT_MODULE_NAME).CarPlaySceneDelegate
     entitlements:
       path: Sources/App/BondTouchBeyond.entitlements
       properties:
@@ -138,6 +150,11 @@ targets:
         keychain-access-groups:
           - $(AppIdentifierPrefix)$(APP_BUNDLE_ID)
           - $(AppIdentifierPrefix)$(APP_BUNDLE_ID).shared
+        # Communication notifications (sender name, Siri announce, CarPlay).
+        com.apple.developer.usernotifications.communication: true
+        # CarPlay (Apple-approved). If the signing profile doesn't carry it yet, the TestFlight
+        # workflow archives again without it rather than failing.
+        com.apple.developer.carplay-communication: true
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: $(APP_BUNDLE_ID)
@@ -235,6 +252,7 @@ targets:
       - path: Sources/Shared/SendMeaningIntent.swift
       - path: Sources/Models/Weather.swift
       - path: Sources/Design/Theme.swift
+      - path: Sources/Design/MatrixRain.swift
       - path: Sources/Design/TouchViz.swift
       - path: Sources/Models/TouchPattern.swift
       - path: Sources/Models/Heartbeat.swift
@@ -307,6 +325,7 @@ targets:
       - path: Sources/Views/EKGView.swift
       - path: Sources/Views/Color+RGB.swift
       - path: Sources/Design/Theme.swift
+      - path: Sources/Design/MatrixRain.swift
       - path: Sources/Design/TouchViz.swift
     info:
       path: NotificationContent/Info.plist

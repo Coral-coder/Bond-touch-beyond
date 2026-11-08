@@ -1,3 +1,4 @@
+import Intents
 import UserNotifications
 
 /// Turns a partner's touch push into a rich notification before iOS shows it: decrypts the
@@ -20,7 +21,7 @@ final class NotificationService: UNNotificationServiceExtension {
         guard let locator = info["bl"] as? String, let b64 = info["bt"] as? String, let sealed = Data(base64Encoded: b64),
               let code = SharedBonds.codes().first(where: { BondCrypto.locator(forCode: $0) == locator }),
               let touch = BondCrypto.open(TouchMessage.self, from: sealed, code: code) else {
-            contentHandler(content); return
+            contentHandler(Self.fromPartner(content)); return
         }
         content.categoryIdentifier = TouchNotification.category
         content.userInfo = info.merging(TouchNotification.userInfo(touch, bondID: code)) { $1 }
@@ -32,7 +33,36 @@ final class NotificationService: UNNotificationServiceExtension {
                                                           options: [UNNotificationAttachmentOptionsTypeHintKey: "public.png"]) {
             content.attachments = [attachment]
         }
-        contentHandler(content)
+        contentHandler(Self.fromPartner(content))
+    }
+
+    /// The notification as a message from the partner (a communication notification): their
+    /// name at the top, the app's icon as a badge, and what they did — "kissed you! 💋",
+    /// "touched you ❤️". Siri can announce it (AirPods, CarPlay) and CarPlay shows it on the
+    /// car's screen. Anything it can't do, it leaves the notification as it was.
+    static func fromPartner(_ content: UNMutableNotificationContent) -> UNNotificationContent {
+        let info = content.userInfo
+        guard let name = info["sn"] as? String, !name.isEmpty, let locator = info["bl"] as? String else { return content }
+        // "Sam kissed you! 💋" / "Sam's heartbeat" → "kissed you! 💋" / "heartbeat", then the body.
+        // (A title that isn't about them, like "Us", gives way to the body.)
+        var said = content.title.hasPrefix(name) ? String(content.title.dropFirst(name.count)) : ""
+        if said.hasPrefix("'s ") { said = String(said.dropFirst(3)) }
+        said = said.trimmingCharacters(in: .whitespaces)
+        let body = content.body.trimmingCharacters(in: .whitespaces)
+        if said.isEmpty { said = body } else if !body.isEmpty, !said.contains(body) {
+            said += body.count <= 2 ? " \(body)" : " · \(body)"
+        }
+        content.body = said
+        let handle = INPersonHandle(value: locator, type: .unknown)
+        let sender = INPerson(personHandle: handle, nameComponents: nil, displayName: name, image: nil,
+                              contactIdentifier: nil, customIdentifier: locator)
+        let intent = INSendMessageIntent(recipients: nil, outgoingMessageType: .outgoingMessageText, content: said,
+                                         speakableGroupName: nil, conversationIdentifier: locator,
+                                         serviceName: nil, sender: sender, attachments: nil)
+        let interaction = INInteraction(intent: intent, response: nil)
+        interaction.direction = .incoming
+        interaction.donate(completion: nil)
+        return (try? content.updating(from: intent)) ?? content
     }
 
     override func serviceExtensionTimeWillExpire() {

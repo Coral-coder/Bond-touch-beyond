@@ -3,7 +3,7 @@ import SwiftUI
 /// The app's look, picked under Settings → Theme. Each one changes the backdrop, the glass
 /// panels, the colours and the type; the touches keep their own colours in every theme.
 enum AppStyle: String, CaseIterable, Identifiable {
-    case aero, neon, pastel, mono, aurora, paper, chalk, bubble, raindrop, citrus
+    case aero, neon, pastel, mono, aurora, paper, chalk, bubble, raindrop, citrus, matrix
     var id: String { rawValue }
 
     var title: String {
@@ -18,6 +18,7 @@ enum AppStyle: String, CaseIterable, Identifiable {
         case .bubble: return "Bubble"
         case .raindrop: return "Raindrop"
         case .citrus: return "Citrus"
+        case .matrix: return "Matrix"
         }
     }
 
@@ -33,6 +34,7 @@ enum AppStyle: String, CaseIterable, Identifiable {
         case .bubble: return "Frutiger Aero: sky, glossy glass, rising bubbles"
         case .raindrop: return "Frutiger Aero: fresh green, rain on glass"
         case .citrus: return "Frutiger Aero: sunny, juicy, glossy fruit"
+        case .matrix: return "Digital rain of glitching hearts, your love in the code"
         }
     }
 
@@ -54,6 +56,7 @@ enum AppStyle: String, CaseIterable, Identifiable {
         case .bubble: return 32
         case .raindrop: return 28
         case .citrus: return 30
+        case .matrix: return 4
         }
     }
 
@@ -71,6 +74,7 @@ enum AppStyle: String, CaseIterable, Identifiable {
         case .bubble: return [("Sky", 0x1E9BE8), ("Lagoon", 0x13B5C8), ("Grass", 0x3DBB5C), ("Orchid", 0x9B6CF6), ("Coral", 0xFF7A6B), ("Sun", 0xF5B300)]
         case .raindrop: return [("Mint", 0x12A594), ("Rain", 0x3D8BD9), ("Leaf", 0x5FB83A), ("Iris", 0x7A6CF0), ("Rose", 0xE86A92), ("Dew", 0x2BB3D9)]
         case .citrus: return [("Orange", 0xFF8A00), ("Lime", 0x6DB935), ("Lemon", 0xE6B800), ("Grapefruit", 0xFF5E7E), ("Tangerine", 0xFF6A2B), ("Kiwi", 0x4FAE3D)]
+        case .matrix: return [("Code", 0x00FF41), ("Phosphor", 0x39FF88), ("Emerald", 0x00C853), ("Acid", 0xB6FF3B), ("Mint", 0x7CFFB2), ("Jade", 0x00A86B)]
         }
     }
 }
@@ -166,6 +170,13 @@ struct Palette {
                            magenta: c(0xB173DF), pink: c(0xEC5A89), lime: c(0x9FD257), amber: c(0xECA94B), danger: c(0xFF6B6B),
                            touchSent: c(0x00527B), touchReceived: c(0x003F63), surface: c(0x123A5C),
                            glassTop: white.opacity(0.22), glassBottom: white.opacity(0.07))
+        case .matrix:
+            return Palette(bgTop: c(0x000000), bgBottom: c(0x000300), ink: c(0xC8FFD4),
+                           title: c(0xD6FFE0), subtitle: c(0x4FD178), mutedHeadline: c(0x9CFFB6),
+                           accent: c(0x00FF41), accentDeep: c(0x00B32D), accentTop: c(0x7CFF9E), onAccent: c(0x001A06),
+                           magenta: c(0x39FF88), pink: c(0x00FF41), lime: c(0xB6FF3B), amber: c(0xC8FF3B), danger: c(0xFF3B3B),
+                           touchSent: c(0x002A0B), touchReceived: c(0x001A07), surface: c(0x020A04),
+                           glassTop: c(0x00FF41).opacity(0.07), glassBottom: .clear)
         case .neon:
             return Palette(bgTop: c(0x05060C), bgBottom: c(0x040509), ink: c(0xE6F6FF),
                            title: c(0xE6F6FF), subtitle: c(0x8A97B0), mutedHeadline: c(0xC9E9F5),
@@ -322,7 +333,7 @@ enum Theme {
             return .custom(bold.contains(weight) ? "ChalkboardSE-Bold" : weight == .light ? "ChalkboardSE-Light" : "ChalkboardSE-Regular",
                            size: size)
         case .paper: return .system(size: size, weight: weight, design: .serif)
-        case .neon: return .system(size: size, weight: weight, design: .monospaced)
+        case .neon, .matrix: return .system(size: size, weight: weight, design: .monospaced)
         case .mono: return .system(size: size, weight: weight, design: .default)
         case .aero, .pastel, .aurora, .bubble, .raindrop, .citrus: return .system(size: size, weight: weight, design: .rounded)
         }
@@ -347,7 +358,7 @@ struct ThemeFonts: ViewModifier {
     private var fontDesign: Font.Design {
         switch Theme.style {
         case .paper: return .serif
-        case .neon: return .monospaced
+        case .neon, .matrix: return .monospaced
         case .mono, .chalk: return .default
         case .aero, .pastel, .aurora, .bubble, .raindrop, .citrus: return .rounded
         }
@@ -374,6 +385,7 @@ struct ThemeBackdrop: View {
             case .bubble: BubbleSky(glow: glow, animated: animated)
             case .raindrop: RainOnGlass(glow: glow, animated: animated)
             case .citrus: CitrusSun(glow: glow)
+            case .matrix: MatrixRain(animated: animated, glow: glow)
             }
         }
         // Pure decoration: some backdrops draw well past their edges (the citrus slices, the
@@ -652,6 +664,13 @@ struct GlassBackground<S: Shape>: View {
                 // A soft, wide ambient shadow plus a tight contact shadow.
                 .shadow(color: Color.black.opacity(0.22 * shadowDepth), radius: 4 + 22 * shadowDepth, y: 4 + 12 * shadowDepth)
                 .shadow(color: Color.black.opacity(0.18 * shadowDepth), radius: 2, y: 1 + shadowDepth)
+        case .matrix:
+            // A terminal window: near-black glass, a thin phosphor-green rule, a green glow.
+            shape
+                .fill(Color.black.opacity(0.78 - clarity * 0.4))
+                .overlay(shape.fill(LinearGradient(colors: [p.glassTop, p.glassBottom], startPoint: .top, endPoint: .bottom)))
+                .overlay(shape.stroke(p.accent.opacity(0.75), lineWidth: 1))
+                .shadow(color: p.accent.opacity(0.4 * shadowDepth), radius: 3 + 9 * shadowDepth)
         case .neon:
             shape
                 .fill(p.surface.opacity(0.92 - clarity * 0.45))
@@ -1011,7 +1030,7 @@ extension View {
 struct AccentButtonStyle: ButtonStyle {
     var height: CGFloat = 50
     func makeBody(configuration: Configuration) -> some View {
-        let glossy = [AppStyle.aero, .aurora, .neon, .pastel, .bubble, .raindrop, .citrus].contains(Theme.style)
+        let glossy = [AppStyle.aero, .aurora, .neon, .pastel, .bubble, .raindrop, .citrus, .matrix].contains(Theme.style)
         return configuration.label
             .font(Theme.font(17, .heavy))
             .foregroundStyle(Theme.onAccent)

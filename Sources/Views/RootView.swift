@@ -51,6 +51,18 @@ struct RootView: View {
             }
         }
         .animation(.spring(response: 0.45, dampingFraction: 0.85), value: model.heartbeatShow)
+        // A partner's kiss, with the app open: lips float up, Kiss back or Send a touch.
+        .overlay {
+            if let show = model.kissShow {
+                KissOverlay(show: show).transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+        .animation(.spring(response: 0.5, dampingFraction: 0.8), value: model.kissShow)
+        // A touch sent from Matrix mode: the screen goes Matrix while it plays, then back.
+        .overlay {
+            if let show = model.matrixShow { MatrixTakeover(show: show).transition(.opacity) }
+        }
+        .animation(.easeOut(duration: 0.4), value: model.matrixShow)
         .confirmationDialog("Which bracelet is this firmware for?",
                             isPresented: Binding(get: { recovery.pendingImport != nil },
                                                  set: { if !$0 { recovery.pendingImport = nil } }),

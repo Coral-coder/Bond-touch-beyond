@@ -59,6 +59,9 @@ struct TouchMessage: Identifiable, Codable, Equatable {
     }
 
     var isRainbow: Bool { effect == "rainbow" }
+    /// Sent from Matrix mode: glitchy, in code green, and it plays in Matrix mode.
+    static let matrixEffect = "matrix"
+    var isMatrix: Bool { effect == Self.matrixEffect }
 
     private enum CodingKeys: String, CodingKey {
         case id, bondID, senderID, pattern, generation, colorRGB, endColorRGB, sentAt, meaningLabel, meaningEmoji, heartbeatBPM, effect, delivery, ringSeq, missed
