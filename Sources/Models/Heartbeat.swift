@@ -32,43 +32,32 @@ enum EKG {
         return level(elapsed.truncatingRemainder(dividingBy: period(bpm: bpm)), bpm: bpm)
     }
 
-    /// The heartbeat on a Bond Touch More bar, as 50 ms samples in one message: each beat is a
-    /// small P flick, the spike up to one end and down to the other (R, S), then a soft T,
-    /// and between beats the "no finger" sample — the bar goes dark and still, so only the
-    /// beats light and buzz, and the gaps keep the rhythm inside the message itself.
+    /// The heartbeat on a Bond Touch More bar, as 50 ms samples in one message: each beat is
+    /// one pulse, the spike up to one end of the bar and down to the other (200 ms), and
+    /// everything between pulses is the "no finger" sample, so nothing vibrates (or lights)
+    /// between beats. The gaps keep the rhythm inside the message itself.
     static func samples(bpm: Int, seconds: Double = 5) -> [Int] {
         let total = min(TouchPattern.maxSamples, Int(seconds * 1000) / TouchPattern.sampleMs)
         let perBeat = max(6, Int((period(bpm: bpm) * 1000).rounded()) / TouchPattern.sampleMs)
-        let gap = -1
-        //           P     ·    R up  S down     ·    T
-        let beat = [5, gap, 6, 8, 0, 2, gap, 5, 5]
-        let spikeEnd = 6          // too fast for the whole beat: keep up to the spike, drop the T
+        let pulse = [6, 8, 0, 2]      // up and down the bar: the beat
         var out: [Int] = []
         while out.count < total {
             for k in 0..<perBeat where out.count < total {
-                let p = k < beat.count && (k < spikeEnd || perBeat >= beat.count) ? beat[k] : gap
-                out.append(p == gap ? TouchPattern.sample([]) : TouchPattern.sample([p]))
+                out.append(k < pulse.count ? TouchPattern.sample([pulse[k]]) : TouchPattern.sample([]))
             }
         }
         return out
     }
 
-    /// The heartbeat for bracelets that only buzz on/off (and the original backend): a firm
-    /// press on each spike, a lighter one on the T wave.
+    /// The heartbeat for bracelets that only buzz on/off (and the original backend): one firm
+    /// buzz per beat, and nothing between beats.
     static func onOff(bpm: Int, seconds: Double = 5) -> [Int] {
         let periodMs = Int(period(bpm: bpm) * 1000)
         let beats = max(1, Int(seconds * 1000) / periodMs)
         var pattern: [Int] = []
-        let withT = periodMs >= 150 + 150 + 90 + 80
         for i in 0..<beats {
-            pattern.append(150)                                          // spike (on)
-            if withT {
-                pattern.append(150)                                      // gap (off)
-                pattern.append(90)                                       // T (on)
-                if i < beats - 1 { pattern.append(max(periodMs - 390, 80)) }
-            } else if i < beats - 1 {
-                pattern.append(max(periodMs - 150, 80))
-            }
+            pattern.append(150)                                          // the beat (on)
+            if i < beats - 1 { pattern.append(max(periodMs - 150, 80)) } // still (off)
         }
         return pattern
     }
