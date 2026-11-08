@@ -21,6 +21,14 @@ struct WhatsNewView: View {
     /// Newest first. Add to the top for each build; trim when it no longer needs to go back to 40.
     static let sections: [Section] = [
         Section(title: "This update", items: [
+            Item(icon: "chevron.left.forwardslash.chevron.right", title: "Matrix",
+                 detail: "A new theme: digital rain in code greens, led by glitching hearts, with your partner's face coming through in the code. Touches you send from it glitch, and play in Matrix mode on your partner's phone."),
+            Item(icon: "mouth.fill", title: "Kisses",
+                 detail: "A kiss now says \"{name} kissed you! 💋\". Every notification has Kiss back and Send a touch, and a partner's page has both buttons too."),
+            Item(icon: "waveform.path.ecg", title: "Heartbeats in time",
+                 detail: "A heartbeat goes to the bracelet as one message, so it beats steadily instead of drifting."),
+            Item(icon: "car.fill", title: "CarPlay",
+                 detail: "Kisses, touches and heartbeats show on the car screen and Siri can read them out. Kiss back or send a touch without picking up your phone."),
             Item(icon: "person.3.sequence.fill", title: "Room for up to 10 partners",
                  detail: "With more than three, the others gather in a cluster on the partner bar — tap it and everyone bursts out around it to pick from."),
             Item(icon: "rainbow", title: "Rainbow wave",

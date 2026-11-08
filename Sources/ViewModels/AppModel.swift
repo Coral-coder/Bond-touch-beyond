@@ -157,6 +157,12 @@ final class AppModel: ObservableObject {
 
     /// A heartbeat on screen now (the live EKG card), and its monitor beep.
     @Published var heartbeatShow: HeartbeatShow?
+    /// A partner's kiss on screen now (it arrived with the app open).
+    @Published var kissShow: KissShow?
+    /// A touch sent from Matrix mode playing now: the screen goes Matrix until it's done.
+    @Published var matrixShow: MatrixShow?
+    /// Kisses from partners, newest first (for CarPlay and the kiss card), kept on this phone.
+    @Published var receivedKisses: [KissEvent] = KissEvent.load()
     /// A tapped notification's destination, until the screens have opened it.
     @Published var route: AppRoute?
     /// The Apple Watch's Stand-in mode is on: it plays every touch itself, like the bracelet.
@@ -174,9 +180,8 @@ final class AppModel: ObservableObject {
         let foreground = UIApplication.shared.applicationState == .active
         let seconds = 5.0
         if bracelet.isReady {
-            // Every bracelet beats it from the phone; a Bond Touch More glows between beats
-            // and only buzzes on each beat's spike.
-            bracelet.playHeartbeat(bpm: bpm, seconds: seconds, colorRGB: touch.colorRGB)
+            // One message: the bracelet plays all the beats itself, in time.
+            bracelet.playHeartbeat(bpm: bpm, seconds: seconds, colorRGB: touch.colorRGB, bondID: touch.bondID)
         }
         if foreground { haptics.playHeartbeat(bpm: bpm, seconds: seconds) }
         guard foreground else { return }
@@ -447,20 +452,24 @@ final class AppModel: ObservableObject {
         await publishPresence(force: false)   // throttled — fixes can arrive every few seconds
     }
 
-    // MARK: - Kiss ("I'm thinking of you")
+    // MARK: - Kiss
 
-    /// Plays a kiss on the selected partner's phone (and watch): just the sound and a little
-    /// "Thinking of you" — no touch, nothing on the bracelet.
+    /// Sends a kiss to the selected partner (or `toBondID`): their phone and watch play the kiss
+    /// sound and say "{name} kissed you! 💋", with Kiss back and Send a touch right there. No
+    /// touch, nothing on the bracelet. Sent from Matrix mode, it arrives in Matrix mode.
     @discardableResult
-    func sendKiss() async -> Bool {
+    func sendKiss(toBondID: String? = nil) async -> Bool {
+        if let toBondID { selectedPartnerID = toBondID }
         guard let bond = activeBond else { statusLine = "Choose a partner first."; return false }
         guard !bond.legacy else { statusLine = "Kisses go to partners on iCloud."; return false }
         guard partnerPushTokens[bond.id]?.isEmpty == false else {
             statusLine = "Can't reach \(bond.partnerName)'s phone yet."; return false
         }
         let me = store.profile.name.isEmpty ? "Someone" : store.profile.name
-        await pushPartner(bondID: bond.id, title: me, body: "💋 Thinking of you", group: "k", sound: TouchNotification.kissSound)
+        await pushPartner(bondID: bond.id, title: "\(me) kissed you! 💋", body: "💋", group: "k",
+                          sound: TouchNotification.kissSound, extra: Theme.style == .matrix ? ["fx": "matrix"] : [:])
         NetLog.shared.log(.send, "Kiss → \(bond.partnerName)")
+        haptics.sent()
         return true
     }
 
@@ -500,19 +509,20 @@ final class AppModel: ObservableObject {
 
     // MARK: - Notification buttons
 
-    /// "Touch back" or "Send my heartbeat" on a touch notification, to the partner it came from.
+    /// "Kiss back", "Touch back" or "Send my heartbeat" on a notification, to the partner it came from.
     func answerNotification(action: String, userInfo: [AnyHashable: Any]) async {
-        guard action == TouchNotification.touchBackAction || action == TouchNotification.heartbeatAction else { return }
+        guard [TouchNotification.touchBackAction, TouchNotification.heartbeatAction,
+               TouchNotification.kissBackAction].contains(action) else { return }
         let bg = UIApplication.shared.beginBackgroundTask(withName: "notification-reply")
         defer { UIApplication.shared.endBackgroundTask(bg) }
         if !ready { await bootstrap() }
         let bondID = userInfo[TouchNotification.Key.bond] as? String
             ?? (userInfo["bl"] as? String).flatMap { locator in partners.first { BondCrypto.locator(forCode: $0.id) == locator }?.id }
         guard let bondID, partners.contains(where: { $0.id == bondID }) else { return }
-        if action == TouchNotification.touchBackAction {
-            // Two soft taps in your colour.
-            await sendTouch(pattern: [140, 120, 140], generation: 2, colorRGB: store.profile.colorRGB,
-                            toBondID: bondID, matchMeaning: false)
+        if action == TouchNotification.kissBackAction {
+            await sendKiss(toBondID: bondID)
+        } else if action == TouchNotification.touchBackAction {
+            await sendQuickTouch(toBondID: bondID)
         } else {
             selectedPartnerID = bondID
             await sendHeartbeat()
@@ -885,17 +895,22 @@ final class AppModel: ObservableObject {
 
         let meaning = given ?? (matchMeaning ? matchingMeaning(pattern: pattern, generation: generation,
                                                                in: meanings(for: bond)) : nil)
+        // Sent from Matrix mode (iCloud partners): a glitchy touch in code green, and it
+        // plays in Matrix mode on their phone.
+        let matrix = Theme.style == .matrix && !bond.legacy && heartbeatBPM == nil && effect == nil
         if let meaning, given == nil {
             NetLog.shared.log(.ok, "Touch matches \"\(meaning.label)\" — sending it as that meaning")
         }
         // A meaning goes out as itself: its own pattern and colours.
+        let gen = meaning?.touchGeneration ?? generation
+        let raw = meaning?.pattern ?? pattern
         var touch = TouchMessage(bondID: bond.id, senderID: myUserID,
-                                 pattern: meaning?.pattern ?? pattern,
-                                 generation: meaning?.touchGeneration ?? generation,
-                                 colorRGB: meaning?.colorRGB ?? colorRGB,
-                                 endColorRGB: meaning?.endColorRGB ?? endColorRGB,
+                                 pattern: matrix ? Glitch.pattern(raw, generation: gen) : raw,
+                                 generation: gen,
+                                 colorRGB: matrix ? Glitch.green : meaning?.colorRGB ?? colorRGB,
+                                 endColorRGB: matrix ? Glitch.deepGreen : meaning?.endColorRGB ?? endColorRGB,
                                  meaningLabel: meaning?.label, meaningEmoji: meaning?.emoji,
-                                 heartbeatBPM: heartbeatBPM, effect: effect)
+                                 heartbeatBPM: heartbeatBPM, effect: matrix ? TouchMessage.matrixEffect : effect)
         touch.delivery = .sending
         // Felt leaving: a firm double knock (heartbeats have their own beat).
         if heartbeatBPM == nil { haptics.sent() }
@@ -1057,7 +1072,8 @@ final class AppModel: ObservableObject {
     /// play it on their bracelet the moment it wakes — no iCloud fetch first (a background
     /// wake only gets a few seconds). The bond is named by its opaque locator, never its code.
     func pushPartner(bondID: String, title: String, body: String, touch: TouchMessage? = nil,
-                     group: String = "t", sound: String = TouchNotification.sound) async {
+                     group: String = "t", sound: String = TouchNotification.sound,
+                     extra more: [String: Any] = [:]) async {
         guard let token = partnerPushTokens[bondID], !token.isEmpty else { return }
         let locator = BondCrypto.locator(forCode: bondID)
         // They've switched this kind of notification off: a silent push, so their phone
@@ -1071,10 +1087,15 @@ final class AppModel: ObservableObject {
         // Their bracelet is connected → it plays the touch; don't buzz their phone too.
         let silent = partnerBraceletConnected[bondID] == true
         // "g": the kind, so an open app can tell a chat message from everything else.
-        var extra: [String: Any] = ["bl": locator, "g": group]
+        // "sn": the sender's name, so their phone shows it as a message from them (and Siri
+        // and CarPlay say who it's from).
+        var extra: [String: Any] = more.merging(["bl": locator, "g": group,
+                                                 "sn": store.profile.name.isEmpty ? "Someone" : store.profile.name]) { $1 }
         if let touch, let sealed = BondCrypto.seal(touch, code: bondID) { extra["bt"] = sealed.base64EncodedString() }
         await APNsClient.shared.send(toDeviceToken: token, title: title, body: body, silent: silent,
-                                     sound: sound, collapseID: "\(group)-\(locator.prefix(16))", extra: extra)
+                                     sound: sound, collapseID: "\(group)-\(locator.prefix(16))",
+                                     category: touch == nil ? TouchNotification.partnerCategory : TouchNotification.category,
+                                     extra: extra)
     }
 
     /// The touch carried in a partner's push, decrypted with that bond's key.
@@ -1089,7 +1110,7 @@ final class AppModel: ObservableObject {
                             pattern: sent.pattern, generation: sent.generation, colorRGB: sent.colorRGB,
                             endColorRGB: sent.endColorRGB, sentAt: sent.sentAt,
                             meaningLabel: sent.meaningLabel, meaningEmoji: sent.meaningEmoji,
-                            heartbeatBPM: sent.heartbeatBPM)
+                            heartbeatBPM: sent.heartbeatBPM, effect: sent.effect)
     }
 
     /// Plays a partner's incoming touch on the bracelet (or the phone) once — however many
@@ -1110,6 +1131,7 @@ final class AppModel: ObservableObject {
         }
         feel(touch)
         watch.forward(touch)
+        if touch.isMatrix { showMatrix(for: touch) }
         // A touch that didn't come with its own push (picked up from iCloud, or from an
         // original-app partner) still gets the rich notification on the phone and the watch.
         if notify { Task { await notifyTouch(touch) } }
@@ -1138,6 +1160,11 @@ final class AppModel: ObservableObject {
     func handleRemoteNotification(_ userInfo: [AnyHashable: Any] = [:]) async {
         if !ready { await bootstrap() }
         if await answerRefresh(userInfo) { return }
+        // A kiss with the app open: it lands on screen (the banner isn't shown in the app).
+        if userInfo["g"] as? String == "k", let locator = userInfo["bl"] as? String,
+           let partner = partners.first(where: { BondCrypto.locator(forCode: $0.id) == locator }) {
+            receivedKiss(from: partner, matrix: userInfo["fx"] as? String == "matrix")
+        }
         if let touch = touchFromPush(userInfo) {
             NetLog.shared.log(.recv, "Touch in push ← \(partners.first { $0.id == touch.bondID }?.displayName ?? "partner")")
             recordTouches([touch])

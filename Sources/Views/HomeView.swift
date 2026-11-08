@@ -109,6 +109,7 @@ struct HomeView: View {
                         Image(systemName: "face.smiling")
                             .font(.system(size: Theme.s(17), weight: .semibold)).foregroundStyle(Theme.title)
                             .frame(width: 38, height: 44)
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("Mood check-in")
@@ -129,6 +130,7 @@ struct HomeView: View {
                     .foregroundStyle(Theme.title)
                     .frame(width: 44, height: 44)
                     .glass(Circle())
+                    .contentShape(Circle())
             }
             .accessibilityLabel("More")
         }
@@ -164,7 +166,7 @@ struct HomeView: View {
         .accessibilityAddTraits(.isButton)
     }
 
-    /// Sends a kiss: the partner's phone (and watch) plays just the kiss sound, "Thinking of you".
+    /// Sends a kiss: the partner's phone (and watch) plays the kiss sound, "{name} kissed you! 💋".
     private var kissButton: some View {
         Button {
             UIImpactFeedbackGenerator(style: .soft).impactOccurred()
@@ -184,6 +186,7 @@ struct HomeView: View {
                 .font(.system(size: Theme.s(18)))
                 .foregroundStyle(Theme.title)
                 .frame(width: 38, height: 44)
+                .contentShape(Rectangle())
                 .scaleEffect(kissSent ? 1.12 : 1)
                 .animation(.spring(response: 0.3), value: kissSent)
         }

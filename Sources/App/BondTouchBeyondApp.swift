@@ -51,11 +51,15 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
                      didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         UNUserNotificationCenter.current().delegate = self
         // A touch notification's buttons (also on the Apple Watch): answer without opening the app.
-        let touchBack = UNNotificationAction(identifier: TouchNotification.touchBackAction, title: "❤️ Touch back", options: [])
+        // Every partner notification (a touch, a kiss, a heartbeat) offers a kiss or a touch back.
+        let kissBack = UNNotificationAction(identifier: TouchNotification.kissBackAction, title: "💋 Kiss back", options: [])
+        let touchBack = UNNotificationAction(identifier: TouchNotification.touchBackAction, title: "❤️ Send a touch", options: [])
         let heartbeat = UNNotificationAction(identifier: TouchNotification.heartbeatAction, title: "💓 Send my heartbeat", options: [])
         UNUserNotificationCenter.current().setNotificationCategories([
-            UNNotificationCategory(identifier: TouchNotification.category, actions: [touchBack, heartbeat],
-                                   intentIdentifiers: [], options: [])
+            UNNotificationCategory(identifier: TouchNotification.category, actions: [kissBack, touchBack, heartbeat],
+                                   intentIdentifiers: ["INSendMessageIntent"], options: []),
+            UNNotificationCategory(identifier: TouchNotification.partnerCategory, actions: [kissBack, touchBack, heartbeat],
+                                   intentIdentifiers: ["INSendMessageIntent"], options: [])
         ])
         // Ask to show alert pushes (a partner's touch wakes the phone reliably as an alert);
         // register for a device token either way so pushes reach the app.

@@ -368,10 +368,28 @@ jobs:
           # look for its file before it's written ("Build input file cannot be found:
           # …mobileprovision"). The profile then exists, so archiving again gets past it — up
           # to three tries, only for that error.
-          for attempt in 1 2 3; do
+          # CarPlay is an Apple-granted entitlement (and communication notifications a capability
+          # the App ID may not have yet). If the signing profile can't carry one, archive again
+          # without it (CarPlay first) rather than failing the whole build.
+          optional="com.apple.developer.carplay-communication com.apple.developer.usernotifications.communication"
+          ents="Sources/App/BondTouchBeyond.entitlements"
+          for attempt in 1 2 3 4 5; do
             if archive; then ok=true; break; fi
-            grep -q "Build input file cannot be found: .*\.mobileprovision" build/xcodebuild.log || break
-            echo "New provisioning profile wasn't ready yet; archiving again (try $((attempt + 1)))"
+            if grep -q "Build input file cannot be found: .*\.mobileprovision" build/xcodebuild.log; then
+              echo "New provisioning profile wasn't ready yet; archiving again (try $((attempt + 1)))"
+              continue
+            fi
+            dropped=""
+            for key in $optional; do
+              if /usr/libexec/PlistBuddy -c "Print :$key" "$ents" >/dev/null 2>&1 \
+                 && grep -qiE "error:.*(entitlement|capabilit|provisioning profile)" build/xcodebuild.log; then
+                /usr/libexec/PlistBuddy -c "Delete :$key" "$ents"
+                dropped="$key"; break
+              fi
+            done
+            [ -n "$dropped" ] || break
+            echo "::warning::Signing couldn't include $dropped; archiving without it (enable it on the App ID to get it back)"
+            echo "### Built without \`$dropped\` (the signing profile doesn't carry it yet)" >> "$GITHUB_STEP_SUMMARY"
           done
           if [ "$ok" != true ]; then
             # Surface compiler errors as annotations (readable without downloading the log).

@@ -311,11 +311,9 @@ final class BraceletManager: NSObject, ObservableObject {
     private var v1Started = false
     private var v1Touches: [(at: Int, count: Int, ms: Int)] = []
 
-    private var heartbeatTimer: Timer?
     private var heartbeatWatchdog: Timer?
     private var heartbeatBPM = 0
     /// A Bond Touch More is glowing between heartbeat spikes.
-    private var heartbeatGlow = false
     @Published private(set) var heartbeatActive = false
 
     /// CoreBluetooth's `connect` never times out, and service discovery / the pairing
@@ -578,62 +576,39 @@ final class BraceletManager: NSObject, ObservableObject {
         }
     }
 
-    /// Plays a received heartbeat: one pulse per beat at `bpm` for `seconds` (5 s), then
-    /// stops on its own.
-    func playHeartbeat(bpm: Int, seconds: Double = 5, colorRGB: Int = 0xE85D75) {
+    /// Plays a heartbeat as ONE touch the bracelet plays by itself: the whole 5 s of beats
+    /// goes over in a single message, so the bracelet keeps the rhythm (no write per beat,
+    /// which drifted with Bluetooth timing). A Bond Touch More gets the EKG on its bar;
+    /// the others an on/off buzz per beat. `heartbeatActive` stays on while it plays.
+    func playHeartbeat(bpm: Int, seconds: Double = 5, colorRGB: Int = 0xE85D75, bondID: String = "") {
         let clamped = min(max(bpm, 30), 220)
         stopHeartbeat()
+        guard let gen, state == .connected else { return }
         heartbeatBPM = clamped
         heartbeatActive = true
-        let interval = 60.0 / Double(clamped)
-        if gen == .v3 {
-            // Bond Touch More: the band glows steadily between beats (light only, no motor);
-            // each beat is a short spike up and down the bar, which is all that vibrates.
-            // The glow is put back just after each spike has played.
-            heartbeatGlow = true
-            let beat: () -> Void = { [weak self] in
-                guard let self, self.gen == .v3 else { return }
-                self.enqueue(BondGATT.v3HeartbeatSpike(rgb: colorRGB))
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
-                    guard let self, self.heartbeatGlow else { return }
-                    self.enqueue([BondGATT.v3Color(colorRGB)])
-                }
-            }
-            enqueue([BondGATT.v3Color(colorRGB)])
-            beat()
-            let timer = Timer(timeInterval: interval, repeats: true) { _ in beat() }
-            RunLoop.main.add(timer, forMode: .common)
-            heartbeatTimer = timer
-            let end = Timer(timeInterval: seconds, repeats: false) { [weak self] _ in self?.stopHeartbeat() }
-            RunLoop.main.add(end, forMode: .common)
-            heartbeatWatchdog = end
-            return
+        let slot = slotBondIDs.firstIndex(of: bondID).map { $0 + 1 } ?? 1
+        let strength = vibrationLevel ?? 80
+        switch gen {
+        case .v1:
+            enqueue(v1.touch(onOff: EKG.onOff(bpm: clamped, seconds: seconds), rgb: colorRGB))
+        case .v3:
+            let t = TouchMessage(bondID: bondID, senderID: "heartbeat", pattern: EKG.samples(bpm: clamped, seconds: seconds),
+                                 generation: 3, colorRGB: colorRGB, heartbeatBPM: clamped)
+            enqueue(BondGATT.touchSend(.v3, touch: t, slot: slot, strength: strength))
+        default:
+            let t = TouchMessage(bondID: bondID, senderID: "heartbeat", pattern: EKG.onOff(bpm: clamped, seconds: seconds),
+                                 generation: 2, colorRGB: colorRGB, heartbeatBPM: clamped)
+            enqueue(BondGATT.touchSend(gen, touch: t, slot: slot, strength: strength))
         }
-        if let gen { enqueue(heartbeatPulse(gen, rgb: colorRGB)) }
-        let timer = Timer(timeInterval: interval, repeats: true) { [weak self] _ in
-            guard let self, let gen = self.gen else { return }
-            self.enqueue(self.heartbeatPulse(gen, rgb: colorRGB))
-        }
-        RunLoop.main.add(timer, forMode: .common)
-        heartbeatTimer = timer
         let end = Timer(timeInterval: seconds, repeats: false) { [weak self] _ in self?.stopHeartbeat() }
         RunLoop.main.add(end, forMode: .common)
         heartbeatWatchdog = end
     }
 
     func stopHeartbeat() {
-        heartbeatTimer?.invalidate(); heartbeatTimer = nil
         heartbeatWatchdog?.invalidate(); heartbeatWatchdog = nil
-        if heartbeatGlow {
-            heartbeatGlow = false
-            if gen == .v3 { enqueue([BondGATT.v3LedsOff]) }   // the glow goes out with the last beat
-        }
         heartbeatBPM = 0
         heartbeatActive = false
-    }
-
-    private func heartbeatPulse(_ gen: BondGeneration, rgb: Int) -> [(CBUUID, Data)] {
-        gen == .v1 ? v1.touch(onOff: [130], rgb: rgb) : BondGATT.heartbeatPulse(gen, rgb: rgb)
     }
 
     // MARK: - Light lab (debug)

@@ -43,9 +43,12 @@ struct AppBackground: View {
 
     var body: some View {
         ZStack {
+            // Matrix: the photo isn't shown as a photo; the face comes through in the code.
+            if Theme.style == .matrix {
+                MatrixRain(face: model.backgroundPhoto, glow: ThemeTints.tint(for: .matrix).map { Color(rgbInt: $0) })
             // A background photo covers the whole screen, so the backdrop is only drawn without one.
-            if model.backgroundPhoto == nil { ThemeBackdrop() }
-            if let photo = model.backgroundPhoto {
+            } else if model.backgroundPhoto == nil { ThemeBackdrop() }
+            if Theme.style != .matrix, let photo = model.backgroundPhoto {
                 SoftPhoto(photo: photo, softness: store.backgroundSoftness)
                 LinearGradient(colors: [Theme.bgBottom.opacity(0.25), Theme.bgBottom.opacity(0.6)],
                                startPoint: .top, endPoint: .bottom)

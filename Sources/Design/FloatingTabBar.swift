@@ -45,6 +45,9 @@ struct FloatingTabBar: View {
                     .foregroundStyle(selection == tab ? Theme.title : Theme.subtitle.opacity(0.8))
                     .frame(maxWidth: .infinity).frame(height: 52)
                     .background(Capsule().fill(selection == tab ? Theme.ink.opacity(0.16) : .clear))
+                    // The whole slot takes the tap, not just the icon and its label (a plain
+                    // button only hits what's drawn, so a smaller display size shrank the target).
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityAddTraits(selection == tab ? .isSelected : [])

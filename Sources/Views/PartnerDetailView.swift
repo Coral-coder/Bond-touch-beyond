@@ -90,6 +90,10 @@ struct PartnerDetailView: View {
                         }
                         .padding(16).glass(cornerRadius: 22)
 
+                        if !partner.bond.legacy {
+                            TouchOrKissRow(bondID: partner.id, name: partner.displayName)
+                        }
+
                         AboutCard(name: partner.displayName, about: model.partnerAbout(partner.id))
 
                         PulseButton(partner: partner)

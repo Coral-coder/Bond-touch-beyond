@@ -7,21 +7,24 @@ import UIKit
 /// (which draw and play it). Everything here stays on the user's own devices.
 enum TouchNotification {
     static let category = "TOUCH"
+    /// A kiss or any other partner notification with no touch: the same buttons, no replay view.
+    static let partnerCategory = "PARTNER"
     static let touchBackAction = "touch-back"
     static let heartbeatAction = "heartbeat"
     static let feelAgainAction = "feel-again"
+    static let kissBackAction = "kiss-back"
     /// The touch notification sound, bundled in the phone and watch apps: a soft kiss, then a
     /// harp-like strummed A sus2 chord (scripts/make_touch_chime.py glow2:sus2roll — pure synthesis).
     /// It also makes the phone vibrate and the watch tap the wrist (they only vibrate for a
     /// notification with a sound).
     static let sound = "touch-chime.wav"
-    /// Just the kiss, for "Thinking of you" (the kiss button).
+    /// Just the kiss, for "{name} kissed you! 💋" (the kiss button).
     static let kissSound = "kiss.wav"
 
     /// The touch, in the notification's userInfo, under these keys.
     enum Key {
         static let bond = "tBond", pattern = "tPattern", generation = "tGen", start = "tStart", end = "tEnd"
-        static let label = "tLabel", emoji = "tEmoji", bpm = "tBPM", sentAt = "tAt"
+        static let label = "tLabel", emoji = "tEmoji", bpm = "tBPM", sentAt = "tAt", effect = "tFX"
     }
 
     static func userInfo(_ t: TouchMessage, bondID: String) -> [String: Any] {
@@ -30,6 +33,7 @@ enum TouchNotification {
         if let l = t.meaningLabel { d[Key.label] = l }
         if let e = t.meaningEmoji { d[Key.emoji] = e }
         if let b = t.heartbeatBPM { d[Key.bpm] = b }
+        if let e = t.effect { d[Key.effect] = e }
         return d
     }
 
@@ -41,7 +45,7 @@ enum TouchNotification {
                             endColorRGB: info[Key.end] as? Int ?? start,
                             sentAt: (info[Key.sentAt] as? Double).map(Date.init(timeIntervalSince1970:)) ?? Date(),
                             meaningLabel: info[Key.label] as? String, meaningEmoji: info[Key.emoji] as? String,
-                            heartbeatBPM: info[Key.bpm] as? Int)
+                            heartbeatBPM: info[Key.bpm] as? Int, effect: info[Key.effect] as? String)
     }
 
     /// A picture of the touch for the banner's thumbnail: the bar trace, the tap rhythm, or
