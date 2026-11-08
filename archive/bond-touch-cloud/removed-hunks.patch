@@ -1,0 +1,2813 @@
+diff --git a/.github/workflows/ios-build-check.yml b/.github/workflows/ios-build-check.yml
+index 9a73640..1bb685c 100644
+--- a/.github/workflows/ios-build-check.yml
++++ b/.github/workflows/ios-build-check.yml
+@@ -23,6 +23,9 @@ jobs:
+       - name: Install XcodeGen
+         run: brew install xcodegen
+ 
++      - name: Fetch libsignal_ffi (Signal protocol core)
++        run: scripts/fetch-libsignal-ffi.sh
++
+       - name: Generate Xcode project
+         run: xcodegen generate
+ 
+diff --git a/.github/workflows/ios-quick-build.yml b/.github/workflows/ios-quick-build.yml
+index a6f80b0..295226f 100644
+--- a/.github/workflows/ios-quick-build.yml
++++ b/.github/workflows/ios-quick-build.yml
+@@ -34,6 +34,9 @@ jobs:
+       - name: Install XcodeGen
+         run: brew install xcodegen
+ 
++      - name: Fetch libsignal_ffi (Signal protocol core)
++        run: scripts/fetch-libsignal-ffi.sh
++
+       - name: Generate Xcode project
+         run: xcodegen generate
+ 
+diff --git a/.github/workflows/ios-screenshots.yml b/.github/workflows/ios-screenshots.yml
+index 6ef1bb4..a5056a4 100644
+--- a/.github/workflows/ios-screenshots.yml
++++ b/.github/workflows/ios-screenshots.yml
+@@ -22,6 +22,9 @@ jobs:
+       - name: Install XcodeGen
+         run: brew install xcodegen
+ 
++      - name: Fetch libsignal_ffi
++        run: scripts/fetch-libsignal-ffi.sh
++
+       - name: Generate Xcode project
+         run: xcodegen generate
+ 
+diff --git a/.github/workflows/ios-testflight.yml b/.github/workflows/ios-testflight.yml
+index cf68db7..28dab12 100644
+--- a/.github/workflows/ios-testflight.yml
++++ b/.github/workflows/ios-testflight.yml
+@@ -209,6 +209,9 @@ jobs:
+           sudo xcode-select -s "$xcode/Contents/Developer"
+           xcodebuild -version
+ 
++      - name: Fetch libsignal_ffi (Signal protocol core)
++        run: scripts/fetch-libsignal-ffi.sh
++
+       - name: Find the project, scheme and bundle ID
+         env:
+           XCODE_PROJECT: ${{ vars.XCODE_PROJECT }}
+diff --git a/.github/workflows/ios-ui-tests.yml b/.github/workflows/ios-ui-tests.yml
+index eb9814b..c45be1c 100644
+--- a/.github/workflows/ios-ui-tests.yml
++++ b/.github/workflows/ios-ui-tests.yml
+@@ -29,6 +29,8 @@ jobs:
+       - uses: actions/checkout@v4
+       - name: Install XcodeGen
+         run: brew install xcodegen
++      - name: Fetch libsignal_ffi
++        run: scripts/fetch-libsignal-ffi.sh
+       - name: Generate the project with the UI-test target
+         run: xcodegen generate --spec uitests.yml
+       - name: Pick and boot a simulator
+diff --git a/Sources/App/BondTouchBeyondApp.swift b/Sources/App/BondTouchBeyondApp.swift
+index 413e79d..0af06d0 100644
+--- a/Sources/App/BondTouchBeyondApp.swift
++++ b/Sources/App/BondTouchBeyondApp.swift
+@@ -69,7 +69,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
+             DispatchQueue.main.async { application.registerForRemoteNotifications() }
+         }
+         // Start up straight away, even with no screen (a background launch for a push or a
+-        // bracelet event), so iCloud and the bracelet are ready.
++        // bracelet event), so iCloud, the bracelet and the original backend are ready.
+         Task { await model.bootstrap() }
+         return true
+     }
+diff --git a/Sources/CarPlay/CarPlaySceneDelegate.swift b/Sources/CarPlay/CarPlaySceneDelegate.swift
+index 6270eff..d6e7547 100644
+--- a/Sources/CarPlay/CarPlaySceneDelegate.swift
++++ b/Sources/CarPlay/CarPlaySceneDelegate.swift
+@@ -75,7 +75,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
+             item.handler = { [weak self] _, done in self?.answer(bondID: m.bondID, name: m.name, line: m.line); done() }
+             return item
+         }
+-        let partners = model.partners.map { p -> CPListItem in
++        let partners = model.partners.filter { !$0.bond.legacy }.map { p -> CPListItem in
+             let item = CPListItem(text: p.displayName, detailText: "Send a kiss or a touch", image: photo(p.id))
+             item.handler = { [weak self] _, done in self?.answer(bondID: p.id, name: p.displayName, line: nil); done() }
+             return item
+diff --git a/Sources/Location/BackgroundKeeper.swift b/Sources/Location/BackgroundKeeper.swift
+index 4b39dee..4e73f3a 100644
+--- a/Sources/Location/BackgroundKeeper.swift
++++ b/Sources/Location/BackgroundKeeper.swift
+@@ -1,13 +1,13 @@
+ import CoreLocation
+ import Foundation
+ 
+-/// Keeps the app running in the background so touches from partners are received and
+-/// played on the bracelet, and touches made on the bracelet are sent, while the phone is
+-/// locked.
++/// Keeps the app running in the background so touches from partners on the original
++/// Bond Touch app are received and played on the bracelet, and touches made on the
++/// bracelet are sent, while the phone is locked.
+ ///
+-/// Partners wake the app with silent pushes, and the bracelet's own events wake it over
+-/// Bluetooth; but iOS throttles (and, once the app is swiped away, drops) silent pushes,
+-/// so kept running the app keeps checking iCloud. Low-accuracy background location
++/// Partners on iCloud wake the app with silent pushes, and the bracelet's own events wake
++/// it over Bluetooth; but the original servers only push to the official app, so for
++/// original-app partners this app has to keep polling. Low-accuracy background location
+ /// (cell/Wi-Fi, no GPS) is what lets an app keep running; iOS shows the blue location
+ /// indicator while it's on. Off in Settings, or automatically when no partner needs it.
+ final class BackgroundKeeper: NSObject, CLLocationManagerDelegate {
+diff --git a/Sources/Models/Bond.swift b/Sources/Models/Bond.swift
+index 8f471ce..2cc8a17 100644
+--- a/Sources/Models/Bond.swift
++++ b/Sources/Models/Bond.swift
+@@ -10,4 +10,7 @@ struct Bond: Identifiable, Equatable {
+     /// True for an invite the user created that no partner has accepted yet. Pending
+     /// bonds are not shown as active partners — only as a cancellable invite.
+     var pending: Bool = false
++    /// True for a bond on the original Bond Touch backend (a partner using the original
++    /// app); its `id` is the server `bondId`. False for an iCloud (CloudKit zone) bond.
++    var legacy: Bool = false
+ }
+diff --git a/Sources/Models/ChatMessage.swift b/Sources/Models/ChatMessage.swift
+index 7c02753..97458ae 100644
+--- a/Sources/Models/ChatMessage.swift
++++ b/Sources/Models/ChatMessage.swift
+@@ -1,13 +1,14 @@
+ import Foundation
+ 
+ /// A chat message in a bond: text, a photo, or a touch rendered inline. Relayed over
+-/// CloudKit.
++/// CloudKit, or end-to-end encrypted through the original Bond backend for original-app
++/// partners.
+ struct ChatMessage: Identifiable, Equatable, Codable {
+     enum Kind: String, Codable { case text, touch, image }
+ 
+-    /// A fixed `senderID` for the user's own messages and touches where no CloudKit user id
+-    /// applies (the demo, and history saved by older versions). Treated as "mine".
+-    static let localSelf = "me"
++    /// `senderID` of the user's own messages on the original backend (the CloudKit user
++    /// id may be unknown or change, so those messages use this fixed marker).
++    static let legacySelf = "me"
+ 
+     let id: UUID
+     let bondID: String
+@@ -16,8 +17,7 @@ struct ChatMessage: Identifiable, Equatable, Codable {
+     let text: String
+     let colorRGB: Int
+     let sentAt: Date
+-    /// Unused: a message id from the original Bond Touch servers, kept so history saved by
+-    /// older versions still decodes.
++    /// The message id on the original backend (dedup, delivery acks, deletion).
+     var serverID: String? = nil
+     /// File name of a photo saved in the app's chat-media folder.
+     var imageFile: String? = nil
+@@ -39,8 +39,9 @@ struct ChatMessage: Identifiable, Equatable, Codable {
+     }
+ }
+ 
+-/// On-device chat history, plus the photos. Stored in Application Support with complete
+-/// file protection.
++/// On-device history of chat with original-app partners (the server only holds messages
++/// until they are acknowledged), plus the decrypted photos. Stored in Application Support
++/// with complete file protection.
+ enum ChatArchive {
+     private static var dir: URL {
+         let d = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+@@ -55,7 +56,6 @@ enum ChatArchive {
+         return d
+     }
+ 
+-    // The file name dates from older versions; kept so existing history still loads.
+     private static var file: URL { dir.appendingPathComponent("legacy-chat.json") }
+ 
+     static func load() -> [String: [ChatMessage]] {
+diff --git a/Sources/Models/SavedHeartbeat.swift b/Sources/Models/SavedHeartbeat.swift
+index 561f4af..b95c2b6 100644
+--- a/Sources/Models/SavedHeartbeat.swift
++++ b/Sources/Models/SavedHeartbeat.swift
+@@ -4,8 +4,7 @@ import Foundation
+ /// original's `HeartbeatItem.pattern`, plus its name, colour and memory.
+ struct SavedHeartbeat: Codable, Identifiable, Equatable {
+     var id: UUID = UUID()
+-    /// Unused: its id on the original Bond Touch Heart API, from older versions. Kept so
+-    /// saved libraries still decode.
++    /// Its id on the original Heart API, once uploaded (or when it came from there).
+     var serverID: String?
+     /// Whose heartbeat it is ("Who's in your heart?").
+     var name: String
+@@ -21,11 +20,10 @@ struct SavedHeartbeat: Codable, Identifiable, Equatable {
+     var createdBy: String?
+     /// Recorded by this user (server `isSelf`).
+     var isSelf: Bool = true
+-    /// Unused: who could see its heartbeat count on the original Heart API. Kept so saved
+-    /// libraries still decode.
++    /// Who may see its heartbeat count (server `emails`, up to 3).
+     var emails: [String] = []
+     var source: Source = .camera
+-    /// Unused: "changed since the last upload" for the original Heart API. Kept for decoding.
++    /// Changed locally since the last upload.
+     var dirty: Bool = false
+ 
+     enum Source: String, Codable {
+@@ -45,3 +43,25 @@ struct SavedHeartbeat: Codable, Identifiable, Equatable {
+ 
+     var title: String { name.isEmpty ? "Heartbeat" : "\(name)’s heartbeat" }
+ }
++
++/// A heartbeat someone shared with this account that hasn't been accepted yet (server
++/// `pendingHeartbeats`; the original's "Received from:").
++struct PendingHeartbeat: Identifiable, Equatable {
++    let id: String
++    let name: String
++    let colorRGB: Int
++    let createdBy: String
++    let createdAt: Date
++    let message: String
++    let intervals: [Int]
++}
++
++/// A request for a heartbeat (server `/heart/api/v2/requests`): sent by this account
++/// ("Pending request to:") or to it ("… is asking for your heartbeat").
++struct HeartRequest: Identifiable, Equatable {
++    let id: String
++    let fromUser: String
++    let fromUserName: String
++    let toUser: String
++    let createdAt: Date
++}
+diff --git a/Sources/Models/TouchMeaning.swift b/Sources/Models/TouchMeaning.swift
+index e64adc2..621c794 100644
+--- a/Sources/Models/TouchMeaning.swift
++++ b/Sources/Models/TouchMeaning.swift
+@@ -14,13 +14,12 @@ struct TouchMeaning: Identifiable, Codable, Equatable {
+     var pattern: [Int]   // inter-tap gaps in ms
+     /// Freshly added meanings show a "New" badge until sent, as in the original.
+     var isNew: Bool = false
+-    /// The meaning's id on the original Bond Touch servers, set by older versions for
+-    /// meanings synced with an original-app partner. No longer set; kept so saved meanings
+-    /// (and the widget ids derived from them) still load.
++    /// The meaning's id on the original Bond backend, for meanings synced with an
++    /// original-app partner (nil for iCloud-only meanings).
+     var serverID: String? = nil
+     /// Pattern format: 3 = 50 ms position samples (touch bar), nil/2 = on/off milliseconds.
+     var generation: Int? = nil
+-    /// Starred in the Touch Library.
++    /// Starred in the Touch Library (synced with the original backend's `favourite`).
+     /// Optional so meanings saved before this field existed still load.
+     var favourite: Bool? = nil
+     /// For a library shared with an iCloud partner: when it was last changed (the newer
+diff --git a/Sources/Shared/WidgetShared.swift b/Sources/Shared/WidgetShared.swift
+index fbf846d..5fed272 100644
+--- a/Sources/Shared/WidgetShared.swift
++++ b/Sources/Shared/WidgetShared.swift
+@@ -184,7 +184,8 @@ struct WidgetSnapshot: Codable, Equatable {
+     }
+ 
+     struct Meaning: Codable, Equatable, Identifiable {
+-        /// The local meaning's UUID (or the original-server id an older version kept for it).
++        /// The original backend's meaning id for an original-app partner (stable across
++        /// syncs), else the local meaning's UUID.
+         var id: String
+         var label: String
+         var emoji: String
+diff --git a/Sources/Stores/HeartLibrary.swift b/Sources/Stores/HeartLibrary.swift
+index 7afdfa2..18fd295 100644
+--- a/Sources/Stores/HeartLibrary.swift
++++ b/Sources/Stores/HeartLibrary.swift
+@@ -2,7 +2,8 @@ import Foundation
+ import UIKit
+ 
+ /// The Bond Heart library, kept on this device: saved heartbeats (JSON in Application
+-/// Support), their memory photos (JPEG files beside it), and which one the pendant wears.
++/// Support), their memory photos (JPEG files beside it), which one the pendant wears, and
++/// what the original Heart API last reported (pending heartbeats and requests).
+ @MainActor
+ final class HeartLibrary: ObservableObject {
+     @Published private(set) var items: [SavedHeartbeat] = []
+@@ -12,18 +13,27 @@ final class HeartLibrary: ObservableObject {
+     /// The pendant's played counter when the heartbeat was put on (the count shared is the
+     /// reading minus this).
+     @Published private(set) var countBaseline: Int?
++    /// When the heartbeat count was last shared (the original allows once every 24 hours).
++    @Published var lastCountShare: Date?
++    /// `controlTimestamp` the server returned last; sent back with the next count.
++    var controlTimestamp = 0
++
++    // From the original Heart API (not stored).
++    @Published var pending: [PendingHeartbeat] = []
++    @Published var requests: [HeartRequest] = []
++    @Published var syncStatus = ""
++    @Published var lastSync: Date?
++    /// Server ids deleted here that still need deleting on the server.
++    private(set) var deletedServerIDs: [String] = []
+ 
+-    /// The saved file. `lastCountShare`, `controlTimestamp` and `deletedServerIDs` were for
+-    /// the original Bond Touch Heart API; they're still read (optional) so a library saved by
+-    /// an older version decodes, and no longer written.
+     private struct Saved: Codable {
+         var items: [SavedHeartbeat]
+         var wornID: UUID?
+         var wornAt: Date?
+         var countBaseline: Int?
+         var lastCountShare: Date?
+-        var controlTimestamp: Int?
+-        var deletedServerIDs: [String]?
++        var controlTimestamp: Int
++        var deletedServerIDs: [String]
+     }
+ 
+     private static var folder: URL {
+@@ -41,11 +51,16 @@ final class HeartLibrary: ObservableObject {
+             wornID = s.wornID
+             wornAt = s.wornAt
+             countBaseline = s.countBaseline
++            lastCountShare = s.lastCountShare
++            controlTimestamp = s.controlTimestamp
++            deletedServerIDs = s.deletedServerIDs
+         }
+     }
+ 
+     func save() {
+-        let s = Saved(items: items, wornID: wornID, wornAt: wornAt, countBaseline: countBaseline)
++        let s = Saved(items: items, wornID: wornID, wornAt: wornAt, countBaseline: countBaseline,
++                      lastCountShare: lastCountShare, controlTimestamp: controlTimestamp,
++                      deletedServerIDs: deletedServerIDs)
+         if let data = try? JSONEncoder().encode(s) { try? data.write(to: Self.file, options: .atomic) }
+     }
+ 
+@@ -60,13 +75,19 @@ final class HeartLibrary: ObservableObject {
+     }
+ 
+     func delete(_ id: UUID) {
+-        guard item(id) != nil else { return }
++        guard let hb = item(id) else { return }
++        if let sid = hb.serverID { deletedServerIDs.append(sid) }
+         items.removeAll { $0.id == id }
+         try? FileManager.default.removeItem(at: photoURL(id))
+         if wornID == id { wornID = nil; wornAt = nil; countBaseline = nil }
+         save()
+     }
+ 
++    func serverDeleteDone(_ serverID: String) {
++        deletedServerIDs.removeAll { $0 == serverID }
++        save()
++    }
++
+     func markWorn(_ id: UUID, baseline: Int?) {
+         wornID = id
+         wornAt = Date()
+@@ -98,6 +119,7 @@ final class HeartLibrary: ObservableObject {
+             try? FileManager.default.removeItem(at: photoURL(id))
+             hb.hasPhoto = false
+         }
++        hb.dirty = hb.serverID != nil
+         upsert(hb)
+     }
+ 
+diff --git a/Sources/Stores/LocalStore.swift b/Sources/Stores/LocalStore.swift
+index 775b252..da2bde5 100644
+--- a/Sources/Stores/LocalStore.swift
++++ b/Sources/Stores/LocalStore.swift
+@@ -42,6 +42,23 @@ final class LocalStore: ObservableObject {
+     @Published var profile: UserProfile {
+         didSet { save(profile, for: .profile) }
+     }
++    /// Opt in to the legacy Firebase backend (experimental; see SettingsView footnote).
++    @Published var useLegacyFirebase: Bool {
++        didSet { UserDefaults.standard.set(useLegacyFirebase, forKey: Key.fbEnabled.rawValue) }
++    }
++    @Published var firebaseDatabaseURL: String {
++        didSet { UserDefaults.standard.set(firebaseDatabaseURL, forKey: Key.fbURL.rawValue) }
++    }
++    @Published var firebaseAuthToken: String {
++        didSet { UserDefaults.standard.set(firebaseAuthToken, forKey: Key.fbToken.rawValue) }
++    }
++    /// The email of the signed-in original Bond Touch account (empty if not logged in).
++    @Published var legacyEmail: String {
++        didSet { UserDefaults.standard.set(legacyEmail, forKey: Key.legacyEmail.rawValue) }
++    }
++    @Published var legacyRefreshToken: String {
++        didSet { UserDefaults.standard.set(legacyRefreshToken, forKey: Key.legacyRefresh.rawValue) }
++    }
+     /// iCloud bond codes this device belongs to (created or joined), persisted so bonds
+     /// come back after relaunch. Maps code → true if we created it.
+     /// The user's order for their partners (bond ids, top first) — lists, the partner bar and
+@@ -93,7 +110,7 @@ final class LocalStore: ObservableObject {
+ 
+     func photoBackground(for bondID: String) -> Bool { photoBackgrounds[bondID] ?? true }
+ 
+-    /// Keep running in the background so touches from partners reach the bracelet while
++    /// Keep running in the background so touches from original-app partners arrive while
+     /// the phone is locked (uses low-accuracy background location).
+     @Published var keepAliveInBackground: Bool {
+         didSet {
+@@ -106,6 +123,15 @@ final class LocalStore: ObservableObject {
+         }
+     }
+ 
++    /// Original-app partner (bond id) → the iCloud bond that carries chat with them.
++    @Published var chatLinks: [String: String] {
++        didSet { save(chatLinks, for: .chatLinks) }
++    }
++
++    /// The user turned on end-to-end encrypted chat with original-app partners on this phone.
++    @Published var legacyChatEnabled: Bool {
++        didSet { UserDefaults.standard.set(legacyChatEnabled, forKey: Key.legacyChat.rawValue) }
++    }
+     /// Per-partner home greeting ("Hello, this is us"), keyed by bond id.
+     @Published var greetings: [String: String] {
+         didSet { save(greetings, for: .greetings) }
+@@ -155,38 +181,25 @@ final class LocalStore: ObservableObject {
+         greetings[bondID] = text
+     }
+ 
+-    private enum Key: String { case meanings, vibration, dnd, profile, greetings, encounters, psPasscode, photoBg, bgSoftness, touchWindow, keepAlive, cloudBonds, cloudMeanings, savedPlaces }
+-
+-    /// What older versions stored for the original Bond Touch servers (account tokens,
+-    /// email, the Signal chat keys, links between original-app partners and iCloud bonds).
+-    /// Partners on the original app are no longer supported: it's all removed once, and the
+-    /// rest of the saved data loads as before. See docs/BOND_TOUCH_CLOUD.md.
+-    private static let removedBondCloudKeys = [
+-        "fbEnabled", "fbURL", "fbToken", "legacyEmail", "legacyRefresh", "legacyChat", "chatLinks",
+-        "LegacySeenTouchIDs", "ImportedLegacyMeanings",
+-    ]
+-
+-    private static func removeBondCloudData() {
+-        let defaults = UserDefaults.standard
+-        for key in removedBondCloudKeys where defaults.object(forKey: key) != nil {
+-            defaults.removeObject(forKey: key)
+-        }
+-        // The Signal protocol state (private keys and sessions) of the original app's chat.
+-        let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+-        try? FileManager.default.removeItem(at: support.appendingPathComponent("signal-store.json"))
+-    }
++    private enum Key: String { case meanings, vibration, dnd, profile, fbEnabled, fbURL, fbToken, greetings, encounters, psPasscode, legacyEmail, legacyRefresh, legacyChat, photoBg, bgSoftness, touchWindow, chatLinks, keepAlive, cloudBonds, cloudMeanings, savedPlaces }
+ 
+     init() {
+-        LocalStore.removeBondCloudData()
+         self.meanings = LocalStore.load([TouchMeaning].self, for: .meanings) ?? TouchMeaning.starters
+         let v = UserDefaults.standard.object(forKey: Key.vibration.rawValue) as? Double
+         self.vibrationStrength = v ?? 200
+         self.doNotDisturb = UserDefaults.standard.bool(forKey: Key.dnd.rawValue)
+         self.profile = LocalStore.load(UserProfile.self, for: .profile) ?? .empty
++        self.useLegacyFirebase = UserDefaults.standard.bool(forKey: Key.fbEnabled.rawValue)
++        self.firebaseDatabaseURL = UserDefaults.standard.string(forKey: Key.fbURL.rawValue) ?? ""
++        self.firebaseAuthToken = UserDefaults.standard.string(forKey: Key.fbToken.rawValue) ?? ""
++        self.legacyEmail = UserDefaults.standard.string(forKey: Key.legacyEmail.rawValue) ?? ""
++        self.legacyRefreshToken = UserDefaults.standard.string(forKey: Key.legacyRefresh.rawValue) ?? ""
++        self.legacyChatEnabled = UserDefaults.standard.bool(forKey: Key.legacyChat.rawValue)
+         self.cloudBondCodes = LocalStore.load([String: Bool].self, for: .cloudBonds) ?? [:]
+         self.cloudMeanings = LocalStore.load([String: [TouchMeaning]].self, for: .cloudMeanings) ?? [:]
+         self.savedPlaces = LocalStore.load([SavedPlace].self, for: .savedPlaces) ?? []
+         self.photoBackgrounds = LocalStore.load([String: Bool].self, for: .photoBg) ?? [:]
++        self.chatLinks = LocalStore.load([String: String].self, for: .chatLinks) ?? [:]
+         // Prefer the iCloud-latched choice, then this device's, then the default (on).
+         let kv = NSUbiquitousKeyValueStore.default
+         kv.synchronize()
+@@ -216,6 +229,12 @@ final class LocalStore: ObservableObject {
+         }
+     }
+ 
++    var legacyFirebase: LegacyFirebaseClient? {
++        guard useLegacyFirebase, !firebaseDatabaseURL.isEmpty else { return nil }
++        return LegacyFirebaseClient(databaseURL: firebaseDatabaseURL,
++                                    authToken: firebaseAuthToken.isEmpty ? nil : firebaseAuthToken)
++    }
++
+     private func save<T: Encodable>(_ value: T, for key: Key) {
+         if let data = try? JSONEncoder().encode(value) {
+             UserDefaults.standard.set(data, forKey: key.rawValue)
+diff --git a/Sources/ViewModels/AppModel+BondHeart.swift b/Sources/ViewModels/AppModel+BondHeart.swift
+index b6211fd..af90573 100644
+--- a/Sources/ViewModels/AppModel+BondHeart.swift
++++ b/Sources/ViewModels/AppModel+BondHeart.swift
+@@ -1,7 +1,8 @@
+ import Foundation
+ import UIKit
+ 
+-/// Bond Heart: the pendant (`pendant`) and the local library (`heartLibrary`).
++/// Bond Heart: the pendant (`pendant`), the local library (`heartLibrary`), and — with an
++/// original Bond Touch account — the original Heart API for sharing and requests.
+ extension AppModel {
+ 
+     // MARK: - Pendant
+@@ -15,7 +16,7 @@ extension AppModel {
+         NetLog.shared.log(.ok, "Heart: wearing \(hb.title)", "\(hb.intervals.count) intervals, \(hb.bpm) BPM")
+     }
+ 
+-    // MARK: - iCloud partners
++    // MARK: - iCloud / original-app partners
+ 
+     /// Sends a saved heartbeat to a partner as a heartbeat touch, like "Send my heartbeat":
+     /// the EKG at its BPM on their bracelet and screen, in their history.
+@@ -23,11 +24,176 @@ extension AppModel {
+         guard let bond = partners.first(where: { $0.id == toBondID })?.bond else { return false }
+         let bpm = hb.bpm
+         statusLine = ""
+-        await sendTouch(pattern: EKG.samples(bpm: bpm), generation: 3, colorRGB: hb.colorRGB,
+-                        toBondID: bond.id, matchMeaning: false, heartbeatBPM: bpm)
++        if bond.legacy {
++            await sendTouch(pattern: EKG.onOff(bpm: bpm), generation: 2, colorRGB: hb.colorRGB,
++                            toBondID: bond.id, matchMeaning: false, heartbeatBPM: bpm)
++        } else {
++            await sendTouch(pattern: EKG.samples(bpm: bpm), generation: 3, colorRGB: hb.colorRGB,
++                            toBondID: bond.id, matchMeaning: false, heartbeatBPM: bpm)
++        }
+         return !statusLine.hasPrefix("Send failed")
+     }
+ 
++    // MARK: - Original Heart API
++
++    /// Syncs with the original Heart API: pushes local deletions and edits, then pulls the library, pending heartbeats and requests.
++    func heartSync() async {
++        guard legacySignedIn else { heartLibrary.syncStatus = "Sign in with your Bond Touch account to share heartbeats."; return }
++        heartLibrary.syncStatus = "Syncing…"
++        do {
++            let token = try await legacyToken()
++            for sid in heartLibrary.deletedServerIDs {
++                try await HeartAPI.delete(sid, bearer: token)
++                heartLibrary.serverDeleteDone(sid)
++            }
++            // Edits to heartbeats already on the account. New recordings stay on this phone
++            // until they're shared (the original uploads every one).
++            for hb in heartLibrary.items where hb.serverID != nil && hb.dirty {
++                _ = try await upload(hb, token: token)
++            }
++            let (items, pending) = try await HeartAPI.heartbeats(bearer: token)
++            for it in items { await merge(it, token: token) }
++            heartLibrary.pending = pending
++            heartLibrary.requests = try await HeartAPI.requests(bearer: token)
++            heartLibrary.lastSync = Date()
++            heartLibrary.syncStatus = ""
++        } catch {
++            heartLibrary.syncStatus = error.localizedDescription
++            NetLog.shared.log(.fail, "Heart API sync", error.localizedDescription)
++        }
++    }
++
++    /// Uploads (or updates) a heartbeat; returns its server id. Its memory photo is uploaded
++    /// to Firebase Storage `memories/<uid>/<id>` as the original — which App Check blocks
++    /// for this app, so `hasMemory` stays false unless that upload worked.
++    @discardableResult
++    func upload(_ hb: SavedHeartbeat, token: String) async throws -> String {
++        var hb = hb
++        var hasMemory = false
++        if let sid = hb.serverID {
++            if hb.hasPhoto { hasMemory = await uploadMemory(hb, serverID: sid, token: token) }
++            try await HeartAPI.update(sid, name: hb.name, colorRGB: hb.colorRGB, hasMemory: hasMemory,
++                                      emails: hb.emails, bearer: token)
++        } else {
++            let sid = try await HeartAPI.create(hb, hasMemory: false, bearer: token)
++            hb.serverID = sid
++            if hb.hasPhoto, await uploadMemory(hb, serverID: sid, token: token) {
++                try await HeartAPI.update(sid, name: hb.name, colorRGB: hb.colorRGB, hasMemory: true,
++                                          emails: hb.emails, bearer: token)
++            }
++        }
++        hb.dirty = false
++        heartLibrary.upsert(hb)
++        return hb.serverID ?? ""
++    }
++
++    private func uploadMemory(_ hb: SavedHeartbeat, serverID: String, token: String) async -> Bool {
++        guard let data = heartLibrary.photoData(hb.id), let uid = BondBackend.tokenUID(token) else { return false }
++        do {
++            try await FirebaseStorage.upload(data, to: "memories/\(uid)/\(serverID)", contentType: "image/jpeg", token: token)
++            return true
++        } catch {
++            NetLog.shared.log(.fail, "Heart memory photo upload", error.localizedDescription)
++            return false
++        }
++    }
++
++    /// Adds or refreshes a server heartbeat in the local library (local edits win until
++    /// they're uploaded).
++    private func merge(_ it: HeartAPI.Item, token: String) async {
++        var hb = heartLibrary.items.first { $0.serverID == it.id }
++            ?? SavedHeartbeat(serverID: it.id, name: it.name, colorRGB: it.colorRGB, intervals: it.intervals,
++                              createdAt: it.createdAt, createdBy: it.createdBy, isSelf: it.isSelf,
++                              emails: it.emails, source: it.isSelf ? .server : .received)
++        if !hb.dirty {
++            hb.name = it.name
++            hb.colorRGB = it.colorRGB
++            hb.emails = it.emails
++            if !it.intervals.isEmpty { hb.intervals = it.intervals }
++        }
++        heartLibrary.upsert(hb)
++        if it.hasMemory, !hb.hasPhoto { await downloadMemory(hb, serverID: it.id, owner: it.createdBy, token: token) }
++    }
++
++    /// The memory photo, from `memories/<owner uid>/<id>` (owner = `createdBy`, which is
++    /// presumably the Firebase uid — a guess). App Check normally blocks this.
++    private func downloadMemory(_ hb: SavedHeartbeat, serverID: String, owner: String, token: String) async {
++        let uid = owner.isEmpty ? (BondBackend.tokenUID(token) ?? "") : owner
++        guard !uid.isEmpty else { return }
++        if let data = try? await FirebaseStorage.download("memories/\(uid)/\(serverID)", token: token) {
++            heartLibrary.setPhotoData(data, for: hb.id)
++        }
++    }
++
++    /// Accepts a heartbeat someone shared into the library.
++    func acceptPending(_ p: PendingHeartbeat) async -> String? {
++        do {
++            let token = try await legacyToken()
++            let it = try await HeartAPI.accept(p.id, bearer: token)
++            let hb = SavedHeartbeat(serverID: it?.id ?? p.id, name: it?.name ?? p.name, colorRGB: it?.colorRGB ?? p.colorRGB,
++                                    memory: p.message, intervals: (it?.intervals.isEmpty == false ? it?.intervals : nil) ?? p.intervals,
++                                    createdAt: p.createdAt, createdBy: p.createdBy, isSelf: false, source: .received)
++            heartLibrary.upsert(hb)
++            heartLibrary.pending.removeAll { $0.id == p.id }
++            return nil
++        } catch { return error.localizedDescription }
++    }
++
++    func rejectPending(_ p: PendingHeartbeat) async -> String? {
++        do {
++            let token = try await legacyToken()
++            try await HeartAPI.delete(p.id, bearer: token)
++            heartLibrary.pending.removeAll { $0.id == p.id }
++            return nil
++        } catch { return error.localizedDescription }
++    }
++
++    /// Shares a heartbeat by email: they receive it as pending (and a notification or email
++    /// from the original servers). Uploads it first if needed.
++    func shareHeartbeat(_ hb: SavedHeartbeat, toEmail: String, message: String) async -> String? {
++        do {
++            let token = try await legacyToken()
++            let sid: String
++            if let existing = hb.serverID, !hb.dirty { sid = existing } else { sid = try await upload(hb, token: token) }
++            try await HeartAPI.share(sid, toEmail: toEmail, message: message, bearer: token)
++            NetLog.shared.log(.ok, "Heart: shared \(hb.title) with \(toEmail)")
++            return nil
++        } catch { return error.localizedDescription }
++    }
++
++    /// Asks someone for their heartbeat by email.
++    func askForHeartbeat(email: String) async -> String? {
++        do {
++            let token = try await legacyToken()
++            let name = store.profile.name.isEmpty ? "Me" : store.profile.name
++            try await HeartAPI.ask(email: email, fromName: name, bearer: token)
++            heartLibrary.requests = (try? await HeartAPI.requests(bearer: token)) ?? heartLibrary.requests
++            return nil
++        } catch { return error.localizedDescription }
++    }
++
++    func deleteHeartRequest(_ r: HeartRequest) async -> String? {
++        do {
++            let token = try await legacyToken()
++            try await HeartAPI.deleteRequest(r.id, bearer: token)
++            heartLibrary.requests.removeAll { $0.id == r.id }
++            return nil
++        } catch { return error.localizedDescription }
++    }
++
++    /// Answers a request: shares the heartbeat with whoever asked, then clears the request.
++    func answerRequest(_ r: HeartRequest, with hb: SavedHeartbeat) async -> String? {
++        if let err = await shareHeartbeat(hb, toEmail: r.fromUser, message: "") { return err }
++        _ = await deleteHeartRequest(r)
++        return nil
++    }
++
++    /// A request sent to this account (vs. one this account sent).
++    func isReceived(_ r: HeartRequest) -> Bool {
++        let me = store.legacyEmail.lowercased()
++        return !me.isEmpty && r.toUser.lowercased() == me
++    }
++
+     // MARK: - Heartbeat count
+ 
+     /// How many times the worn heartbeat was felt since it was put on (pendant's played
+@@ -37,4 +203,31 @@ extension AppModel {
+         let base = heartLibrary.countBaseline ?? 0
+         return played >= base ? played - base : played
+     }
++
++    /// Shares the worn heartbeat's count with the people in its `emails` (once a day, as
++    /// the original).
++    func shareFeltCount() async -> String? {
++        guard var hb = heartLibrary.worn else { return "You're not wearing any heartbeat." }
++        if let last = heartLibrary.lastCountShare, Date().timeIntervalSince(last) < 24 * 3600 {
++            return "You can share the count once every 24 hours."
++        }
++        guard !hb.emails.isEmpty else { return "Choose who can see this heartbeat count by adding their emails." }
++        do {
++            let count = try await feltCount()
++            guard count > 0 else { return "Feel the heartbeat so you can share your count." }
++            let token = try await legacyToken()
++            if hb.serverID == nil || hb.dirty {
++                _ = try await upload(hb, token: token)
++                hb = heartLibrary.item(hb.id) ?? hb
++            }
++            guard let sid = hb.serverID else { return "Couldn't upload the heartbeat." }
++            let name = store.profile.name.isEmpty ? "Me" : store.profile.name
++            heartLibrary.controlTimestamp = try await HeartAPI.shareCount(
++                sid, name: name, count: count, since: heartLibrary.wornAt ?? hb.createdAt,
++                controlTimestamp: heartLibrary.controlTimestamp, bearer: token)
++            heartLibrary.lastCountShare = Date()
++            heartLibrary.save()
++            return nil
++        } catch { return error.localizedDescription }
++    }
+ }
+diff --git a/Sources/ViewModels/AppModel+Chat.swift b/Sources/ViewModels/AppModel+Chat.swift
+index 6a029d3..1c77468 100644
+--- a/Sources/ViewModels/AppModel+Chat.swift
++++ b/Sources/ViewModels/AppModel+Chat.swift
+@@ -3,15 +3,25 @@ import Foundation
+ import UIKit
+ import UserNotifications
+ 
+-/// Chat runs over iCloud for every partner. History (with photos) is kept on this phone.
++/// Chat runs over iCloud for every partner. A partner on the original Bond Touch app is
++/// linked to an iCloud bond (invite them, or link one you already share) and chat with them
++/// goes through it. History (with photos) is kept on this phone.
++///
++/// The original backend's own end-to-end chat (`BondChat`) can't be used: its key exchange
++/// and photos live in Firebase Storage, which only the official app may access (App Check).
+ extension AppModel {
+     // MARK: - Which iCloud bond carries chat for a partner
+ 
+-    /// The iCloud bond id used for chat with `partnerID` (the partner's own bond).
++    /// The iCloud bond id used for chat with `partnerID`: the partner's own bond for an iCloud
++    /// partner, or the linked bond for an original-app partner.
+     func chatBondID(for partnerID: String?) -> String? {
+         guard let id = partnerID, let partner = partners.first(where: { $0.id == id })
+                 ?? cloudPartners.first(where: { $0.id == id }) else { return nil }
+-        return partner.id
++        if !partner.bond.legacy { return partner.id }
++        guard let linked = store.chatLinks[id],
++              cloudPartners.contains(where: { $0.id == linked }) || cloudPending.contains(where: { $0.id == linked })
++        else { return nil }
++        return linked
+     }
+ 
+     private func chatBond(for partnerID: String?) -> Bond? {
+@@ -19,6 +29,92 @@ extension AppModel {
+         return cloudPartners.first { $0.id == id }?.bond ?? cloudPending.first { $0.id == id }
+     }
+ 
++    /// iCloud bonds linked to an original-app partner.
++    var chatLinkedCloudIDs: Set<String> { Set(store.chatLinks.values) }
++
++    /// Original-app partners who have joined you on iCloud (their linked iCloud bond is
++    /// accepted). They sync through iCloud only.
++    var migratedLegacyIDs: Set<String> {
++        let accepted = Set(cloudPartners.map(\.id))
++        return Set(store.chatLinks.filter { accepted.contains($0.value) }.keys)
++    }
++
++    /// Whether any partner still syncs through the original backend only. When none does,
++    /// nothing (presence, location, profile) is sent there anymore.
++    var hasOriginalOnlyPartners: Bool {
++        let migrated = migratedLegacyIDs
++        return legacyPartners.contains { !migrated.contains($0.id) }
++    }
++
++    /// The iCloud partner that replaces an original-app partner, if they've moved.
++    func iCloudPartnerID(forLegacy id: String) -> String? {
++        guard migratedLegacyIDs.contains(id) else { return nil }
++        return store.chatLinks[id]
++    }
++
++    /// Links original-app partners to an iCloud partner with exactly the same name (when
++    /// there's just one such), and moves the selection onto the iCloud partner once linked.
++    func autoLinkPartners() {
++        let linkedCloud = chatLinkedCloudIDs
++        for legacy in legacyPartners where store.chatLinks[legacy.id] == nil {
++            let name = legacy.displayName.trimmingCharacters(in: .whitespaces).lowercased()
++            let matches = cloudPartners.filter {
++                !linkedCloud.contains($0.id) && $0.displayName.trimmingCharacters(in: .whitespaces).lowercased() == name
++            }
++            if matches.count == 1, !name.isEmpty { store.chatLinks[legacy.id] = matches[0].id }
++        }
++        if let sel = selectedPartnerID, let moved = iCloudPartnerID(forLegacy: sel) {
++            selectedPartnerID = moved
++        }
++        importMeaningsFromMovedPartners()
++    }
++
++    /// Once per partner who moved to iCloud: copy their Touch Language from the original
++    /// backend into the local library, so nothing is lost.
++    private func importMeaningsFromMovedPartners() {
++        let key = "ImportedLegacyMeanings"
++        var done = Set(UserDefaults.standard.stringArray(forKey: key) ?? [])
++        for id in migratedLegacyIDs where !done.contains(id) {
++            guard let list = legacyMeanings[id], let cloudID = store.chatLinks[id] else { continue }
++            // Into the library shared with them on iCloud.
++            var lib = cloudLibrary(cloudID)
++            let existing = Set(lib.filter { $0.deleted != true }.map { $0.label.lowercased() })
++            for m in list where !existing.contains(m.label.lowercased()) {
++                var copy = m
++                copy.serverID = nil
++                copy.updatedAt = Date()
++                lib.append(copy)
++            }
++            store.cloudMeanings[cloudID] = lib
++            done.insert(id)
++        }
++        UserDefaults.standard.set(Array(done), forKey: key)
++    }
++
++    /// Creates an iCloud bond to invite an original-app partner to chat; it is linked to them
++    /// right away and the invite link is offered (`pendingInviteURL`).
++    func inviteToICloudChat(_ legacyID: String) async {
++        // Replace an earlier, still-unaccepted invite rather than piling them up.
++        if let old = store.chatLinks[legacyID], let pending = cloudPending.first(where: { $0.id == old }) {
++            await removeBond(pending)
++            store.chatLinks.removeValue(forKey: legacyID)
++        }
++        let before = Set(cloudPending.map(\.id))
++        await createBond(forExistingPartner: true)
++        if let new = cloudPending.first(where: { !before.contains($0.id) }) {
++            store.chatLinks[legacyID] = new.id
++        }
++    }
++
++    /// Links an existing iCloud partner as the chat channel for an original-app partner.
++    func linkChat(_ legacyID: String, toCloudBond cloudID: String) {
++        store.chatLinks[legacyID] = cloudID
++    }
++
++    func unlinkChat(_ legacyID: String) {
++        store.chatLinks.removeValue(forKey: legacyID)
++    }
++
+     // MARK: - History
+ 
+     /// Adds messages (deduplicated by id) and saves the history.
+@@ -32,7 +128,7 @@ extension AppModel {
+         list.sort { $0.sentAt < $1.sentAt }
+         messagesByBond[bondID] = list
+         ChatArchive.save(messagesByBond)
+-        if fresh.contains(where: { $0.senderID != myUserID && $0.senderID != ChatMessage.localSelf
++        if fresh.contains(where: { $0.senderID != myUserID && $0.senderID != ChatMessage.legacySelf
+                                    && Date().timeIntervalSince($0.sentAt) < 5 * 60 }) {
+             notifyBracelet(bondID: bondID)
+             notifyChatLocally(bondID: bondID)
+@@ -70,6 +166,7 @@ extension AppModel {
+         let key = "BraceletNotifiedAt"
+         if let last = UserDefaults.standard.object(forKey: key) as? Date, Date().timeIntervalSince(last) < 30 { return }
+         UserDefaults.standard.set(Date(), forKey: key)
++        // The chat bond may be the iCloud link for an original-app partner: use whoever it is.
+         let partner = partners.first { $0.id == bondID || chatBondID(for: $0.id) == bondID }
+         _ = bracelet.play(Self.notification(style, colorRGB: partner?.colorRGB ?? store.profile.colorRGB),
+                           holdIfOffline: false)
+@@ -106,7 +203,7 @@ extension AppModel {
+         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+         guard !trimmed.isEmpty else { return }
+         guard let bond = chatBond(for: toBondID ?? selectedPartnerID) else {
+-            statusLine = "Choose a partner first."
++            statusLine = "Invite this partner to iCloud chat first."
+             return
+         }
+         let msg = ChatMessage(bondID: bond.id, senderID: myUserID, kind: .text, text: trimmed,
+@@ -124,7 +221,7 @@ extension AppModel {
+     /// Sends a photo (JPEG) over iCloud.
+     func sendChatImage(_ jpeg: Data, toBondID: String? = nil) async {
+         guard let bond = chatBond(for: toBondID ?? selectedPartnerID) else {
+-            statusLine = "Choose a partner first."
++            statusLine = "Invite this partner to iCloud chat first."
+             return
+         }
+         guard let file = ChatArchive.saveImage(jpeg) else { return }
+@@ -146,4 +243,13 @@ extension AppModel {
+         let me = store.profile.name.isEmpty ? "Someone" : store.profile.name
+         await pushPartner(bondID: bond.id, title: me, body: "New message in Private Space", group: "m")
+     }
++
++    // MARK: - Original-backend encrypted chat (disabled: App Check)
++
++    /// Forgets any keys generated by the disabled original-backend chat.
++    func resetLegacyChat() {
++        store.legacyChatEnabled = false
++        chat.store.reset()
++        legacyChatStatus = ""
++    }
+ }
+diff --git a/Sources/ViewModels/AppModel+Demo.swift b/Sources/ViewModels/AppModel+Demo.swift
+index 2d7d06e..c19fdce 100644
+--- a/Sources/ViewModels/AppModel+Demo.swift
++++ b/Sources/ViewModels/AppModel+Demo.swift
+@@ -68,11 +68,11 @@ extension AppModel {
+         var touches: [TouchMessage] = [
+             TouchMessage(bondID: alex.id, senderID: partnerID, pattern: Self.demoSlide, generation: 3, colorRGB: 0x57C3BB,
+                          endColorRGB: 0xB173DF, sentAt: now.addingTimeInterval(-7200)),
+-            TouchMessage(bondID: alex.id, senderID: ChatMessage.localSelf, pattern: [140, 120, 140, 120, 520],
++            TouchMessage(bondID: alex.id, senderID: ChatMessage.legacySelf, pattern: [140, 120, 140, 120, 520],
+                          colorRGB: 0x57C3BB, endColorRGB: 0x57C3BB, sentAt: now.addingTimeInterval(-5400)),
+             TouchMessage(bondID: alex.id, senderID: partnerID, pattern: [140, 120, 140, 120, 520], colorRGB: 0xEC5A89,
+                          endColorRGB: 0xB173DF, sentAt: now.addingTimeInterval(-3000), meaningLabel: "Love you", meaningEmoji: "💗"),
+-            TouchMessage(bondID: alex.id, senderID: ChatMessage.localSelf, pattern: EKG.onOff(bpm: 72), generation: 2,
++            TouchMessage(bondID: alex.id, senderID: ChatMessage.legacySelf, pattern: EKG.onOff(bpm: 72), generation: 2,
+                          colorRGB: 0xFF2E74, endColorRGB: 0xFF2E74, sentAt: now.addingTimeInterval(-1500), heartbeatBPM: 72),
+             TouchMessage(bondID: alex.id, senderID: partnerID, pattern: Self.demoSlide.reversed(), generation: 3,
+                          colorRGB: 0x9FD257, endColorRGB: 0x57C3BB, sentAt: now.addingTimeInterval(-120)),
+diff --git a/Sources/ViewModels/AppModel+Notifications.swift b/Sources/ViewModels/AppModel+Notifications.swift
+index 5660bf8..4127650 100644
+--- a/Sources/ViewModels/AppModel+Notifications.swift
++++ b/Sources/ViewModels/AppModel+Notifications.swift
+@@ -14,9 +14,9 @@ extension AppModel {
+         let center = UNUserNotificationCenter.current()
+         // Same identifier as the partner's push for this bond (its collapse id), so if that
+         // push's notification is already showing for this touch, this doesn't add a second.
+-        let locator = BondCrypto.locator(forCode: partner.id)
++        let locator = partner.bond.legacy ? nil : BondCrypto.locator(forCode: partner.id)
+         let prefix = kind == .heartbeats ? "h" : kind == .arrivals ? "a" : "t"
+-        let id = "\(prefix)-\(locator.prefix(16))"
++        let id = locator.map { "\(prefix)-\($0.prefix(16))" } ?? "l-\(touch.id.uuidString)"
+         let delivered = await center.deliveredNotifications()
+         if delivered.contains(where: { n in
+             n.request.identifier == id && abs(n.date.timeIntervalSince(touch.sentAt)) < 120
+@@ -35,7 +35,7 @@ extension AppModel {
+             content.body = "❤️"
+         }
+         var info = TouchNotification.userInfo(touch, bondID: partner.id)
+-        info["bl"] = locator
++        if let locator { info["bl"] = locator }
+         content.userInfo = info
+         // The app's chime (a kiss and a soft bell), with the vibration that comes with it.
+         content.sound = UNNotificationSound(named: UNNotificationSoundName(TouchNotification.sound))
+diff --git a/Sources/ViewModels/AppModel+Photos.swift b/Sources/ViewModels/AppModel+Photos.swift
+index 8f62d33..0e5689d 100644
+--- a/Sources/ViewModels/AppModel+Photos.swift
++++ b/Sources/ViewModels/AppModel+Photos.swift
+@@ -2,7 +2,9 @@ import UIKit
+ 
+ /// Profile photos. The user picks their own in Settings; it is kept on this phone and sent to
+ /// iCloud partners inside the profile record. iCloud partners' photos arrive the same way.
+-/// All are cached on disk so they show immediately on the next launch.
++/// Original-app partners' photos come from the original backend (Firebase Storage
++/// `images/<firebaseId>/profile`, for profiles with `hasImage`). All are cached on disk so
++/// they show immediately on the next launch.
+ extension AppModel {
+     /// The user's own photo, as sent to partners (square JPEG).
+     var myPhotoFileURL: URL? {
+@@ -21,14 +23,20 @@ extension AppModel {
+         guard let data = Self.profileJPEG(image) else { return }
+         try? data.write(to: Self.myPhotoURL, options: .atomic)
+         myPhoto = UIImage(data: data)
+-        Task { await publishProfile() }
++        Task {
++            await publishProfile()
++            await legacyUploadMyPhoto(data)
++        }
+     }
+ 
+     func removeMyPhoto() {
+         try? FileManager.default.removeItem(at: Self.myPhotoURL)
+         try? FileManager.default.removeItem(at: Self.cacheURL("me"))
+         myPhoto = nil
+-        Task { await publishProfile() }
++        Task {
++            await publishProfile()
++            await legacyUploadMyPhoto(nil)
++        }
+     }
+ 
+     /// Centre-crops to a square and scales to 640 px, JPEG.
+@@ -76,10 +84,50 @@ extension AppModel {
+         return partnerPhotos[bondID]
+     }
+ 
+-    /// The user's own photo: the one picked here, else one cached by an earlier version.
++    /// Shows the cached photo right away, then downloads it once per profile version.
++    /// The original servers only serve photos to the official app (Firebase App Check), so
++    /// once that's known, only the cached photo is used.
++    func loadPartnerPhoto(bondID: String, uid: String, version: Int64) {
++        let key = "\(bondID)#\(version)"
++        loadCachedPhoto(bondID: bondID)
++        guard !uid.isEmpty, !photoRequests.contains(key), !FirebaseStorage.appCheckBlocked else { return }
++        photoRequests.insert(key)
++        Task {
++            guard let token = try? await legacyToken(),
++                  let data = try? await FirebaseStorage.download("images/\(uid)/profile", token: token),
++                  let image = UIImage(data: data) else { return }
++            partnerPhotos[bondID] = image
++            try? data.write(to: Self.cacheURL("bond-" + bondID), options: .atomic)
++        }
++    }
++
++    /// The user's own photo: the one picked here, else the one on their original account.
+     func loadMyPhoto() {
+         if let mine = UIImage(contentsOfFile: Self.myPhotoURL.path) { myPhoto = mine; return }
+         if myPhoto == nil, let cached = UIImage(contentsOfFile: Self.cacheURL("me").path) { myPhoto = cached }
++        guard legacySignedIn, !photoRequests.contains("me"), !FirebaseStorage.appCheckBlocked else { return }
++        photoRequests.insert("me")
++        Task {
++            guard let token = try? await legacyToken(), let uid = BondBackend.tokenUID(token),
++                  let data = try? await FirebaseStorage.download("images/\(uid)/profile", token: token),
++                  let image = UIImage(data: data) else { return }
++            myPhoto = image
++            try? data.write(to: Self.cacheURL("me"), options: .atomic)
++        }
++    }
++
++    /// Puts the user's photo on their original account too, so partners on the original app
++    /// see it. The original servers usually refuse this app (App Check); then nothing changes
++    /// there, and the photo still reaches iCloud partners.
++    func legacyUploadMyPhoto(_ data: Data?) async {
++        guard legacySignedIn, !FirebaseStorage.appCheckBlocked,
++              let token = try? await legacyToken(), let uid = BondBackend.tokenUID(token) else { return }
++        do {
++            if let data {
++                try await FirebaseStorage.upload(data, to: "images/\(uid)/profile", contentType: "image/jpeg", token: token)
++            }
++            try await BondBackend.setProfileHasImage(data != nil, bearer: token)
++        } catch {}
+     }
+ 
+     /// The image to blur behind the app: the selected partner's photo when they have one
+diff --git a/Sources/ViewModels/AppModel+Widget.swift b/Sources/ViewModels/AppModel+Widget.swift
+index afbb53d..04125c6 100644
+--- a/Sources/ViewModels/AppModel+Widget.swift
++++ b/Sources/ViewModels/AppModel+Widget.swift
+@@ -12,8 +12,9 @@ extension AppModel {
+     func startWidgetSync() {
+         let changes: [AnyPublisher<Void, Never>] = [
+             $cloudPartners.map { _ in () }.eraseToAnyPublisher(),
++            $legacyPartners.map { _ in () }.eraseToAnyPublisher(),
+             $selectedPartnerID.map { _ in () }.eraseToAnyPublisher(),
+-            store.$cloudMeanings.map { _ in () }.eraseToAnyPublisher(),
++            $legacyMeanings.map { _ in () }.eraseToAnyPublisher(),
+             $partnerPhotos.map { _ in () }.eraseToAnyPublisher(),
+             store.$meanings.map { _ in () }.eraseToAnyPublisher(),
+             $history.map { _ in () }.eraseToAnyPublisher(),
+@@ -31,9 +32,8 @@ extension AppModel {
+         Task { await processWidgetRequests() }
+     }
+ 
+-    /// The stable id a meaning has in the widget: its UUID (or, for a meaning saved by an
+-    /// older version for an original-app partner, the server id it kept, so existing
+-    /// widgets keep working).
++    /// The stable id a meaning has in the widget: its server id for an original-app partner
++    /// (the local UUID is new on every sync), else its UUID.
+     private func widgetID(_ m: TouchMeaning) -> String { m.serverID ?? m.id.uuidString }
+ 
+     func writeWidgetSnapshot() {
+@@ -107,6 +107,8 @@ extension AppModel {
+         WidgetShared.setStatus(.sending, for: request.meaningID)
+         WidgetShared.reloadWidget()
+         if !ready { await bootstrap() }
++        // Original-app partners only appear after the first sync with their backend.
++        if !partners.contains(where: { $0.id == request.bondID }), legacySignedIn { await legacySyncOnce() }
+         var sent = false
+         if let partner = partners.first(where: { $0.id == request.bondID }),
+            let meaning = widgetMeaning(request.meaningID, bond: partner.bond) {
+@@ -120,7 +122,8 @@ extension AppModel {
+         return sent
+     }
+ 
+-    /// The meaning by its widget id: the loaded one, else the copy in the snapshot.
++    /// The meaning by its widget id: the loaded one, else the copy in the snapshot (the
++    /// original backend's meanings load only after the first sync).
+     private func widgetMeaning(_ id: String, bond: Bond) -> TouchMeaning? {
+         if let live = meanings(for: bond).first(where: { widgetID($0) == id }) { return live }
+         guard let snapshot = WidgetShared.loadSnapshot(), snapshot.partner?.id == bond.id,
+diff --git a/Sources/ViewModels/AppModel.swift b/Sources/ViewModels/AppModel.swift
+index 9889e3d..c74da09 100644
+--- a/Sources/ViewModels/AppModel.swift
++++ b/Sources/ViewModels/AppModel.swift
+@@ -16,14 +16,39 @@ final class AppModel: ObservableObject {
+     /// iCloud invites the user created that no partner has accepted yet.
+     @Published var cloudPending: [Bond] = []
+ 
++    // Original Bond Touch backend (runs in parallel with iCloud; see AppModel+Legacy).
++    @Published var legacyPartners: [Partner] = []
++    @Published var legacyPending: [Bond] = []
++    /// Bond invites other original-app users sent to this account (accept / decline).
++    @Published var incomingInvites: [Bond] = []
++    /// Touch Language per original-app bond, as stored on the server.
++    @Published var legacyMeanings: [String: [TouchMeaning]] = [:]
++    @Published var legacyStatus = "Not signed in"
++    @Published var legacyLastSync: Date?
++    var legacyTask: Task<Void, Never>?
+     /// Polls iCloud bonds every few seconds while the app is foregrounded, so a live
+     /// back-and-forth updates without waiting on a silent push (iOS throttles those heavily
+     /// in the foreground). Cancelled when the app leaves the foreground — pushes cover that.
+     var cloudPollTask: Task<Void, Never>?
++    var legacyProfileTask: Task<Void, Never>?
++    var legacyPrimed = false
++    var legacyCycle = 0
++    var legacyLastLocationPush = Date.distantPast
++
++    // Encrypted chat with original-app partners (see AppModel+Chat).
++    let chat = BondChat()
++    /// Partner Firebase UID + legacy phone number per bond, for their key files and photos.
++    var legacyPartnerAccounts: [String: (uid: String, phone: String)] = [:]
++    var chatSessionAttempts: [String: Date] = [:]
++    /// Partner icon from the bond's settings (kept when updating the colour).
++    var legacyPartnerIcons: [String: String] = [:]
++    var chatMaintenanceDone = false
++    @Published var legacyChatStatus = ""
+ 
+     // Profile photos (see AppModel+Photos).
+     @Published var partnerPhotos: [String: UIImage] = [:]
+     @Published var myPhoto: UIImage?
++    var photoRequests: Set<String> = []
+     /// This device's APNs token (set once iOS registers it), published to partners so they can
+     /// wake this phone directly. Each partner's token, by bond, for the same in reverse.
+     var myPushToken = ""
+@@ -38,12 +63,15 @@ final class AppModel: ObservableObject {
+     var widgetPhotoData: [String: Data] = [:]
+     /// Repairs a bracelet stuck in firmware-update mode.
+     let recovery = FirmwareRecovery()
+-    /// Keeps the app running in the background so touches reach the bracelet.
++    /// Keeps the app running in the background for original-app partners.
+     let keeper = BackgroundKeeper()
+ 
+-    /// Every partner (all on iCloud), in the user's order.
++    /// Every partner, once each: iCloud partners, plus original-app partners who aren't on
++    /// iCloud with you yet. A partner who has moved to iCloud is shown (and synced) only
++    /// through their iCloud bond.
+     var partners: [Partner] {
+-        let all = cloudPartners
++        let migrated = migratedLegacyIDs
++        let all = cloudPartners + legacyPartners.filter { !migrated.contains($0.id) }
+         // In the user's order; anyone not placed yet keeps their place after those who are.
+         let order = store.partnerOrder
+         return all.enumerated().sorted { a, b in
+@@ -59,7 +87,7 @@ final class AppModel: ObservableObject {
+         store.partnerOrder = ids
+     }
+     /// Every invite the user sent that has not been accepted yet.
+-    var pendingBonds: [Bond] { cloudPending }
++    var pendingBonds: [Bond] { cloudPending + legacyPending }
+     @Published var selectedPartnerID: String?
+     @Published var history: [TouchMessage] = []                  // sent + received touches
+     private var historyIDs: Set<UUID> = []
+@@ -95,7 +123,7 @@ final class AppModel: ObservableObject {
+     @Published private(set) var myUserID: String = ""
+     @Published private(set) var ready = false
+     /// nil when iCloud is usable; otherwise why it isn't, shown to the user. iCloud features
+-    /// (pairing, photos, heartbeat relay) need this to be nil.
++    /// (pairing, photos, heartbeat relay) need this to be nil; the original backend doesn't.
+     @Published var iCloudStatus: String?
+ 
+     /// Re-checks iCloud and, if it became available, finishes the iCloud setup bootstrap did
+@@ -157,7 +185,7 @@ final class AppModel: ObservableObject {
+         }
+         if foreground { haptics.playHeartbeat(bpm: bpm, seconds: seconds) }
+         guard foreground else { return }
+-        let mine = touch.senderID == myUserID || touch.senderID == ChatMessage.localSelf
++        let mine = touch.senderID == myUserID || touch.senderID == ChatMessage.legacySelf
+         let name = mine ? "Your" : (partners.first { $0.id == touch.bondID }?.displayName ?? "Partner")
+         let show = HeartbeatShow(bpm: bpm, colorRGB: touch.colorRGB, name: mine ? "Your" : name,
+                                  start: Date(), seconds: seconds, touchID: touch.id)
+@@ -267,9 +295,9 @@ final class AppModel: ObservableObject {
+         }
+         // The bracelet's partner slots follow the partner list: one slot per partner (up to
+         // three), lit in that partner's colour — what the original app sends after pairing.
+-        Publishers.CombineLatest($cloudPartners, store.$partnerOrder)
++        Publishers.CombineLatest3($cloudPartners, $legacyPartners, store.$partnerOrder)
+             .debounce(for: .milliseconds(300), scheduler: DispatchQueue.main)
+-            .sink { [weak self] _, _ in
++            .sink { [weak self] _, _, _ in
+                 Task { @MainActor in
+                     guard let self else { return }
+                     self.bracelet.setPartnerMenu(self.partners.map { (id: $0.id, rgb: $0.colorRGB) })
+@@ -362,7 +390,7 @@ final class AppModel: ObservableObject {
+     /// Kept running, the app keeps checking iCloud and plays every touch on the bracelet.
+     var needsBackgroundKeepAlive: Bool {
+         guard store.keepAliveInBackground else { return false }
+-        return !cloudPartners.isEmpty
++        return !cloudPartners.isEmpty || (legacySignedIn && hasOriginalOnlyPartners)
+     }
+ 
+     func updateKeepAlive() {
+@@ -377,6 +405,7 @@ final class AppModel: ObservableObject {
+     func setLocationSharing(_ on: Bool) {
+         sharingLocation = on
+         StickySetting.set("shareLocation", on)
++        Task { await legacySetSharing(on) }
+         if on {
+             location.start()
+         } else {
+@@ -419,6 +448,7 @@ final class AppModel: ObservableObject {
+ 
+     private func broadcastLocation(_ fix: CLLocation) async {
+         guard sharingLocation else { return }
++        await legacyPushLocation(fix.coordinate)
+         await publishPresence(force: false)   // throttled — fixes can arrive every few seconds
+     }
+ 
+@@ -431,6 +461,7 @@ final class AppModel: ObservableObject {
+     func sendKiss(toBondID: String? = nil) async -> Bool {
+         if let toBondID { selectedPartnerID = toBondID }
+         guard let bond = activeBond else { statusLine = "Choose a partner first."; return false }
++        guard !bond.legacy else { statusLine = "Kisses go to partners on iCloud."; return false }
+         guard partnerPushTokens[bond.id]?.isEmpty == false else {
+             statusLine = "Can't reach \(bond.partnerName)'s phone yet."; return false
+         }
+@@ -538,6 +569,8 @@ final class AppModel: ObservableObject {
+         startTogetherSync()
+         loadMyPhoto()
+         bracelet.startScanning()
++        // The original backend works without iCloud, so start it first and independently.
++        startLegacySync()
+         // Sharing stays as the user left it (on by default) — it isn't reset by an update.
+         if sharingLocation { setLocationSharing(true) }
+         iCloudStatus = await relay.accountStatusMessage()
+@@ -580,7 +613,8 @@ final class AppModel: ObservableObject {
+         }
+     }
+ 
+-    /// Foreground / background: presence, and the iCloud polling loop's pace.
++    /// Foreground / background: presence on both backends, and the original backend's
++    /// sync loop runs only while the app is active.
+     func setActive(_ active: Bool) async {
+         location.setBackground(!active)
+         if active {
+@@ -590,7 +624,10 @@ final class AppModel: ObservableObject {
+             await refreshICloudStatus()   // the user may have just signed into iCloud
+             updateKeepAlive()
+             // Restart the loops so they drop from the slow background pace straight away.
++            stopLegacySync()
+             stopCloudPolling()
++            startLegacySync()
++            await legacySetOnline(true)
+             await setOnline(true)
+             await refreshAll()
+             requestPartnerLocations()
+@@ -602,7 +639,9 @@ final class AppModel: ObservableObject {
+             // bracelet.
+             startCloudPolling()
+         } else {
++            stopLegacySync()
+             stopCloudPolling()
++            await legacySetOnline(false)
+             await setOnline(false)
+         }
+     }
+@@ -758,7 +797,7 @@ final class AppModel: ObservableObject {
+ 
+     /// Creates an iCloud bond and its invite link. Returns an error message when it can't
+     /// (chiefly: not signed into iCloud), so the UI can show it instead of a dead end.
+-    /// `forExistingPartner`: an invite for someone already counted as a partner (skips the limit).
++    /// `forExistingPartner`: an invite to move an original-app partner (already counted) to iCloud.
+     @discardableResult
+     func createBond(forExistingPartner: Bool = false) async -> String? {
+         if !forExistingPartner, let full = partnerLimitMessage { return full }
+@@ -834,12 +873,14 @@ final class AppModel: ObservableObject {
+         return activeBond
+     }
+ 
+-    /// Sends a touch to a bond (the selected partner when `toBondID` is nil) as an encrypted
+-    /// iCloud relay record, and records it to the local feed.
++    /// Sends a touch to a bond (the selected partner when `toBondID` is nil): iCloud partners
++    /// get an encrypted relay record, original-app partners go through the Bond API. Records
++    /// it to the local feed either way.
+     ///
+     /// Unless `meaning` is given (or `matchMeaning` is false), the touch is first checked
+     /// against the partner's saved meanings: a close match is sent *as* that meaning — its
+-    /// colours and name.
++    /// colours and name, and for an original-app partner by meaning id, so their bracelet
++    /// plays it as the meaning.
+     ///
+     /// Returns whether it was sent (for the widget's Sent / Failed).
+     @discardableResult
+@@ -856,7 +897,7 @@ final class AppModel: ObservableObject {
+                                                                in: meanings(for: bond)) : nil)
+         // Sent from Matrix mode (iCloud partners): a glitchy touch in code green, and it
+         // plays in Matrix mode on their phone.
+-        let matrix = Theme.style == .matrix && heartbeatBPM == nil && effect == nil
++        let matrix = Theme.style == .matrix && !bond.legacy && heartbeatBPM == nil && effect == nil
+         if let meaning, given == nil {
+             NetLog.shared.log(.ok, "Touch matches \"\(meaning.label)\" — sending it as that meaning")
+         }
+@@ -881,23 +922,38 @@ final class AppModel: ObservableObject {
+     /// Returns whether it was sent.
+     @discardableResult
+     private func transmit(_ touch: TouchMessage, bond: Bond, meaning: TouchMeaning?) async -> Bool {
+-        let route = "iCloud"
++        let route = bond.legacy ? "original Bond API" : "iCloud"
+         NetLog.shared.log(.send, "Send \(meaning.map { "\"\($0.label)\"" } ?? "touch") → \(bond.partnerName) (\(route))",
+                           "gen \(touch.generation), \(touch.pattern.count) samples")
+         do {
+-            let seq = try await relay.sendTouch(touch, bond: bond)
+-            updateHistory(touch.id) { $0.delivery = .sent; $0.ringSeq = seq }
+-            askForRatingIfDue()
+-            NetLog.shared.log(.ok, "Touch → iCloud accepted", "\(bond.partnerName)")
+-            // Wake their phone right away (CloudKit's own push can lag in deep sleep).
+-            let me = store.profile.name.isEmpty ? "Someone" : store.profile.name
+-            if let bpm = touch.heartbeatBPM {
+-                await pushPartner(bondID: bond.id, title: "\(me)'s heartbeat", body: "\(bpm) BPM", touch: touch, group: "h")
+-            } else if touch.meaningEmoji == "📍", let label = touch.meaningLabel {
+-                await pushPartner(bondID: bond.id, title: "\(me) arrived", body: label, touch: touch, group: "a")
++            if bond.legacy, let serverID = meaning?.serverID {
++                // The original app sends a saved meaning by id; the partner's bracelet then
++                // lights and buzzes it as that meaning.
++                try await BondBackend.sendMeaningTouch(bondId: bond.id, meaningId: serverID,
++                                                       bearer: try await legacyToken())
++                updateHistory(touch.id) { $0.delivery = .sent }
++            } else if bond.legacy {
++                // As the original: the server tells us which saved meaning it matched.
++                let matched = try await legacySendTouch(touch, bond: bond)
++                updateHistory(touch.id) { t in
++                    t.delivery = .sent
++                    if let matched, t.meaningLabel == nil { t.meaningLabel = matched.label; t.meaningEmoji = matched.emoji }
++                }
+             } else {
+-                let body = touch.meaningLabel.map { "\(touch.meaningEmoji ?? "") \($0)".trimmingCharacters(in: .whitespaces) } ?? "❤️"
+-                await pushPartner(bondID: bond.id, title: "\(me) touched you", body: body, touch: touch)
++                let seq = try await relay.sendTouch(touch, bond: bond)
++                updateHistory(touch.id) { $0.delivery = .sent; $0.ringSeq = seq }
++                askForRatingIfDue()
++                NetLog.shared.log(.ok, "Touch → iCloud accepted", "\(bond.partnerName)")
++                // Wake their phone right away (CloudKit's own push can lag in deep sleep).
++                let me = store.profile.name.isEmpty ? "Someone" : store.profile.name
++                if let bpm = touch.heartbeatBPM {
++                    await pushPartner(bondID: bond.id, title: "\(me)'s heartbeat", body: "\(bpm) BPM", touch: touch, group: "h")
++                } else if touch.meaningEmoji == "📍", let label = touch.meaningLabel {
++                    await pushPartner(bondID: bond.id, title: "\(me) arrived", body: label, touch: touch, group: "a")
++                } else {
++                    let body = touch.meaningLabel.map { "\(touch.meaningEmoji ?? "") \($0)".trimmingCharacters(in: .whitespaces) } ?? "❤️"
++                    await pushPartner(bondID: bond.id, title: "\(me) touched you", body: body, touch: touch)
++                }
+             }
+             return true
+         } catch {
+@@ -977,8 +1033,8 @@ final class AppModel: ObservableObject {
+                                toBondID: toBondID, matchMeaning: false, effect: "rainbow")
+     }
+ 
+-    /// Sends a saved meaning (Touch Language) as a labelled touch over iCloud. Returns
+-    /// whether it was sent.
++    /// Sends a saved meaning (Touch Language) — by id to an original-app partner, as a
++    /// labelled touch over iCloud. Returns whether it was sent.
+     @discardableResult
+     func sendMeaning(_ meaning: TouchMeaning, toBondID: String? = nil) async -> Bool {
+         await sendTouch(pattern: meaning.pattern, generation: meaning.touchGeneration,
+@@ -988,10 +1044,12 @@ final class AppModel: ObservableObject {
+ 
+     // MARK: - Profile
+ 
+-    /// Pushes the user's profile (name, colour, photo) to every iCloud partner.
++    /// Pushes the user's profile (name, colour, photo) to every partner: the original backend
++    /// and each iCloud bond.
+     func publishProfile() async {
+         let p = store.profile
+         guard p.isComplete else { return }
++        legacyPublishProfile(name: p.name, colorRGB: p.colorRGB)
+         for partner in cloudPartners {
+             try? await relay.sendProfile(name: p.name, colorRGB: p.colorRGB, photo: myPhotoFileURL,
+                                          pushToken: myPushToken, meanings: sharedLibrary(partner.id),
+@@ -1056,7 +1114,7 @@ final class AppModel: ObservableObject {
+     }
+ 
+     /// Plays a partner's incoming touch on the bracelet (or the phone) once — however many
+-    /// ways it arrives (push, iCloud fetch) — from any partner, in their
++    /// ways it arrives (push, iCloud fetch, original backend) — from any partner, in their
+     /// slot, up to 15 minutes old (as the original app), and not during Do Not Disturb.
+     private var deliveredTouchIDs: Set<UUID> = []
+     func deliver(_ touch: TouchMessage, notify: Bool = true) {
+@@ -1074,12 +1132,15 @@ final class AppModel: ObservableObject {
+         feel(touch)
+         watch.forward(touch)
+         if touch.isMatrix { showMatrix(for: touch) }
+-        // A touch that didn't come with its own push (picked up from iCloud) still gets the rich notification on the phone and the watch.
++        // A touch that didn't come with its own push (picked up from iCloud, or from an
++        // original-app partner) still gets the rich notification on the phone and the watch.
+         if notify { Task { await notifyTouch(touch) } }
+     }
+ 
+-    /// Unbonds: deletes the iCloud bond (owner only) and drops the partner locally.
++    /// Unbonds: deletes the iCloud bond (owner only) or cancels the original-app bond, and
++    /// drops the partner locally.
+     func removeBond(_ bond: Bond) async {
++        if bond.legacy { await legacyCancelBond(bond); return }
+         do {
+             try await relay.deleteBond(bond)
+             cloudPartners.removeAll { $0.id == bond.id }
+@@ -1114,7 +1175,10 @@ final class AppModel: ObservableObject {
+     }
+ 
+     func refreshAll() async {
+-        defer { Task { await refreshPartnerWeather() } }
++        defer {
++            autoLinkPartners()
++            Task { await refreshPartnerWeather() }
++        }
+         // An invite we created: once the partner's profile appears, they've joined — make
+         // them a partner (no relaunch needed).
+         for bond in cloudPending {
+@@ -1219,9 +1283,15 @@ final class AppModel: ObservableObject {
+         statusLine = ""
+         defer { Task { @MainActor in try? await Task.sleep(nanoseconds: 5_000_000_000); self.sendingHeartbeat = false } }
+         // It goes as a touch tagged with the BPM: over iCloud the EKG itself (in the touch ring
+-        // and inside the push, so it plays right away and shows in history on both phones).
+-        await sendTouch(pattern: EKG.samples(bpm: bpm), generation: 3, colorRGB: EKG.colorRGB,
+-                        toBondID: bond.id, matchMeaning: false, heartbeatBPM: bpm)
++        // and inside the push, so it plays right away and shows in history on both phones);
++        // to an original-app partner, a press per beat (their app only knows touches).
++        if bond.legacy {
++            await sendTouch(pattern: EKG.onOff(bpm: bpm), generation: 2, colorRGB: EKG.colorRGB,
++                            toBondID: bond.id, matchMeaning: false, heartbeatBPM: bpm)
++        } else {
++            await sendTouch(pattern: EKG.samples(bpm: bpm), generation: 3, colorRGB: EKG.colorRGB,
++                            toBondID: bond.id, matchMeaning: false, heartbeatBPM: bpm)
++        }
+         if statusLine.hasPrefix("Send failed") { statusLine = "Heartbeat " + statusLine.lowercased(); return nil }
+         return bpm
+     }
+diff --git a/Sources/Views/BondHeartLibraryView.swift b/Sources/Views/BondHeartLibraryView.swift
+index bbc4edc..b6cb340 100644
+--- a/Sources/Views/BondHeartLibraryView.swift
++++ b/Sources/Views/BondHeartLibraryView.swift
+@@ -20,7 +20,7 @@ private struct HeartLibraryList: View {
+                     GlassCard {
+                         VStack(alignment: .leading, spacing: 6) {
+                             Text("All heartbeats in one place").font(Theme.font(17, .heavy)).foregroundStyle(Theme.title)
+-                            Text("Add heartbeats by recording them.")
++                            Text("Add heartbeats by recording or request one from your loved ones.")
+                                 .font(.footnote).foregroundStyle(Theme.subtitle)
+                         }
+                     }
+@@ -60,7 +60,7 @@ private struct HeartLibraryList: View {
+ }
+ 
+ /// One heartbeat: replay it (EKG + beep + phone vibration), wear it on the pendant, send it
+-/// to a partner's bracelet, edit its name / colour / memory, delete it.
++/// to a partner's bracelet, share it by email, edit its name / colour / memory, delete it.
+ struct HeartbeatDetailView: View {
+     @EnvironmentObject var model: AppModel
+     let id: UUID
+@@ -79,6 +79,8 @@ private struct HeartbeatDetail: View {
+     @State private var name = ""
+     @State private var colorRGB = EKG.colorRGB
+     @State private var memory = ""
++    @State private var emails: [String] = []
++    @State private var newEmail = ""
+     @State private var photoItem: PhotosPickerItem?
+     @State private var photo: UIImage?
+     @State private var loaded = false
+@@ -86,16 +88,19 @@ private struct HeartbeatDetail: View {
+     @State private var message: String?
+     @State private var busy = false
+     @State private var confirmDelete = false
++    @State private var sharing = false
+ 
+     var body: some View {
+         if let hb = library.item(id) {
+             content(hb)
+                 .onAppear { load(hb) }
+                 .onDisappear { commit(); stop() }
++                .sheet(isPresented: $sharing) { HeartShareSheet(heartbeat: hb) }
+                 .confirmationDialog("Delete heartbeat?", isPresented: $confirmDelete, titleVisibility: .visible) {
+                     Button("Delete heartbeat", role: .destructive) {
+                         stop()
+                         library.delete(id)
++                        if model.legacySignedIn { Task { await model.heartSync() } }
+                         dismiss()
+                     }
+                 } message: {
+@@ -197,6 +202,12 @@ private struct HeartbeatDetail: View {
+                 }
+                 .disabled(busy)
+             }
++            if model.legacySignedIn {
++                Button { commit(); sharing = true } label: {
++                    Label("Share by email", systemImage: "envelope")
++                }
++                .buttonStyle(GlassButtonStyle(height: 46))
++            }
+         }
+     }
+ 
+@@ -213,6 +224,31 @@ private struct HeartbeatDetail: View {
+                 TextField("A memory (optional)", text: $memory, axis: .vertical)
+                     .lineLimit(2...5).textFieldStyle(.roundedBorder)
+                 HeartPhotoPicker(item: $photoItem, image: $photo)
++                if model.legacySignedIn {
++                    Text("Heartbeat count").font(Theme.font(15, .bold)).foregroundStyle(Theme.title)
++                    Text("Choose who can see this heartbeat count (up to 3).")
++                        .font(.caption).foregroundStyle(Theme.subtitle)
++                    ForEach(emails, id: \.self) { e in
++                        HStack {
++                            Text(e).font(.footnote).foregroundStyle(Theme.title)
++                            Spacer()
++                            Button { emails.removeAll { $0 == e }; commit() } label: { Image(systemName: "xmark.circle.fill") }
++                                .foregroundStyle(Theme.subtitle)
++                        }
++                    }
++                    if emails.count < 3 {
++                        HStack {
++                            TextField("name@email.com", text: $newEmail)
++                                .textFieldStyle(.roundedBorder)
++                                .keyboardType(.emailAddress).textInputAutocapitalization(.never).autocorrectionDisabled()
++                            Button("Add") {
++                                let e = newEmail.trimmingCharacters(in: .whitespaces).lowercased()
++                                if e.contains("@"), !emails.contains(e) { emails.append(e); newEmail = ""; commit() }
++                            }
++                            .foregroundStyle(Theme.accent)
++                        }
++                    }
++                }
+             }
+         }
+         .onChange(of: colorRGB) { _ in commit() }
+@@ -229,20 +265,23 @@ private struct HeartbeatDetail: View {
+         name = hb.name
+         colorRGB = hb.colorRGB
+         memory = hb.memory
++        emails = hb.emails
+         photo = hb.hasPhoto ? library.photo(hb.id) : nil
+         // Let the initial values settle before onChange starts saving.
+         DispatchQueue.main.async { loaded = true }
+     }
+ 
+-    /// Saves edits.
++    /// Saves edits (marked for upload if the heartbeat is on the Bond Touch account).
+     private func commit() {
+         guard loaded, var hb = library.item(id) else { return }
+         let trimmed = name.trimmingCharacters(in: .whitespaces)
+-        let changed = hb.name != trimmed || hb.colorRGB != colorRGB || hb.memory != memory
++        let changed = hb.name != trimmed || hb.colorRGB != colorRGB || hb.memory != memory || hb.emails != emails
+         guard changed else { return }
+         if !trimmed.isEmpty { hb.name = trimmed }
+         hb.colorRGB = colorRGB
+         hb.memory = memory
++        hb.emails = emails
++        if hb.serverID != nil { hb.dirty = true }
+         library.upsert(hb)
+     }
+ 
+@@ -268,3 +307,255 @@ private struct HeartbeatDetail: View {
+         Task { await work(); busy = false }
+     }
+ }
++
++/// Share a heartbeat with someone by their Bond Touch account email.
++struct HeartShareSheet: View {
++    @EnvironmentObject var model: AppModel
++    @Environment(\.dismiss) private var dismiss
++    let heartbeat: SavedHeartbeat
++    @State private var email = ""
++    @State private var note = ""
++    @State private var busy = false
++    @State private var result: String?
++    @State private var sent = false
++
++    var body: some View {
++        NavigationStack {
++            ScrollView {
++                VStack(spacing: 16) {
++                    HeartGlyph(colorRGB: heartbeat.colorRGB, size: 60, bpm: heartbeat.bpm)
++                    if sent {
++                        Text("Heartbeat sent!").font(Theme.font(22, .heavy)).foregroundStyle(Theme.title)
++                        Text("Once received, your loved one will be able to save it within their library!")
++                            .font(.footnote).foregroundStyle(Theme.subtitle).multilineTextAlignment(.center)
++                        Button("Got it!") { dismiss() }.buttonStyle(AccentButtonStyle())
++                    } else {
++                        GlassCard {
++                            VStack(alignment: .leading, spacing: 10) {
++                                Text("Who do you want to send it to?").font(Theme.font(16, .bold)).foregroundStyle(Theme.title)
++                                TextField("name@email.com", text: $email)
++                                    .textFieldStyle(.roundedBorder)
++                                    .keyboardType(.emailAddress).textInputAutocapitalization(.never).autocorrectionDisabled()
++                                Text("Make it personal").font(Theme.font(16, .bold)).foregroundStyle(Theme.title)
++                                Text("Add a lovely message if you want, it’s totally optional.")
++                                    .font(.caption).foregroundStyle(Theme.subtitle)
++                                TextField("Message", text: $note, axis: .vertical)
++                                    .lineLimit(2...4).textFieldStyle(.roundedBorder)
++                            }
++                        }
++                        if let result { Text(result).font(.footnote).foregroundStyle(Theme.amber) }
++                        Button {
++                            busy = true
++                            Task {
++                                let e = email.trimmingCharacters(in: .whitespaces)
++                                result = await model.shareHeartbeat(model.heartLibrary.item(heartbeat.id) ?? heartbeat,
++                                                                    toEmail: e, message: note)
++                                sent = result == nil
++                                busy = false
++                            }
++                        } label: {
++                            if busy { ProgressView().tint(Theme.onAccent) } else { Text("Send heartbeat") }
++                        }
++                        .buttonStyle(AccentButtonStyle())
++                        .disabled(busy || !email.contains("@"))
++                        Text("It's uploaded to your Bond Touch account to be shared. A memory photo can't be shared from this app (the original servers only let their own app use photo storage).")
++                            .font(.caption).foregroundStyle(Theme.subtitle).multilineTextAlignment(.center)
++                    }
++                }
++                .padding(20)
++            }
++            .screenBackground()
++            .navigationTitle("Share heartbeat")
++            .navigationBarTitleDisplayMode(.inline)
++            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Close") { dismiss() } } }
++        }
++    }
++}
++
++/// Heartbeats shared with you, requests for your heartbeat, and asking someone for theirs —
++/// through the original Bond Touch account (the original's received / waiting screens).
++struct HeartSharedView: View {
++    @EnvironmentObject var model: AppModel
++    var body: some View {
++        HeartShared(library: model.heartLibrary)
++            .navigationTitle("Shared & requests")
++    }
++}
++
++private struct HeartShared: View {
++    @EnvironmentObject var model: AppModel
++    @ObservedObject var library: HeartLibrary
++    @State private var askEmail = ""
++    @State private var message: String?
++    @State private var busy = false
++    @State private var rejecting: PendingHeartbeat?
++    @State private var removing: HeartRequest?
++
++    private var received: [HeartRequest] { library.requests.filter { model.isReceived($0) } }
++    private var sent: [HeartRequest] { library.requests.filter { !model.isReceived($0) } }
++
++    var body: some View {
++        ScrollView {
++            VStack(spacing: 16) {
++                if !model.legacySignedIn {
++                    GlassCard {
++                        VStack(alignment: .leading, spacing: 8) {
++                            Text("Send & ask for a heartbeat").font(Theme.font(17, .heavy)).foregroundStyle(Theme.title)
++                            Text("Heartbeat requests go through the original Bond Touch servers, which need a Bond Touch account (in the debug menu). You can still send a heartbeat to a partner's bracelet from the library.")
++                                .font(.footnote).foregroundStyle(Theme.subtitle)
++                        }
++                    }
++                } else {
++                    if let message { Text(message).font(.footnote).foregroundStyle(Theme.title).multilineTextAlignment(.center) }
++                    askCard
++                    pendingSection
++                    requestsSection
++                    if library.pending.isEmpty && library.requests.isEmpty {
++                        GlassCard {
++                            VStack(alignment: .leading, spacing: 4) {
++                                Text("All good").font(Theme.font(17, .heavy)).foregroundStyle(Theme.title)
++                                Text("No requests to manage.").font(.footnote).foregroundStyle(Theme.subtitle)
++                            }
++                        }
++                    }
++                    if !library.syncStatus.isEmpty {
++                        Text(library.syncStatus).font(.caption).foregroundStyle(Theme.amber)
++                    } else if let at = library.lastSync {
++                        Text("Updated \(at.formatted(date: .omitted, time: .shortened))").font(.caption).foregroundStyle(Theme.subtitle)
++                    }
++                }
++                Color.clear.frame(height: 12)
++            }
++            .padding(20)
++        }
++        .refreshable { await model.heartSync() }
++        .task { await model.heartSync() }
++        .confirmationDialog("Reject \(rejecting?.name ?? "")'s heartbeat?",
++                            isPresented: Binding(get: { rejecting != nil }, set: { if !$0 { rejecting = nil } }),
++                            titleVisibility: .visible) {
++            Button("Reject", role: .destructive) {
++                if let p = rejecting { run { message = await model.rejectPending(p) } }
++            }
++        }
++        .confirmationDialog(removing.map { model.isReceived($0) ? "Reject \($0.fromUserName)'s request?" : "Delete request?" } ?? "",
++                            isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } }),
++                            titleVisibility: .visible) {
++            Button(removing.map { model.isReceived($0) ? "Reject" : "Delete" } ?? "Delete", role: .destructive) {
++                if let r = removing { run { message = await model.deleteHeartRequest(r) } }
++            }
++        } message: {
++            Text(removing.map { model.isReceived($0) ? "This request will be permanently deleted." : "You are about to delete your request. If you proceed, you will need to request it again." } ?? "")
++        }
++    }
++
++    private var askCard: some View {
++        GlassCard {
++            VStack(alignment: .leading, spacing: 10) {
++                Text("Ask for a heartbeat").font(Theme.font(17, .heavy)).foregroundStyle(Theme.title)
++                Text("Whose heartbeat are you asking for? They’ll receive a request to record their heartbeat.")
++                    .font(.caption).foregroundStyle(Theme.subtitle)
++                HStack {
++                    TextField("name@email.com", text: $askEmail)
++                        .textFieldStyle(.roundedBorder)
++                        .keyboardType(.emailAddress).textInputAutocapitalization(.never).autocorrectionDisabled()
++                    Button("Ask") {
++                        let e = askEmail.trimmingCharacters(in: .whitespaces)
++                        run {
++                            if let err = await model.askForHeartbeat(email: e) { message = err }
++                            else { message = "Request sent! Once they send you their heartbeat, you'll find it here."; askEmail = "" }
++                        }
++                    }
++                    .foregroundStyle(Theme.accent)
++                    .disabled(busy || !askEmail.contains("@"))
++                }
++            }
++        }
++    }
++
++    @ViewBuilder private var pendingSection: some View {
++        if !library.pending.isEmpty {
++            sectionTitle("Pending (\(library.pending.count))")
++            ForEach(library.pending) { p in
++                GlassCard {
++                    VStack(alignment: .leading, spacing: 10) {
++                        HStack(spacing: 10) {
++                            HeartGlyph(colorRGB: p.colorRGB, size: 28)
++                            VStack(alignment: .leading, spacing: 2) {
++                                Text("\(p.name)’s heartbeat").font(Theme.font(16, .bold)).foregroundStyle(Theme.title)
++                                Text("Received from: \(p.createdBy)").font(.caption).foregroundStyle(Theme.subtitle)
++                            }
++                        }
++                        if !p.message.isEmpty { Text(p.message).font(.footnote).foregroundStyle(Theme.title) }
++                        if p.intervals.count > 1 {
++                            EKGView(bpm: SavedHeartbeat(name: p.name, colorRGB: p.colorRGB, intervals: p.intervals).bpm,
++                                    colorRGB: p.colorRGB).frame(height: 40)
++                        }
++                        HStack(spacing: 10) {
++                            Button("Keep it") { run { message = await model.acceptPending(p) ?? "Saved to your library." } }
++                                .buttonStyle(AccentButtonStyle(height: 40))
++                            Button("Reject") { rejecting = p }
++                                .buttonStyle(GlassButtonStyle(height: 40))
++                        }
++                        .disabled(busy)
++                    }
++                }
++            }
++        }
++    }
++
++    @ViewBuilder private var requestsSection: some View {
++        if !received.isEmpty {
++            sectionTitle("Asking for your heartbeat")
++            ForEach(received) { r in
++                GlassCard {
++                    VStack(alignment: .leading, spacing: 10) {
++                        Text("\(r.fromUserName.isEmpty ? r.fromUser : r.fromUserName) is asking for your heartbeat")
++                            .font(Theme.font(16, .bold)).foregroundStyle(Theme.title)
++                        Text("Record a heartbeat or choose one from the library to send.")
++                            .font(.caption).foregroundStyle(Theme.subtitle)
++                        HStack(spacing: 10) {
++                            Menu {
++                                ForEach(library.items) { hb in
++                                    Button(hb.title) { run { message = await model.answerRequest(r, with: hb) ?? "Heartbeat sent!" } }
++                                }
++                            } label: {
++                                Text("Choose a heartbeat").font(Theme.font(15, .bold)).foregroundStyle(Theme.title)
++                                    .frame(maxWidth: .infinity).frame(height: 40).glass(Capsule())
++                            }
++                            .disabled(library.items.isEmpty || busy)
++                            Button("Reject") { removing = r }
++                                .buttonStyle(GlassButtonStyle(height: 40))
++                        }
++                    }
++                }
++            }
++        }
++        if !sent.isEmpty {
++            sectionTitle("Waiting")
++            ForEach(sent) { r in
++                GlassCard(padding: 14) {
++                    HStack {
++                        VStack(alignment: .leading, spacing: 2) {
++                            Text("Pending request to:").font(.caption).foregroundStyle(Theme.subtitle)
++                            Text(r.toUser).font(Theme.font(15, .bold)).foregroundStyle(Theme.title)
++                        }
++                        Spacer()
++                        Button { removing = r } label: { Image(systemName: "trash") }
++                            .foregroundStyle(Theme.subtitle)
++                    }
++                }
++            }
++        }
++    }
++
++    private func sectionTitle(_ t: String) -> some View {
++        Text(t).font(Theme.font(15, .heavy)).foregroundStyle(Theme.subtitle)
++            .frame(maxWidth: .infinity, alignment: .leading)
++    }
++
++    private func run(_ work: @escaping () async -> Void) {
++        busy = true
++        message = nil
++        Task { await work(); busy = false }
++    }
++}
+diff --git a/Sources/Views/BondHeartView.swift b/Sources/Views/BondHeartView.swift
+index 6c0996b..1d01d25 100644
+--- a/Sources/Views/BondHeartView.swift
++++ b/Sources/Views/BondHeartView.swift
+@@ -1,7 +1,8 @@
+ import SwiftUI
+ 
+ /// Bond Heart — the heartbeat pendant: its status and pairing, the heartbeat it's wearing
+-/// and how often it was felt, recording a heartbeat, and the library.
++/// and how often it was felt, recording a heartbeat, the library, and heartbeats shared
++/// with you through the original Bond Touch account.
+ struct BondHeartView: View {
+     @EnvironmentObject var model: AppModel
+     var body: some View {
+@@ -59,12 +60,20 @@ private struct BondHeartHome: View {
+                          library.items.isEmpty ? "All heartbeats in one place" : "\(library.items.count) heartbeat\(library.items.count == 1 ? "" : "s")") {
+                         HeartLibraryView()
+                     }
++                    link("Shared & requests", "envelope.open", sharedSubtitle) { HeartSharedView() }
+                     link("Tutorials", "book", "Get to know your Heart") { HeartTutorialsView() }
+                 }
+                 Color.clear.frame(height: 12)
+             }
+             .padding(20)
+         }
++        .task { if model.legacySignedIn { await model.heartSync() } }
++    }
++
++    private var sharedSubtitle: String {
++        guard model.legacySignedIn else { return "Send & ask by email (Bond Touch account)" }
++        let n = library.pending.count + library.requests.filter { model.isReceived($0) }.count
++        return n == 0 ? "Send or ask for a heartbeat by email" : "\(n) waiting for you"
+     }
+ 
+     @ViewBuilder private var wearingCard: some View {
+@@ -98,6 +107,12 @@ private struct BondHeartHome: View {
+                             }
+                         }
+                         .buttonStyle(GlassButtonStyle(height: 40))
++                        if model.legacySignedIn {
++                            Button("Share count") {
++                                run { countText = await model.shareFeltCount() ?? "Heartbeat count successfully sent!" }
++                            }
++                            .buttonStyle(GlassButtonStyle(height: 40))
++                        }
+                     }
+                     .disabled(busy || !pendant.state.isUsable)
+                 }
+@@ -234,8 +249,10 @@ struct HeartTutorialsView: View {
+           "A blinking red light means your Heart is charging. When the light is green, it's fully charged.",
+           "Bond Heart needs to charge at least every 15 days. Check its battery here while waking it up."]),
+         Lesson(title: "Feeling the heartbeat", icon: "heart.circle", lines: ["Grab the heart by touching the front light area. You’ll feel it beating after a few seconds. Don’t forget to wear a heartbeat before trying to feel one."]),
+-        Lesson(title: "Heartbeat count", icon: "number", lines: ["Every time you hold the heart to feel its beat, that moment is counted. Tap Heartbeat count to see how often you felt it."]),
+-        Lesson(title: "Send a heartbeat", icon: "paperplane", lines: ["Send a heartbeat to a partner's bracelet from its page in the library."]),
++        Lesson(title: "Heartbeat count", icon: "number", lines: ["Every time you hold the heart to feel its beat, that moment is counted.",
++          "Share this count with up to 3 loved ones (add their emails to the heartbeat), once every 24 hours."]),
++        Lesson(title: "Send & ask for a heartbeat", icon: "envelope", lines: ["You can send or request a heartbeat to and from your loved ones; all you need is their Bond Touch account email.",
++          "You can also send a heartbeat to a partner's bracelet from its page in the library."]),
+     ]
+ 
+     var body: some View {
+diff --git a/Sources/Views/ChatView.swift b/Sources/Views/ChatView.swift
+index c8bd3a7..1952970 100644
+--- a/Sources/Views/ChatView.swift
++++ b/Sources/Views/ChatView.swift
+@@ -2,12 +2,16 @@ import PhotosUI
+ import SwiftUI
+ 
+ /// Chat with the selected partner over iCloud — text bubbles, photos, and touches rendered
+-/// as glowing strokes.
++/// as glowing strokes. A partner on the original Bond Touch app is invited to (or linked
++/// with) an iCloud bond first; chat with them then runs through it.
+ struct ChatView: View {
+     @EnvironmentObject var model: AppModel
+     @EnvironmentObject var store: LocalStore
+     @State private var draft = ""
+     @State private var photo: PhotosPickerItem?
++    @State private var inviting = false
++    @State private var showShare = false
++    @State private var shareError: String?
+     /// Whether the end of the chat is on screen; new messages only pull the view down then.
+     @State private var atBottom = true
+     @State private var viewportHeight: CGFloat = 0
+@@ -28,83 +32,89 @@ struct ChatView: View {
+         return (messages.map(Item.message) + touches).sorted { $0.date < $1.date }
+     }
+     private var lastSeenID: UUID? { model.lastSeenMessageID(for: model.selectedPartnerID) }
++    private var chatBondID: String? { model.chatBondID(for: model.selectedPartnerID) }
++    private var needsLink: Bool { model.selectedPartner != nil && chatBondID == nil }
+ 
+     var body: some View {
+         VStack(spacing: 0) {
+             HStack { Spacer(); PartnerBar(); Spacer() }
+                 .padding(.horizontal, 20).padding(.top, 8).padding(.bottom, 6)
+ 
+-            ScrollViewReader { proxy in
+-                ScrollView {
+-                    LazyVStack(alignment: .leading, spacing: 14) {
+-                        ForEach(items) { item in
+-                            switch item {
+-                            case .message(let msg): bubble(msg).id(msg.id)
+-                            case .touch(let t): touchBubble(t).id(t.id)
++            if needsLink {
++                ScrollView { linkCard }
++            } else {
++                ScrollViewReader { proxy in
++                    ScrollView {
++                        LazyVStack(alignment: .leading, spacing: 14) {
++                            ForEach(items) { item in
++                                switch item {
++                                case .message(let msg): bubble(msg).id(msg.id)
++                                case .touch(let t): touchBubble(t).id(t.id)
++                                }
+                             }
++                            // Where the bottom of the chat is, relative to the visible area.
++                            Color.clear.frame(height: 8).id("bottom")
++                                .background(GeometryReader { g in
++                                    Color.clear.preference(key: ChatBottomKey.self, value: g.frame(in: .named("chat")).maxY)
++                                })
+                         }
+-                        // Where the bottom of the chat is, relative to the visible area.
+-                        Color.clear.frame(height: 8).id("bottom")
+-                            .background(GeometryReader { g in
+-                                Color.clear.preference(key: ChatBottomKey.self, value: g.frame(in: .named("chat")).maxY)
+-                            })
++                        .padding(.horizontal, 16).padding(.top, 8)
+                     }
+-                    .padding(.horizontal, 16).padding(.top, 8)
+-                }
+-                .coordinateSpace(name: "chat")
+-                // The message box sits between the chat and the bar, so no extra gap here.
+-                .noTabBarGap()
+-                .scrollDismissesKeyboard(.interactively)
+-                .background(GeometryReader { g in
+-                    Color.clear
+-                        .onAppear { viewportHeight = g.size.height }
+-                        .onChange(of: g.size.height) { h in
+-                            viewportHeight = h
+-                            // The keyboard (or the tab bar) changed the space: keep the
+-                            // latest message in view if we were at the bottom.
+-                            if atBottom { scrollToBottom(proxy, animated: false) }
+-                        }
+-                })
+-                .onPreferenceChange(ChatBottomKey.self) { maxY in
+-                    // At the bottom = the end of the chat is (nearly) on screen.
+-                    let now = maxY <= viewportHeight + 40
+-                    if now != atBottom { withAnimation(.easeOut(duration: 0.2)) { atBottom = now } }
+-                }
+-                .onAppear {
+-                    scrollToBottom(proxy, animated: false)
+-                    // Once more after the lazy rows have laid out.
+-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { scrollToBottom(proxy, animated: false) }
+-                }
+-                .onChange(of: model.selectedPartnerID) { _ in
+-                    atBottom = true
+-                    DispatchQueue.main.async { scrollToBottom(proxy, animated: false) }
+-                }
+-                .onChange(of: items.count) { _ in
+-                    // Follow new messages only if we're at the bottom, or it's our own.
+-                    let mineLast: Bool = {
+-                        switch items.last {
+-                        case .message(let m): return m.senderID == model.myUserID
+-                        case .touch(let t): return t.senderID == model.myUserID || t.senderID == ChatMessage.localSelf
+-                        case nil: return false
+-                        }
+-                    }()
+-                    if atBottom || mineLast { scrollToBottom(proxy, animated: true) }
+-                }
+-                .overlay(alignment: .bottomTrailing) {
+-                    if !atBottom {
+-                        Button { scrollToBottom(proxy, animated: true) } label: {
+-                            Image(systemName: "chevron.down")
+-                                .font(.system(size: Theme.s(16), weight: .bold)).foregroundStyle(Theme.title)
+-                                .frame(width: 44, height: 44).glass(Circle())
++                    .coordinateSpace(name: "chat")
++                    // The message box sits between the chat and the bar, so no extra gap here.
++                    .noTabBarGap()
++                    .scrollDismissesKeyboard(.interactively)
++                    .background(GeometryReader { g in
++                        Color.clear
++                            .onAppear { viewportHeight = g.size.height }
++                            .onChange(of: g.size.height) { h in
++                                viewportHeight = h
++                                // The keyboard (or the tab bar) changed the space: keep the
++                                // latest message in view if we were at the bottom.
++                                if atBottom { scrollToBottom(proxy, animated: false) }
++                            }
++                    })
++                    .onPreferenceChange(ChatBottomKey.self) { maxY in
++                        // At the bottom = the end of the chat is (nearly) on screen.
++                        let now = maxY <= viewportHeight + 40
++                        if now != atBottom { withAnimation(.easeOut(duration: 0.2)) { atBottom = now } }
++                    }
++                    .onAppear {
++                        scrollToBottom(proxy, animated: false)
++                        // Once more after the lazy rows have laid out.
++                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { scrollToBottom(proxy, animated: false) }
++                    }
++                    .onChange(of: model.selectedPartnerID) { _ in
++                        atBottom = true
++                        DispatchQueue.main.async { scrollToBottom(proxy, animated: false) }
++                    }
++                    .onChange(of: items.count) { _ in
++                        // Follow new messages only if we're at the bottom, or it's our own.
++                        let mineLast: Bool = {
++                            switch items.last {
++                            case .message(let m): return m.senderID == model.myUserID
++                            case .touch(let t): return t.senderID == model.myUserID || t.senderID == ChatMessage.legacySelf
++                            case nil: return false
++                            }
++                        }()
++                        if atBottom || mineLast { scrollToBottom(proxy, animated: true) }
++                    }
++                    .overlay(alignment: .bottomTrailing) {
++                        if !atBottom {
++                            Button { scrollToBottom(proxy, animated: true) } label: {
++                                Image(systemName: "chevron.down")
++                                    .font(.system(size: Theme.s(16), weight: .bold)).foregroundStyle(Theme.title)
++                                    .frame(width: 44, height: 44).glass(Circle())
++                            }
++                            .buttonStyle(.plain)
++                            .padding(.trailing, 16).padding(.bottom, 10)
++                            .transition(.scale.combined(with: .opacity))
++                            .accessibilityLabel("Jump to the latest message")
+                         }
+-                        .buttonStyle(.plain)
+-                        .padding(.trailing, 16).padding(.bottom, 10)
+-                        .transition(.scale.combined(with: .opacity))
+-                        .accessibilityLabel("Jump to the latest message")
+                     }
+                 }
++                inputBar
+             }
+-            inputBar
+         }
+         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in keyboardUp = true }
+         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in keyboardUp = false }
+@@ -118,16 +128,73 @@ struct ChatView: View {
+                 photo = nil
+             }
+         }
++        .sheet(isPresented: $showShare) {
++            InviteCodeSheet(url: model.pendingInviteURL)
++        }
++        .alert("Can't invite", isPresented: Binding(get: { shareError != nil }, set: { if !$0 { shareError = nil } })) {
++            Button("OK", role: .cancel) { shareError = nil }
++        } message: { Text(shareError ?? "") }
+         // While this chat is on screen, its message notifications stay quiet (see AppDelegate).
+         .onAppear { model.viewingChatBondID = model.selectedPartnerID }
+         .onChange(of: model.selectedPartnerID) { model.viewingChatBondID = $0 }
+         .onDisappear { model.viewingChatBondID = nil }
+     }
+ 
++    /// Shown for an original-app partner without an iCloud chat bond yet.
++    private var linkCard: some View {
++        let name = model.selectedPartner?.displayName ?? "your partner"
++        let linkable = model.cloudPartners.filter { !model.chatLinkedCloudIDs.contains($0.id) }
++        return VStack(alignment: .leading, spacing: 12) {
++            Label("Chat goes through iCloud", systemImage: "icloud.fill")
++                .font(Theme.font(17, .heavy)).foregroundStyle(.white)
++            Text("Messages and photos with \(name) are sent privately through iCloud. Invite them to Bond Touch Beyond chat — they open the link on their iPhone — or link the iCloud partner you already share with them.")
++                .font(Theme.font(14)).foregroundStyle(Theme.subtitle)
++                .fixedSize(horizontal: false, vertical: true)
++            Button {
++                guard let id = model.selectedPartnerID else { return }
++                inviting = true
++                Task {
++                    await model.inviteToICloudChat(id)
++                    inviting = false
++                    showShare = model.pendingInviteURL != nil
++                }
++            } label: {
++                HStack {
++                    if inviting { ProgressView().tint(Theme.onAccent) }
++                    Text("Invite \(name) to iCloud chat")
++                }
++            }
++            .buttonStyle(AccentButtonStyle())
++            .disabled(inviting)
++            if !linkable.isEmpty {
++                Text("Or link an iCloud partner").font(Theme.font(13, .bold)).foregroundStyle(Theme.subtitle)
++                    .padding(.top, 4)
++                ForEach(linkable) { p in
++                    Button {
++                        if let id = model.selectedPartnerID { model.linkChat(id, toCloudBond: p.id) }
++                    } label: {
++                        HStack(spacing: 10) {
++                            AvatarRing(name: p.displayName, ringColor: Color(rgbInt: p.colorRGB), size: 34,
++                                       photo: model.photo(forBond: p.id), ringWidth: 0)
++                            Text(p.displayName).font(Theme.font(15, .bold)).foregroundStyle(.white)
++                            Spacer()
++                            Image(systemName: "link").foregroundStyle(Theme.accent)
++                        }
++                        .padding(10).glass(cornerRadius: 18)
++                    }
++                    .buttonStyle(.plain)
++                }
++            }
++        }
++        .padding(18)
++        .glass(cornerRadius: 28)
++        .padding(16)
++    }
++
+     /// A touch in the chat: the touch drawn in a small glass card (a heartbeat as its EKG),
+     /// on the sender's side, with its meaning and a replay button.
+     private func touchBubble(_ t: TouchMessage) -> some View {
+-        let mine = t.senderID == model.myUserID || t.senderID == ChatMessage.localSelf
++        let mine = t.senderID == model.myUserID || t.senderID == ChatMessage.legacySelf
+         return VStack(alignment: mine ? .trailing : .leading, spacing: 4) {
+             HStack {
+                 if mine { Spacer(minLength: 60) }
+diff --git a/Sources/Views/DebugView.swift b/Sources/Views/DebugView.swift
+index 4873ff6..2ff3d33 100644
+--- a/Sources/Views/DebugView.swift
++++ b/Sources/Views/DebugView.swift
+@@ -1,7 +1,8 @@
+ import SwiftUI
+ 
+-/// Hidden diagnostics panel (tap the partner bar 5×). Shows the backend the app reads from
+-/// and writes to (the CloudKit relay), the current bonds and the touch send / receive log.
++/// Hidden diagnostics panel (tap the partner bar 5×). Shows exactly which backend the app
++/// is reading from and writing to right now — the CloudKit relay and the original Firebase
++/// project / Bond API, plus the signed-in account and the current bonds.
+ struct DebugView: View {
+     @EnvironmentObject var model: AppModel
+     @EnvironmentObject var store: LocalStore
+@@ -9,6 +10,13 @@ struct DebugView: View {
+     @AppStorage(Poly.modeKey) private var polyMode = Poly.Mode.auto.rawValue
+     @Environment(\.dismiss) private var dismiss
+ 
++    private var legacyActive: Bool { store.useLegacyFirebase && !store.firebaseAuthToken.isEmpty }
++
++    private var tokenExpiryText: String {
++        guard let exp = BondBackend.tokenExpiry(store.firebaseAuthToken) else { return "—" }
++        return exp.formatted(date: .abbreviated, time: .standard)
++    }
++
+     var body: some View {
+         NavigationStack {
+             ScrollView {
+@@ -30,21 +38,49 @@ struct DebugView: View {
+                     }
+ 
+                     section("Active data backend") {
+-                        row("Reads / writes", "CloudKit (iCloud)")
++                        row("Reads / writes", legacyActive ? "CloudKit (iCloud) + original Bond API, in parallel" : "CloudKit (iCloud)")
+                         row("CloudKit container", AppConfig.cloudContainerID)
+                         row("My CloudKit user ID", model.myUserID.isEmpty ? "—" : model.myUserID)
+                     }
+ 
++                    section("Original Firebase / Bond API") {
++                        NavigationLink {
++                            LegacyLoginView().screenBackground().navigationBarTitleDisplayMode(.inline)
++                        } label: {
++                            HStack {
++                                Text(store.legacyEmail.isEmpty ? "Sign in to a Bond Touch account" : "Bond Touch account")
++                                    .font(.footnote.bold()).foregroundStyle(Theme.accent)
++                                Spacer()
++                                Image(systemName: "chevron.right").font(.caption).foregroundStyle(Theme.subtitle)
++                            }
++                        }
++                        row("Signed in", store.legacyEmail.isEmpty ? "No" : store.legacyEmail)
++                        row("ID token present", store.firebaseAuthToken.isEmpty ? "No" : "Yes")
++                        row("Bridge enabled", store.useLegacyFirebase ? "Yes" : "No")
++                        row("Sync status", model.legacyStatus)
++                        row("Chat", "iCloud · \(store.chatLinks.count) original-app partner(s) linked")
++                        row("Firebase Storage", FirebaseStorage.appCheckBlocked
++                            ? "Blocked by App Check (official app only)" : "No App Check block seen")
++                        row("Last sync", model.legacyLastSync?.formatted(date: .omitted, time: .standard) ?? "—")
++                        row("Token expires", tokenExpiryText)
++                        row("Project", BondBackend.projectId)
++                        row("Realtime Database", BondBackend.rtdbURL)
++                        row("REST API", BondBackend.apiBase.absoluteString)
++                        row("Storage bucket", BondBackend.storageBucket)
++                        row("Firebase API key", BondBackend.apiKey)
++                        row("iOS bundle id (X-Ios-Bundle-Identifier)", BondBackend.iosBundleId)
++                    }
++
+                     section("Partners (\(model.partners.count))") {
+                         if model.partners.isEmpty { row("—", "none") }
+                         ForEach(model.partners) { p in
+-                            row(p.displayName, "iCloud · \(p.online ? "online" : "offline") · zone \(p.bond.id)")
++                            row(p.displayName, "\(p.bond.legacy ? "Bond API" : "iCloud") · \(p.online ? "online" : "offline") · \(p.bond.legacy ? "bondId" : "zone") \(p.bond.id)")
+                         }
+                     }
+ 
+                     if !model.pendingBonds.isEmpty {
+                         section("Pending invites (\(model.pendingBonds.count))") {
+-                            ForEach(model.pendingBonds) { b in row("Pending (iCloud)", b.id) }
++                            ForEach(model.pendingBonds) { b in row(b.legacy ? "Pending (Bond API)" : "Pending (iCloud)", b.id) }
+                         }
+                     }
+ 
+@@ -62,7 +98,7 @@ struct DebugView: View {
+                         }
+                         VStack(alignment: .leading, spacing: 8) {
+                             if netLog.entries.isEmpty {
+-                                Text("Send a touch, or wait for one to arrive, and it shows here — and whether it went through.")
++                                Text("Send a touch, or wait for one to arrive, and it shows here — which backend, and whether the server accepted it.")
+                                     .font(.footnote).foregroundStyle(Theme.subtitle)
+                             }
+                             ForEach(netLog.entries) { e in
+@@ -85,6 +121,23 @@ struct DebugView: View {
+                         .background(Theme.ink.opacity(0.06))
+                         .clipShape(RoundedRectangle(cornerRadius: Metric.cornerMedium))
+                     }
++
++                    section("My database") {
++                        if store.firebaseAuthToken.isEmpty {
++                            Text("Sign in above (Bond Touch account) to read your database.")
++                                .font(.footnote).foregroundStyle(Theme.subtitle)
++                        } else {
++                            NavigationLink {
++                                DataDumpView(bearer: store.firebaseAuthToken)
++                            } label: {
++                                Text("Load everything in my database")
++                                    .font(.headline).frame(maxWidth: .infinity).frame(height: Metric.buttonHeight)
++                                    .background(Theme.accent).foregroundStyle(Theme.onAccent)
++                                    .clipShape(RoundedRectangle(cornerRadius: Metric.cornerMedium))
++                            }
++                            .buttonStyle(.plain)
++                        }
++                    }
+                 }
+                 .padding(20)
+             }
+@@ -124,3 +177,145 @@ struct DebugView: View {
+         }
+     }
+ }
++
++/// Shows everything the signed-in account can read from the original Bond Touch database
++/// (api.bond-touch.com) as a collapsible, colour-coded JSON tree — one section per endpoint,
++/// with an editor (PUT) on the endpoints that accept writes.
++private struct DataDumpView: View {
++    let bearer: String
++    @State private var items: [BondBackend.Fetched] = []
++    @State private var loading = true
++    @State private var exportURL: URL?
++
++    var body: some View {
++        List {
++            if loading {
++                HStack { Spacer(); ProgressView().tint(Theme.accent); Spacer() }
++                    .listRowBackground(Color.clear)
++            }
++            ForEach(items) { item in
++                Section {
++                    if let json = item.json {
++                        JSONNode(key: nil, value: json)
++                            .listRowBackground(Theme.ink.opacity(0.04))
++                    } else {
++                        Text(item.pretty)
++                            .font(.system(size: Theme.s(11), design: .monospaced)).foregroundStyle(Theme.title)
++                            .textSelection(.enabled)
++                            .listRowBackground(Theme.ink.opacity(0.04))
++                    }
++                    if item.editable {
++                        NavigationLink {
++                            EndpointEditorView(path: item.path, initial: item.pretty, bearer: bearer)
++                        } label: {
++                            Label("Edit (PUT)", systemImage: "pencil").foregroundStyle(Theme.accent)
++                        }
++                        .listRowBackground(Theme.ink.opacity(0.04))
++                    }
++                } header: {
++                    Text("/\(item.path)  ·  HTTP \(item.status)")
++                        .font(.caption.monospaced()).foregroundStyle(Theme.subtitle)
++                }
++            }
++        }
++        .listStyle(.plain)
++        .scrollContentBackground(.hidden)
++        .screenBackground()
++        .navigationTitle("My database")
++        .navigationBarTitleDisplayMode(.inline)
++        .toolbar {
++            ToolbarItem(placement: .primaryAction) {
++                Button { Task { await load() } } label: { Image(systemName: "arrow.clockwise") }
++                    .disabled(loading)
++            }
++            ToolbarItem(placement: .primaryAction) {
++                if let exportURL {
++                    ShareLink(item: exportURL) { Image(systemName: "square.and.arrow.up") }
++                        .accessibilityLabel("Export database")
++                }
++            }
++        }
++        .task { await load() }
++    }
++
++    private func load() async {
++        loading = true
++        items = await BondBackend.dumpAccountStructured(bearer: bearer)
++        exportURL = writeExport(items)
++        loading = false
++    }
++
++    /// Writes everything fetched to one pretty-printed JSON file for the share sheet
++    /// (save to Files, AirDrop, mail…): `{ "exportedAt", "endpoints": { "/path": {status, body} } }`.
++    private func writeExport(_ items: [BondBackend.Fetched]) -> URL? {
++        var endpoints: [String: Any] = [:]
++        for item in items {
++            endpoints["/" + item.path] = ["status": item.status, "body": item.json ?? item.pretty]
++        }
++        let root: [String: Any] = [
++            "exportedAt": ISO8601DateFormatter().string(from: Date()),
++            "source": BondBackend.apiBase.absoluteString,
++            "endpoints": endpoints
++        ]
++        guard JSONSerialization.isValidJSONObject(root),
++              let data = try? JSONSerialization.data(withJSONObject: root, options: [.prettyPrinted, .sortedKeys])
++        else { return nil }
++        let stamp = ISO8601DateFormatter().string(from: Date()).replacingOccurrences(of: ":", with: "-")
++        let url = FileManager.default.temporaryDirectory.appendingPathComponent("BondTouch-database-\(stamp).json")
++        do { try data.write(to: url, options: .atomic); return url } catch { return nil }
++    }
++}
++
++/// Raw JSON editor for one endpoint: edit the body and PUT it back.
++private struct EndpointEditorView: View {
++    let path: String
++    let bearer: String
++    @State private var text: String
++    @State private var result = ""
++    @State private var busy = false
++
++    init(path: String, initial: String, bearer: String) {
++        self.path = path
++        self.bearer = bearer
++        _text = State(initialValue: initial)
++    }
++
++    var body: some View {
++        VStack(spacing: 12) {
++            TextEditor(text: $text)
++                .font(.system(size: Theme.s(12), design: .monospaced)).foregroundStyle(Theme.title)
++                .scrollContentBackground(.hidden)
++                .padding(8).background(Theme.ink.opacity(0.06))
++                .clipShape(RoundedRectangle(cornerRadius: Metric.cornerMedium))
++            Button { Task { await save() } } label: {
++                HStack { if busy { ProgressView().tint(Theme.onAccent) }; Text("Save (PUT)").font(.headline) }
++                    .frame(maxWidth: .infinity).frame(height: Metric.buttonHeight)
++                    .background(Theme.accent).foregroundStyle(Theme.onAccent)
++                    .clipShape(RoundedRectangle(cornerRadius: Metric.cornerMedium))
++            }
++            .buttonStyle(.plain).disabled(busy)
++            if !result.isEmpty {
++                ScrollView {
++                    Text(result).font(.system(size: Theme.s(11), design: .monospaced)).foregroundStyle(Theme.title)
++                        .textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
++                }
++                .frame(maxHeight: 180)
++            }
++            Spacer()
++        }
++        .padding(16)
++        .screenBackground()
++        .navigationTitle(path)
++        .navigationBarTitleDisplayMode(.inline)
++    }
++
++    private func save() async {
++        busy = true; result = ""
++        guard let data = text.data(using: .utf8),
++              (try? JSONSerialization.jsonObject(with: data)) != nil else {
++            result = "Invalid JSON — fix it before saving."; busy = false; return
++        }
++        result = await BondBackend.putRaw(path, body: data, bearer: bearer)
++        busy = false
++    }
++}
+diff --git a/Sources/Views/HomeView.swift b/Sources/Views/HomeView.swift
+index 269505e..dfbd3e8 100644
+--- a/Sources/Views/HomeView.swift
++++ b/Sources/Views/HomeView.swift
+@@ -459,7 +459,7 @@ struct HomeView: View {
+ 
+     /// "Last sent 5 min ago · Last received 2 hr ago", as the original's history header.
+     private func summary(_ touches: [TouchMessage]) -> some View {
+-        let isMine: (TouchMessage) -> Bool = { $0.senderID == model.myUserID || $0.senderID == ChatMessage.localSelf }
++        let isMine: (TouchMessage) -> Bool = { $0.senderID == model.myUserID || $0.senderID == ChatMessage.legacySelf }
+         let sent = touches.first(where: isMine)?.sentAt
+         let received = touches.first(where: { !isMine($0) })?.sentAt
+         let missed = touches.filter { !isMine($0) && $0.missed == true }.count
+@@ -528,7 +528,7 @@ struct HomeView: View {
+     private static let rowHeight: CGFloat = 84
+ 
+     private func touchRow(_ touch: TouchMessage) -> some View {
+-        let mine = touch.senderID == model.myUserID || touch.senderID == ChatMessage.localSelf
++        let mine = touch.senderID == model.myUserID || touch.senderID == ChatMessage.legacySelf
+         let meaning = model.meaningTag(for: touch)
+         let h = Self.rowHeight
+         return ZStack(alignment: .trailing) {
+diff --git a/Sources/Views/Layouts/HomeKit.swift b/Sources/Views/Layouts/HomeKit.swift
+index 7af19a9..766f5c7 100644
+--- a/Sources/Views/Layouts/HomeKit.swift
++++ b/Sources/Views/Layouts/HomeKit.swift
+@@ -82,7 +82,7 @@ struct HomeRouter: View {
+ // MARK: - Shared pieces
+ 
+ extension AppModel {
+-    func isMine(_ t: TouchMessage) -> Bool { t.senderID == myUserID || t.senderID == ChatMessage.localSelf }
++    func isMine(_ t: TouchMessage) -> Bool { t.senderID == myUserID || t.senderID == ChatMessage.legacySelf }
+ 
+     /// Touches with `bondID` (the selected partner by default), newest first.
+     func recentTouches(with bondID: String? = nil, limit: Int = 40) -> [TouchMessage] {
+diff --git a/Sources/Views/PairingView.swift b/Sources/Views/PairingView.swift
+index 25300e4..fb1acfc 100644
+--- a/Sources/Views/PairingView.swift
++++ b/Sources/Views/PairingView.swift
+@@ -5,6 +5,8 @@ import UIKit
+ struct PairingView: View {
+     @EnvironmentObject var model: AppModel
+     @State private var shareError: String?
++    @State private var inviteEmail = ""
++    @State private var inviting = false
+     @State private var inviteResult: String?
+     @State private var joinCode = ""
+     @State private var joining = false
+@@ -44,6 +46,8 @@ struct PairingView: View {
+             }
+ 
+             joinBlock
++
++            if model.legacySignedIn { emailInvite }
+         }
+         .padding()
+         }
+@@ -126,6 +130,50 @@ struct PairingView: View {
+         .padding(14)
+         .background(Theme.amber.opacity(0.16), in: RoundedRectangle(cornerRadius: Metric.cornerMedium))
+     }
++
++    /// Invite someone who uses the original Bond Touch app, by their account email
++    /// (`POST bond/api/v4/bonds`). They accept it in their app.
++    private var emailInvite: some View {
++        VStack(alignment: .leading, spacing: 10) {
++            Divider().overlay(Theme.ink.opacity(0.1))
++            Text("Partner on the original Bond Touch app?")
++                .font(.headline).foregroundStyle(Theme.title)
++            Text("Invite them with the email on their Bond Touch account.")
++                .font(.footnote).foregroundStyle(Theme.subtitle)
++            TextField("name@email.com", text: $inviteEmail)
++                .textContentType(.emailAddress).keyboardType(.emailAddress)
++                .autocorrectionDisabled().textInputAutocapitalization(.never)
++                .padding(12).background(Theme.ink.opacity(0.08))
++                .clipShape(RoundedRectangle(cornerRadius: Metric.cornerMedium)).foregroundStyle(Theme.title)
++            Button {
++                Task {
++                    inviting = true; inviteResult = nil
++                    do {
++                        try await model.legacyInvite(email: inviteEmail)
++                        inviteResult = "Invite sent to \(inviteEmail)."
++                        inviteEmail = ""
++                    } catch {
++                        inviteResult = error.localizedDescription
++                    }
++                    inviting = false
++                }
++            } label: {
++                HStack {
++                    if inviting { ProgressView().tint(Theme.onAccent) }
++                    Text("Send invite").font(.headline)
++                }
++                .frame(maxWidth: .infinity).frame(height: Metric.buttonHeight)
++                .background(inviteEmail.contains("@") ? Theme.accent : Theme.ink.opacity(0.2))
++                .foregroundStyle(Theme.onAccent)
++                .clipShape(RoundedRectangle(cornerRadius: Metric.cornerMedium))
++            }
++            .buttonStyle(.plain)
++            .disabled(!inviteEmail.contains("@") || inviting)
++            if let inviteResult {
++                Text(inviteResult).font(.footnote).foregroundStyle(Theme.subtitle)
++            }
++        }
++    }
+ }
+ 
+ /// A sheet showing a bond's invite code + link (used from a partner/chat screen).
+diff --git a/Sources/Views/PartnerDetailView.swift b/Sources/Views/PartnerDetailView.swift
+index a5e9984..0d22caa 100644
+--- a/Sources/Views/PartnerDetailView.swift
++++ b/Sources/Views/PartnerDetailView.swift
+@@ -17,6 +17,9 @@ struct PartnerDetailView: View {
+     @State private var color = Color.white
+     @State private var showEncounters = false
+     @State private var confirmUnbond = false
++    @State private var showShare = false
++    @State private var shareError: String?
++    @State private var inviting = false
+ 
+     private var partner: Partner? { model.partners.first { $0.id == partnerID } }
+     private var photo: UIImage? { model.photo(forBond: partnerID) }
+@@ -87,7 +90,9 @@ struct PartnerDetailView: View {
+                         }
+                         .padding(16).glass(cornerRadius: 22)
+ 
+-                        TouchOrKissRow(bondID: partner.id, name: partner.displayName)
++                        if !partner.bond.legacy {
++                            TouchOrKissRow(bondID: partner.id, name: partner.displayName)
++                        }
+ 
+                         AboutCard(name: partner.displayName, about: model.partnerAbout(partner.id))
+ 
+@@ -165,6 +170,12 @@ struct PartnerDetailView: View {
+             if new.rgbInt != partner?.colorRGB { model.setPartnerColor(new.rgbInt, for: partnerID) }
+         }
+         .sheet(isPresented: $showEncounters) { EncountersView(bondID: partnerID) }
++        .sheet(isPresented: $showShare) {
++            InviteCodeSheet(url: model.pendingInviteURL)
++        }
++        .alert("Can't invite", isPresented: Binding(get: { shareError != nil }, set: { if !$0 { shareError = nil } })) {
++            Button("OK", role: .cancel) { shareError = nil }
++        } message: { Text(shareError ?? "") }
+         .confirmationDialog("Unbond from \(partner?.displayName ?? "this partner")?",
+                             isPresented: $confirmUnbond, titleVisibility: .visible) {
+             Button("Unbond", role: .destructive) {
+@@ -173,21 +184,42 @@ struct PartnerDetailView: View {
+         }
+     }
+ 
+-    /// How this partner syncs: privately through iCloud.
++    /// How this partner syncs: iCloud, or the original servers with an invite to move.
+     @ViewBuilder private func connectionCard(_ p: Partner) -> some View {
+         VStack(alignment: .leading, spacing: 10) {
+             HStack(spacing: 10) {
+-                Image(systemName: "icloud.fill")
+-                    .foregroundStyle(Theme.accent)
++                Image(systemName: p.bond.legacy ? "antenna.radiowaves.left.and.right" : "icloud.fill")
++                    .foregroundStyle(p.bond.legacy ? Theme.amber : Theme.accent)
+                 VStack(alignment: .leading, spacing: 2) {
+-                    Text("On iCloud")
++                    Text(p.bond.legacy ? "Original Bond Touch app" : "On iCloud")
+                         .font(Theme.font(16, .bold)).foregroundStyle(Theme.title)
+-                    Text("Everything syncs privately through iCloud")
++                    Text(p.bond.legacy
++                         ? (model.store.chatLinks[p.id] != nil
++                            ? "Invite sent — everything moves to iCloud when they accept"
++                            : "Touches sync through the original servers; chat needs iCloud")
++                         : "Everything syncs privately through iCloud")
+                         .font(Theme.font(12)).foregroundStyle(Theme.subtitle)
+                         .fixedSize(horizontal: false, vertical: true)
+                 }
+                 Spacer()
+             }
++            if p.bond.legacy {
++                Button {
++                    inviting = true
++                    Task {
++                        await model.inviteToICloudChat(p.id)
++                        inviting = false
++                        if let msg = model.iCloudStatus { shareError = msg } else { showShare = model.pendingInviteURL != nil }
++                    }
++                } label: {
++                    HStack {
++                        if inviting { ProgressView().tint(Theme.onAccent) }
++                        Text(model.store.chatLinks[p.id] != nil ? "Send the iCloud invite again" : "Invite \(p.displayName) to iCloud")
++                    }
++                }
++                .buttonStyle(AccentButtonStyle(height: 46))
++                .disabled(inviting)
++            }
+         }
+         .padding(16).glass(cornerRadius: 22)
+     }
+diff --git a/Sources/Views/PeopleView.swift b/Sources/Views/PeopleView.swift
+index e3b2731..3aefa7d 100644
+--- a/Sources/Views/PeopleView.swift
++++ b/Sources/Views/PeopleView.swift
+@@ -10,7 +10,11 @@ struct PeopleView: View {
+     var body: some View {
+         ScrollView {
+             VStack(alignment: .leading, spacing: 16) {
+-                if model.partners.isEmpty && model.pendingBonds.isEmpty {
++                ForEach(model.incomingInvites) { bond in
++                    inviteRow(bond)
++                }
++
++                if model.partners.isEmpty && model.pendingBonds.isEmpty && model.incomingInvites.isEmpty {
+                     Text("You haven't added a partner yet.")
+                         .foregroundStyle(Theme.subtitle)
+                         .frame(maxWidth: .infinity, alignment: .center)
+@@ -98,8 +102,8 @@ struct PeopleView: View {
+                 Circle().fill(Theme.ink.opacity(0.12)).frame(width: 40, height: 40)
+                     .overlay(Image(systemName: "hourglass").foregroundStyle(Theme.subtitle))
+                 VStack(alignment: .leading, spacing: 2) {
+-                    Text("Pending invite").foregroundStyle(Theme.title)
+-                    Text("Waiting for your partner to accept")
++                    Text(bond.legacy ? bond.partnerName : "Pending invite").foregroundStyle(Theme.title)
++                    Text(bond.legacy ? "Invite sent · waiting for them to accept" : "Waiting for your partner to accept")
+                         .font(.caption).foregroundStyle(Theme.subtitle)
+                 }
+                 Spacer()
+@@ -111,6 +115,36 @@ struct PeopleView: View {
+         }
+     }
+ 
++    /// A bond invite another original-app user sent to this account.
++    private func inviteRow(_ bond: Bond) -> some View {
++        GlassCard {
++            VStack(alignment: .leading, spacing: 12) {
++                HStack(spacing: 14) {
++                    Circle().fill(Theme.accent.opacity(0.25)).frame(width: 40, height: 40)
++                        .overlay(Image(systemName: "envelope.fill").foregroundStyle(Theme.accent))
++                    VStack(alignment: .leading, spacing: 2) {
++                        Text(bond.partnerName).foregroundStyle(Theme.title)
++                        Text("wants to bond with you").font(.caption).foregroundStyle(Theme.subtitle)
++                    }
++                    Spacer()
++                }
++                HStack(spacing: 12) {
++                    Button { Task { await model.legacyAccept(bond) } } label: {
++                        Text("Accept").font(.headline).frame(maxWidth: .infinity).frame(height: 40)
++                            .background(Theme.accent).foregroundStyle(Theme.onAccent)
++                            .clipShape(RoundedRectangle(cornerRadius: Metric.cornerMedium))
++                    }
++                    Button { Task { await model.removeBond(bond) } } label: {
++                        Text("Decline").font(.headline).frame(maxWidth: .infinity).frame(height: 40)
++                            .background(Theme.ink.opacity(0.08)).foregroundStyle(Theme.title)
++                            .clipShape(RoundedRectangle(cornerRadius: Metric.cornerMedium))
++                    }
++                }
++                .buttonStyle(.plain)
++            }
++        }
++    }
++
+     private func presenceText(_ p: Partner) -> String {
+         if p.online { return "Online now" }
+         if let seen = p.lastSeen {
+diff --git a/Sources/Views/SettingsView.swift b/Sources/Views/SettingsView.swift
+index b923d87..b49e046 100644
+--- a/Sources/Views/SettingsView.swift
++++ b/Sources/Views/SettingsView.swift
+@@ -15,6 +15,11 @@ struct SettingsView: View {
+                 Text("Settings").font(.title3.bold()).foregroundStyle(Theme.title).padding(.top, 10)
+ 
+                 MyPhotoPicker(size: 110)
++                if model.myPhoto == nil, model.legacySignedIn, FirebaseStorage.appCheckBlocked {
++                    Text("Bond Touch's servers won't hand your photo to any app but theirs. Tap your picture and choose the same photo once — it's then shared with your partners.")
++                        .font(.caption).foregroundStyle(Theme.subtitle)
++                        .multilineTextAlignment(.center).padding(.horizontal, 20)
++                }
+                 Text(store.profile.name.isEmpty ? "Me" : store.profile.name)
+                     .font(.title2.bold()).foregroundStyle(Theme.title)
+                 HStack(spacing: 6) {
+diff --git a/Sources/Views/Together/PolyViews.swift b/Sources/Views/Together/PolyViews.swift
+index 832d693..43717e8 100644
+--- a/Sources/Views/Together/PolyViews.swift
++++ b/Sources/Views/Together/PolyViews.swift
+@@ -16,7 +16,7 @@ struct PolyCalendarView: View {
+ 
+     private var rows: [Row] {
+         let start = Calendar.current.startOfDay(for: Date())
+-        return model.partners.flatMap { p in
++        return model.partners.filter { !$0.bond.legacy }.flatMap { p in
+             syncLive(together.space(p.id).events).filter { $0.end >= start }.map { Row(event: $0, partner: p) }
+         }
+         .sorted { $0.event.start < $1.event.start }
+@@ -49,7 +49,7 @@ struct PolyCalendarView: View {
+     private var legend: some View {
+         ScrollView(.horizontal, showsIndicators: false) {
+             HStack(spacing: 8) {
+-                ForEach(model.partners) { p in
++                ForEach(model.partners.filter { !$0.bond.legacy }) { p in
+                     HStack(spacing: 5) {
+                         Circle().fill(Color(rgbInt: p.colorRGB)).frame(width: 10, height: 10)
+                         Text(p.displayName).font(Theme.font(12, .bold)).foregroundStyle(Theme.title)
+@@ -98,7 +98,7 @@ struct CalendarEventEditor: View {
+         NavigationStack {
+             Form {
+                 Picker("Shared with", selection: $partnerID) {
+-                    ForEach(model.partners) { p in Text(p.displayName).tag(Optional(p.id)) }
++                    ForEach(model.partners.filter { !$0.bond.legacy }) { p in Text(p.displayName).tag(Optional(p.id)) }
+                 }
+                 TextField("What, e.g. Date night", text: $title)
+                 TextField("With (Us, a metamour, family…)", text: $with)
+diff --git a/Sources/Views/Together/TogetherView.swift b/Sources/Views/Together/TogetherView.swift
+index badacc0..a8fb4f4 100644
+--- a/Sources/Views/Together/TogetherView.swift
++++ b/Sources/Views/Together/TogetherView.swift
+@@ -32,10 +32,15 @@ struct TogetherView: View {
+                 .padding(.top, 8)
+ 
+                 if let partner {
+-                    header(partner)
+-                    if Feature.dates.isOn { datesCard }
+-                    if Feature.likes.isOn { likesCard(partner) }
+-                    tiles
++                    if partner.bond.legacy {
++                        Text("The Us space works with partners paired over iCloud.")
++                            .font(Theme.font(14)).foregroundStyle(Theme.subtitle).padding().glass(cornerRadius: 20)
++                    } else {
++                        header(partner)
++                        if Feature.dates.isOn { datesCard }
++                        if Feature.likes.isOn { likesCard(partner) }
++                        tiles
++                    }
+                 } else {
+                     Text("Add a partner to start your Us space.")
+                         .font(Theme.font(15)).foregroundStyle(Theme.subtitle).padding(.top, 40)
+diff --git a/Sources/Watch/WatchBridge.swift b/Sources/Watch/WatchBridge.swift
+index d7ccf1b..8b7a15e 100644
+--- a/Sources/Watch/WatchBridge.swift
++++ b/Sources/Watch/WatchBridge.swift
+@@ -5,7 +5,8 @@ import WatchConnectivity
+ 
+ /// The phone's side of the Apple Watch link: publishes partners, the selected partner, each
+ /// partner's Touch Language and the touch window in the application context, and relays
+-/// touches and selections from the watch through the normal send path (iCloud).
++/// touches and selections from the watch through the normal send path (iCloud or the
++/// original backend).
+ final class WatchBridge: NSObject, WCSessionDelegate {
+     weak var model: AppModel?
+     private var cancellables: Set<AnyCancellable> = []
+@@ -16,8 +17,8 @@ final class WatchBridge: NSObject, WCSessionDelegate {
+         self.model = model
+         WCSession.default.delegate = self
+         WCSession.default.activate()
+-        Publishers.CombineLatest3(model.$cloudPartners, model.$selectedPartnerID,
+-                                  model.store.$cloudMeanings)
++        Publishers.CombineLatest4(model.$cloudPartners, model.$legacyPartners,
++                                  model.$selectedPartnerID, model.$legacyMeanings)
+             .debounce(for: .seconds(1), scheduler: DispatchQueue.main)
+             .sink { [weak self] _ in Task { @MainActor in self?.push() } }
+             .store(in: &cancellables)
+@@ -39,7 +40,7 @@ final class WatchBridge: NSObject, WCSessionDelegate {
+                 var d: [String: Any] = ["name": $0.label, "pattern": $0.pattern, "gen": $0.touchGeneration,
+                                         "start": $0.colorRGB, "end": $0.endColorRGB,
+                                         "fav": $0.favourite == true]
+-                if let sid = $0.serverID { d["meaningId"] = sid }   // an id kept from older versions
++                if let sid = $0.serverID { d["meaningId"] = sid }   // so it lights the partner's bracelet
+                 return d
+             }
+         }
+@@ -124,7 +125,7 @@ final class WatchBridge: NSObject, WCSessionDelegate {
+ 
+     @MainActor
+     private static func encode(_ t: TouchMessage, model: AppModel) -> [String: Any] {
+-        let mine = t.senderID == model.myUserID || t.senderID == ChatMessage.localSelf
++        let mine = t.senderID == model.myUserID || t.senderID == ChatMessage.legacySelf
+         var d: [String: Any] = ["id": t.id.uuidString, "bond": t.bondID, "pattern": t.pattern, "gen": t.generation,
+                                 "start": t.colorRGB, "end": t.endColorRGB, "at": t.sentAt.timeIntervalSince1970,
+                                 "mine": mine]
+diff --git a/Watch/BondWatchApp.swift b/Watch/BondWatchApp.swift
+index 091fd4a..768834c 100644
+--- a/Watch/BondWatchApp.swift
++++ b/Watch/BondWatchApp.swift
+@@ -4,7 +4,7 @@ import WatchKit
+ 
+ /// Bond Touch Beyond for Apple Watch: a touch bar (tap and slide, recorded like the Bond
+ /// Touch More bar) and one-tap Touch Language meanings. The phone relays everything, so it
+-/// works with every partner; the watch needs no account.
++/// works with iCloud and original-app partners alike; the watch needs no account.
+ @main
+ struct BondWatchApp: App {
+     @WKApplicationDelegateAdaptor private var delegate: WatchAppDelegate
+@@ -36,7 +36,7 @@ struct WatchMeaning: Identifiable, Equatable {
+     let generation: Int
+     let startRGB: Int
+     let endRGB: Int
+-    /// An id older versions kept from the original Bond Touch servers (unused).
++    /// The meaning's id on the original backend (so it lights the partner's bracelet).
+     var serverID: String? = nil
+     var favourite = false
+ }
+diff --git a/project.yml b/project.yml
+index a364452..6903457 100644
+--- a/project.yml
++++ b/project.yml
+@@ -26,10 +26,33 @@ packages:
+     exactVersion: 4.15.3
+ 
+ targets:
++  # Signal's LibSignalClient v0.86.5 (AGPL-3.0) — the same Signal-protocol library the
++  # original iOS app ships, needed to interoperate with its end-to-end encrypted chat.
++  # Swift sources are vendored in ThirdParty/LibSignalClient; the Rust core
++  # (libsignal_ffi.a) is fetched by scripts/fetch-libsignal-ffi.sh (SHA-256 pinned).
++  LibSignalClient:
++    type: framework.static
++    platform: iOS
++    sources:
++      - path: ThirdParty/LibSignalClient/LibSignalClient
++    settings:
++      base:
++        SWIFT_VERSION: "5"
++        PRODUCT_BUNDLE_IDENTIFIER: org.signal.libsignal-client
++        SWIFT_INCLUDE_PATHS: $(SRCROOT)/ThirdParty/LibSignalClient/SignalFfi
++        HEADER_SEARCH_PATHS: $(SRCROOT)/ThirdParty/LibSignalClient/SignalFfi
++        GENERATE_INFOPLIST_FILE: YES
++        SKIP_INSTALL: YES
++        BUILD_LIBRARY_FOR_DISTRIBUTION: NO
++        OTHER_SWIFT_FLAGS: -suppress-warnings
++
+   BondTouchBeyond:
+     type: application
+     platform: iOS
+     dependencies:
++      - target: LibSignalClient
++        link: true
++        embed: false
+       - target: BondTouchBeyondWatch
+       - target: BondTouchBeyondNotificationService
+       - target: BondTouchBeyondNotificationContent
+@@ -138,6 +161,14 @@ targets:
+         # The original icon stays selectable in Settings → App icon.
+         ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES: AppIconClassic
+         ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS: YES
++        # LibSignalClient imports the SignalFfi C module; the app must see it too, and the
++        # final link pulls in the prebuilt Rust core for the SDK/arch being built.
++        SWIFT_INCLUDE_PATHS: $(SRCROOT)/ThirdParty/LibSignalClient/SignalFfi
++        HEADER_SEARCH_PATHS: $(SRCROOT)/ThirdParty/LibSignalClient/SignalFfi
++        "LIBRARY_SEARCH_PATHS[sdk=iphoneos*]": $(SRCROOT)/ThirdParty/libsignal-ffi/target/aarch64-apple-ios/release
++        "LIBRARY_SEARCH_PATHS[sdk=iphonesimulator*][arch=arm64]": $(SRCROOT)/ThirdParty/libsignal-ffi/target/aarch64-apple-ios-sim/release
++        "LIBRARY_SEARCH_PATHS[sdk=iphonesimulator*][arch=x86_64]": $(SRCROOT)/ThirdParty/libsignal-ffi/target/x86_64-apple-ios/release
++        OTHER_LDFLAGS: -lsignal_ffi -lz
+ 
+   # Apple Watch app: a touch bar and one-tap meanings, relayed through the phone
+   # (WatchConnectivity). Embedded in the iOS app.

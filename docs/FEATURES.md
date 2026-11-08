@@ -6,6 +6,10 @@ model, and how each feature syncs. BLE/hardware details are in
 [BLE_PROTOCOL.md](BLE_PROTOCOL.md); backend, Room schema, API endpoints, Firebase
 usage, and crypto are in [DATA_MODEL.md](DATA_MODEL.md).
 
+> This describes the **original** app and its servers. Bond Touch Beyond does not talk to
+> Bond Touch's servers (see [BOND_TOUCH_CLOUD.md](BOND_TOUCH_CLOUD.md) for the bridge that
+> earlier versions had, now removed).
+
 ---
 
 ## Onboarding & Auth

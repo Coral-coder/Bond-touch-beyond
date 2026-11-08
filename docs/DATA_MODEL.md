@@ -5,6 +5,9 @@ and cryptography of the original Android app `com.impossible.bondtouch` v11.2.0
 (versionCode 490). Feature behavior is in [FEATURES.md](FEATURES.md); the bracelet
 protocol is in [BLE_PROTOCOL.md](BLE_PROTOCOL.md).
 
+> Bond Touch Beyond no longer calls any of the Bond endpoints below. What earlier versions
+> called, and how, is in [BOND_TOUCH_CLOUD.md](BOND_TOUCH_CLOUD.md).
+
 ---
 
 ## 1. Hosts, URLs, and telemetry destinations
@@ -308,7 +311,7 @@ identity is entirely Firebase Auth.
 - DELETE `/heart/api/v2/requests/{id}`
 - PUT `/heart/api/v2/heartbeats/{id}/requests`
 
-Bodies (Gson, Kotlin field names; `Sources/Legacy/HeartAPI.swift`): list →
+Bodies (Gson, Kotlin field names; `archive/bond-touch-cloud/Sources/Legacy/HeartAPI.swift`): list →
 `{heartbeats: [{id, pattern [ms], name, color, createdDate, createdBy, hasMemory, isSelf,
 emails}], pendingHeartbeats: [{id, pattern, name, color, createdDate, createdBy, message}]}`;
 create `{pattern, name, color (& 0xFFFFFF), isSelf: false, createdDate (epoch ms), hasMemory,
