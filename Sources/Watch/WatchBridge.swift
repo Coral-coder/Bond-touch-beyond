@@ -5,8 +5,7 @@ import WatchConnectivity
 
 /// The phone's side of the Apple Watch link: publishes partners, the selected partner, each
 /// partner's Touch Language and the touch window in the application context, and relays
-/// touches and selections from the watch through the normal send path (iCloud or the
-/// original backend).
+/// touches and selections from the watch through the normal send path (iCloud).
 final class WatchBridge: NSObject, WCSessionDelegate {
     weak var model: AppModel?
     private var cancellables: Set<AnyCancellable> = []
@@ -17,8 +16,8 @@ final class WatchBridge: NSObject, WCSessionDelegate {
         self.model = model
         WCSession.default.delegate = self
         WCSession.default.activate()
-        Publishers.CombineLatest4(model.$cloudPartners, model.$legacyPartners,
-                                  model.$selectedPartnerID, model.$legacyMeanings)
+        Publishers.CombineLatest3(model.$cloudPartners, model.$selectedPartnerID,
+                                  model.store.$cloudMeanings)
             .debounce(for: .seconds(1), scheduler: DispatchQueue.main)
             .sink { [weak self] _ in Task { @MainActor in self?.push() } }
             .store(in: &cancellables)
@@ -40,7 +39,7 @@ final class WatchBridge: NSObject, WCSessionDelegate {
                 var d: [String: Any] = ["name": $0.label, "pattern": $0.pattern, "gen": $0.touchGeneration,
                                         "start": $0.colorRGB, "end": $0.endColorRGB,
                                         "fav": $0.favourite == true]
-                if let sid = $0.serverID { d["meaningId"] = sid }   // so it lights the partner's bracelet
+                if let sid = $0.serverID { d["meaningId"] = sid }   // an id kept from older versions
                 return d
             }
         }
@@ -125,7 +124,7 @@ final class WatchBridge: NSObject, WCSessionDelegate {
 
     @MainActor
     private static func encode(_ t: TouchMessage, model: AppModel) -> [String: Any] {
-        let mine = t.senderID == model.myUserID || t.senderID == ChatMessage.legacySelf
+        let mine = t.senderID == model.myUserID || t.senderID == ChatMessage.localSelf
         var d: [String: Any] = ["id": t.id.uuidString, "bond": t.bondID, "pattern": t.pattern, "gen": t.generation,
                                 "start": t.colorRGB, "end": t.endColorRGB, "at": t.sentAt.timeIntervalSince1970,
                                 "mine": mine]

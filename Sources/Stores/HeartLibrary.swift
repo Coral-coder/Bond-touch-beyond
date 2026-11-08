@@ -2,8 +2,7 @@ import Foundation
 import UIKit
 
 /// The Bond Heart library, kept on this device: saved heartbeats (JSON in Application
-/// Support), their memory photos (JPEG files beside it), which one the pendant wears, and
-/// what the original Heart API last reported (pending heartbeats and requests).
+/// Support), their memory photos (JPEG files beside it), and which one the pendant wears.
 @MainActor
 final class HeartLibrary: ObservableObject {
     @Published private(set) var items: [SavedHeartbeat] = []
@@ -13,27 +12,18 @@ final class HeartLibrary: ObservableObject {
     /// The pendant's played counter when the heartbeat was put on (the count shared is the
     /// reading minus this).
     @Published private(set) var countBaseline: Int?
-    /// When the heartbeat count was last shared (the original allows once every 24 hours).
-    @Published var lastCountShare: Date?
-    /// `controlTimestamp` the server returned last; sent back with the next count.
-    var controlTimestamp = 0
 
-    // From the original Heart API (not stored).
-    @Published var pending: [PendingHeartbeat] = []
-    @Published var requests: [HeartRequest] = []
-    @Published var syncStatus = ""
-    @Published var lastSync: Date?
-    /// Server ids deleted here that still need deleting on the server.
-    private(set) var deletedServerIDs: [String] = []
-
+    /// The saved file. `lastCountShare`, `controlTimestamp` and `deletedServerIDs` were for
+    /// the original Bond Touch Heart API; they're still read (optional) so a library saved by
+    /// an older version decodes, and no longer written.
     private struct Saved: Codable {
         var items: [SavedHeartbeat]
         var wornID: UUID?
         var wornAt: Date?
         var countBaseline: Int?
         var lastCountShare: Date?
-        var controlTimestamp: Int
-        var deletedServerIDs: [String]
+        var controlTimestamp: Int?
+        var deletedServerIDs: [String]?
     }
 
     private static var folder: URL {
@@ -51,16 +41,11 @@ final class HeartLibrary: ObservableObject {
             wornID = s.wornID
             wornAt = s.wornAt
             countBaseline = s.countBaseline
-            lastCountShare = s.lastCountShare
-            controlTimestamp = s.controlTimestamp
-            deletedServerIDs = s.deletedServerIDs
         }
     }
 
     func save() {
-        let s = Saved(items: items, wornID: wornID, wornAt: wornAt, countBaseline: countBaseline,
-                      lastCountShare: lastCountShare, controlTimestamp: controlTimestamp,
-                      deletedServerIDs: deletedServerIDs)
+        let s = Saved(items: items, wornID: wornID, wornAt: wornAt, countBaseline: countBaseline)
         if let data = try? JSONEncoder().encode(s) { try? data.write(to: Self.file, options: .atomic) }
     }
 
@@ -75,16 +60,10 @@ final class HeartLibrary: ObservableObject {
     }
 
     func delete(_ id: UUID) {
-        guard let hb = item(id) else { return }
-        if let sid = hb.serverID { deletedServerIDs.append(sid) }
+        guard item(id) != nil else { return }
         items.removeAll { $0.id == id }
         try? FileManager.default.removeItem(at: photoURL(id))
         if wornID == id { wornID = nil; wornAt = nil; countBaseline = nil }
-        save()
-    }
-
-    func serverDeleteDone(_ serverID: String) {
-        deletedServerIDs.removeAll { $0 == serverID }
         save()
     }
 
@@ -119,7 +98,6 @@ final class HeartLibrary: ObservableObject {
             try? FileManager.default.removeItem(at: photoURL(id))
             hb.hasPhoto = false
         }
-        hb.dirty = hb.serverID != nil
         upsert(hb)
     }
 

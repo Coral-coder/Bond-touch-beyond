@@ -2,16 +2,12 @@ import PhotosUI
 import SwiftUI
 
 /// Chat with the selected partner over iCloud — text bubbles, photos, and touches rendered
-/// as glowing strokes. A partner on the original Bond Touch app is invited to (or linked
-/// with) an iCloud bond first; chat with them then runs through it.
+/// as glowing strokes.
 struct ChatView: View {
     @EnvironmentObject var model: AppModel
     @EnvironmentObject var store: LocalStore
     @State private var draft = ""
     @State private var photo: PhotosPickerItem?
-    @State private var inviting = false
-    @State private var showShare = false
-    @State private var shareError: String?
     /// Whether the end of the chat is on screen; new messages only pull the view down then.
     @State private var atBottom = true
     @State private var viewportHeight: CGFloat = 0
@@ -32,89 +28,83 @@ struct ChatView: View {
         return (messages.map(Item.message) + touches).sorted { $0.date < $1.date }
     }
     private var lastSeenID: UUID? { model.lastSeenMessageID(for: model.selectedPartnerID) }
-    private var chatBondID: String? { model.chatBondID(for: model.selectedPartnerID) }
-    private var needsLink: Bool { model.selectedPartner != nil && chatBondID == nil }
 
     var body: some View {
         VStack(spacing: 0) {
             HStack { Spacer(); PartnerBar(); Spacer() }
                 .padding(.horizontal, 20).padding(.top, 8).padding(.bottom, 6)
 
-            if needsLink {
-                ScrollView { linkCard }
-            } else {
-                ScrollViewReader { proxy in
-                    ScrollView {
-                        LazyVStack(alignment: .leading, spacing: 14) {
-                            ForEach(items) { item in
-                                switch item {
-                                case .message(let msg): bubble(msg).id(msg.id)
-                                case .touch(let t): touchBubble(t).id(t.id)
-                                }
+            ScrollViewReader { proxy in
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 14) {
+                        ForEach(items) { item in
+                            switch item {
+                            case .message(let msg): bubble(msg).id(msg.id)
+                            case .touch(let t): touchBubble(t).id(t.id)
                             }
-                            // Where the bottom of the chat is, relative to the visible area.
-                            Color.clear.frame(height: 8).id("bottom")
-                                .background(GeometryReader { g in
-                                    Color.clear.preference(key: ChatBottomKey.self, value: g.frame(in: .named("chat")).maxY)
-                                })
                         }
-                        .padding(.horizontal, 16).padding(.top, 8)
+                        // Where the bottom of the chat is, relative to the visible area.
+                        Color.clear.frame(height: 8).id("bottom")
+                            .background(GeometryReader { g in
+                                Color.clear.preference(key: ChatBottomKey.self, value: g.frame(in: .named("chat")).maxY)
+                            })
                     }
-                    .coordinateSpace(name: "chat")
-                    // The message box sits between the chat and the bar, so no extra gap here.
-                    .noTabBarGap()
-                    .scrollDismissesKeyboard(.interactively)
-                    .background(GeometryReader { g in
-                        Color.clear
-                            .onAppear { viewportHeight = g.size.height }
-                            .onChange(of: g.size.height) { h in
-                                viewportHeight = h
-                                // The keyboard (or the tab bar) changed the space: keep the
-                                // latest message in view if we were at the bottom.
-                                if atBottom { scrollToBottom(proxy, animated: false) }
-                            }
-                    })
-                    .onPreferenceChange(ChatBottomKey.self) { maxY in
-                        // At the bottom = the end of the chat is (nearly) on screen.
-                        let now = maxY <= viewportHeight + 40
-                        if now != atBottom { withAnimation(.easeOut(duration: 0.2)) { atBottom = now } }
-                    }
-                    .onAppear {
-                        scrollToBottom(proxy, animated: false)
-                        // Once more after the lazy rows have laid out.
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { scrollToBottom(proxy, animated: false) }
-                    }
-                    .onChange(of: model.selectedPartnerID) { _ in
-                        atBottom = true
-                        DispatchQueue.main.async { scrollToBottom(proxy, animated: false) }
-                    }
-                    .onChange(of: items.count) { _ in
-                        // Follow new messages only if we're at the bottom, or it's our own.
-                        let mineLast: Bool = {
-                            switch items.last {
-                            case .message(let m): return m.senderID == model.myUserID
-                            case .touch(let t): return t.senderID == model.myUserID || t.senderID == ChatMessage.legacySelf
-                            case nil: return false
-                            }
-                        }()
-                        if atBottom || mineLast { scrollToBottom(proxy, animated: true) }
-                    }
-                    .overlay(alignment: .bottomTrailing) {
-                        if !atBottom {
-                            Button { scrollToBottom(proxy, animated: true) } label: {
-                                Image(systemName: "chevron.down")
-                                    .font(.system(size: Theme.s(16), weight: .bold)).foregroundStyle(Theme.title)
-                                    .frame(width: 44, height: 44).glass(Circle())
-                            }
-                            .buttonStyle(.plain)
-                            .padding(.trailing, 16).padding(.bottom, 10)
-                            .transition(.scale.combined(with: .opacity))
-                            .accessibilityLabel("Jump to the latest message")
+                    .padding(.horizontal, 16).padding(.top, 8)
+                }
+                .coordinateSpace(name: "chat")
+                // The message box sits between the chat and the bar, so no extra gap here.
+                .noTabBarGap()
+                .scrollDismissesKeyboard(.interactively)
+                .background(GeometryReader { g in
+                    Color.clear
+                        .onAppear { viewportHeight = g.size.height }
+                        .onChange(of: g.size.height) { h in
+                            viewportHeight = h
+                            // The keyboard (or the tab bar) changed the space: keep the
+                            // latest message in view if we were at the bottom.
+                            if atBottom { scrollToBottom(proxy, animated: false) }
                         }
+                })
+                .onPreferenceChange(ChatBottomKey.self) { maxY in
+                    // At the bottom = the end of the chat is (nearly) on screen.
+                    let now = maxY <= viewportHeight + 40
+                    if now != atBottom { withAnimation(.easeOut(duration: 0.2)) { atBottom = now } }
+                }
+                .onAppear {
+                    scrollToBottom(proxy, animated: false)
+                    // Once more after the lazy rows have laid out.
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { scrollToBottom(proxy, animated: false) }
+                }
+                .onChange(of: model.selectedPartnerID) { _ in
+                    atBottom = true
+                    DispatchQueue.main.async { scrollToBottom(proxy, animated: false) }
+                }
+                .onChange(of: items.count) { _ in
+                    // Follow new messages only if we're at the bottom, or it's our own.
+                    let mineLast: Bool = {
+                        switch items.last {
+                        case .message(let m): return m.senderID == model.myUserID
+                        case .touch(let t): return t.senderID == model.myUserID || t.senderID == ChatMessage.localSelf
+                        case nil: return false
+                        }
+                    }()
+                    if atBottom || mineLast { scrollToBottom(proxy, animated: true) }
+                }
+                .overlay(alignment: .bottomTrailing) {
+                    if !atBottom {
+                        Button { scrollToBottom(proxy, animated: true) } label: {
+                            Image(systemName: "chevron.down")
+                                .font(.system(size: Theme.s(16), weight: .bold)).foregroundStyle(Theme.title)
+                                .frame(width: 44, height: 44).glass(Circle())
+                        }
+                        .buttonStyle(.plain)
+                        .padding(.trailing, 16).padding(.bottom, 10)
+                        .transition(.scale.combined(with: .opacity))
+                        .accessibilityLabel("Jump to the latest message")
                     }
                 }
-                inputBar
             }
+            inputBar
         }
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in keyboardUp = true }
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in keyboardUp = false }
@@ -128,73 +118,16 @@ struct ChatView: View {
                 photo = nil
             }
         }
-        .sheet(isPresented: $showShare) {
-            InviteCodeSheet(url: model.pendingInviteURL)
-        }
-        .alert("Can't invite", isPresented: Binding(get: { shareError != nil }, set: { if !$0 { shareError = nil } })) {
-            Button("OK", role: .cancel) { shareError = nil }
-        } message: { Text(shareError ?? "") }
         // While this chat is on screen, its message notifications stay quiet (see AppDelegate).
         .onAppear { model.viewingChatBondID = model.selectedPartnerID }
         .onChange(of: model.selectedPartnerID) { model.viewingChatBondID = $0 }
         .onDisappear { model.viewingChatBondID = nil }
     }
 
-    /// Shown for an original-app partner without an iCloud chat bond yet.
-    private var linkCard: some View {
-        let name = model.selectedPartner?.displayName ?? "your partner"
-        let linkable = model.cloudPartners.filter { !model.chatLinkedCloudIDs.contains($0.id) }
-        return VStack(alignment: .leading, spacing: 12) {
-            Label("Chat goes through iCloud", systemImage: "icloud.fill")
-                .font(Theme.font(17, .heavy)).foregroundStyle(.white)
-            Text("Messages and photos with \(name) are sent privately through iCloud. Invite them to Bond Touch Beyond chat — they open the link on their iPhone — or link the iCloud partner you already share with them.")
-                .font(Theme.font(14)).foregroundStyle(Theme.subtitle)
-                .fixedSize(horizontal: false, vertical: true)
-            Button {
-                guard let id = model.selectedPartnerID else { return }
-                inviting = true
-                Task {
-                    await model.inviteToICloudChat(id)
-                    inviting = false
-                    showShare = model.pendingInviteURL != nil
-                }
-            } label: {
-                HStack {
-                    if inviting { ProgressView().tint(Theme.onAccent) }
-                    Text("Invite \(name) to iCloud chat")
-                }
-            }
-            .buttonStyle(AccentButtonStyle())
-            .disabled(inviting)
-            if !linkable.isEmpty {
-                Text("Or link an iCloud partner").font(Theme.font(13, .bold)).foregroundStyle(Theme.subtitle)
-                    .padding(.top, 4)
-                ForEach(linkable) { p in
-                    Button {
-                        if let id = model.selectedPartnerID { model.linkChat(id, toCloudBond: p.id) }
-                    } label: {
-                        HStack(spacing: 10) {
-                            AvatarRing(name: p.displayName, ringColor: Color(rgbInt: p.colorRGB), size: 34,
-                                       photo: model.photo(forBond: p.id), ringWidth: 0)
-                            Text(p.displayName).font(Theme.font(15, .bold)).foregroundStyle(.white)
-                            Spacer()
-                            Image(systemName: "link").foregroundStyle(Theme.accent)
-                        }
-                        .padding(10).glass(cornerRadius: 18)
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-        }
-        .padding(18)
-        .glass(cornerRadius: 28)
-        .padding(16)
-    }
-
     /// A touch in the chat: the touch drawn in a small glass card (a heartbeat as its EKG),
     /// on the sender's side, with its meaning and a replay button.
     private func touchBubble(_ t: TouchMessage) -> some View {
-        let mine = t.senderID == model.myUserID || t.senderID == ChatMessage.legacySelf
+        let mine = t.senderID == model.myUserID || t.senderID == ChatMessage.localSelf
         return VStack(alignment: mine ? .trailing : .leading, spacing: 4) {
             HStack {
                 if mine { Spacer(minLength: 60) }

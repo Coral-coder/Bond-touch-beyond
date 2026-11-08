@@ -75,7 +75,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
             item.handler = { [weak self] _, done in self?.answer(bondID: m.bondID, name: m.name, line: m.line); done() }
             return item
         }
-        let partners = model.partners.filter { !$0.bond.legacy }.map { p -> CPListItem in
+        let partners = model.partners.map { p -> CPListItem in
             let item = CPListItem(text: p.displayName, detailText: "Send a kiss or a touch", image: photo(p.id))
             item.handler = { [weak self] _, done in self?.answer(bondID: p.id, name: p.displayName, line: nil); done() }
             return item

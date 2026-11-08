@@ -14,12 +14,13 @@ struct TouchMeaning: Identifiable, Codable, Equatable {
     var pattern: [Int]   // inter-tap gaps in ms
     /// Freshly added meanings show a "New" badge until sent, as in the original.
     var isNew: Bool = false
-    /// The meaning's id on the original Bond backend, for meanings synced with an
-    /// original-app partner (nil for iCloud-only meanings).
+    /// The meaning's id on the original Bond Touch servers, set by older versions for
+    /// meanings synced with an original-app partner. No longer set; kept so saved meanings
+    /// (and the widget ids derived from them) still load.
     var serverID: String? = nil
     /// Pattern format: 3 = 50 ms position samples (touch bar), nil/2 = on/off milliseconds.
     var generation: Int? = nil
-    /// Starred in the Touch Library (synced with the original backend's `favourite`).
+    /// Starred in the Touch Library.
     /// Optional so meanings saved before this field existed still load.
     var favourite: Bool? = nil
     /// For a library shared with an iCloud partner: when it was last changed (the newer

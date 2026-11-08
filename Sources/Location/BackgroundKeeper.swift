@@ -1,13 +1,13 @@
 import CoreLocation
 import Foundation
 
-/// Keeps the app running in the background so touches from partners on the original
-/// Bond Touch app are received and played on the bracelet, and touches made on the
-/// bracelet are sent, while the phone is locked.
+/// Keeps the app running in the background so touches from partners are received and
+/// played on the bracelet, and touches made on the bracelet are sent, while the phone is
+/// locked.
 ///
-/// Partners on iCloud wake the app with silent pushes, and the bracelet's own events wake
-/// it over Bluetooth; but the original servers only push to the official app, so for
-/// original-app partners this app has to keep polling. Low-accuracy background location
+/// Partners wake the app with silent pushes, and the bracelet's own events wake it over
+/// Bluetooth; but iOS throttles (and, once the app is swiped away, drops) silent pushes,
+/// so kept running the app keeps checking iCloud. Low-accuracy background location
 /// (cell/Wi-Fi, no GPS) is what lets an app keep running; iOS shows the blue location
 /// indicator while it's on. Off in Settings, or automatically when no partner needs it.
 final class BackgroundKeeper: NSObject, CLLocationManagerDelegate {

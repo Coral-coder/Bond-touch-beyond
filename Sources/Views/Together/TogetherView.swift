@@ -32,15 +32,10 @@ struct TogetherView: View {
                 .padding(.top, 8)
 
                 if let partner {
-                    if partner.bond.legacy {
-                        Text("The Us space works with partners paired over iCloud.")
-                            .font(Theme.font(14)).foregroundStyle(Theme.subtitle).padding().glass(cornerRadius: 20)
-                    } else {
-                        header(partner)
-                        if Feature.dates.isOn { datesCard }
-                        if Feature.likes.isOn { likesCard(partner) }
-                        tiles
-                    }
+                    header(partner)
+                    if Feature.dates.isOn { datesCard }
+                    if Feature.likes.isOn { likesCard(partner) }
+                    tiles
                 } else {
                     Text("Add a partner to start your Us space.")
                         .font(Theme.font(15)).foregroundStyle(Theme.subtitle).padding(.top, 40)

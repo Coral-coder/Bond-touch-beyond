@@ -4,7 +4,8 @@ import Foundation
 /// original's `HeartbeatItem.pattern`, plus its name, colour and memory.
 struct SavedHeartbeat: Codable, Identifiable, Equatable {
     var id: UUID = UUID()
-    /// Its id on the original Heart API, once uploaded (or when it came from there).
+    /// Unused: its id on the original Bond Touch Heart API, from older versions. Kept so
+    /// saved libraries still decode.
     var serverID: String?
     /// Whose heartbeat it is ("Who's in your heart?").
     var name: String
@@ -20,10 +21,11 @@ struct SavedHeartbeat: Codable, Identifiable, Equatable {
     var createdBy: String?
     /// Recorded by this user (server `isSelf`).
     var isSelf: Bool = true
-    /// Who may see its heartbeat count (server `emails`, up to 3).
+    /// Unused: who could see its heartbeat count on the original Heart API. Kept so saved
+    /// libraries still decode.
     var emails: [String] = []
     var source: Source = .camera
-    /// Changed locally since the last upload.
+    /// Unused: "changed since the last upload" for the original Heart API. Kept for decoding.
     var dirty: Bool = false
 
     enum Source: String, Codable {
@@ -42,26 +44,4 @@ struct SavedHeartbeat: Codable, Identifiable, Equatable {
     var seconds: Double { Double(intervals.reduce(0, +)) / 1000 }
 
     var title: String { name.isEmpty ? "Heartbeat" : "\(name)’s heartbeat" }
-}
-
-/// A heartbeat someone shared with this account that hasn't been accepted yet (server
-/// `pendingHeartbeats`; the original's "Received from:").
-struct PendingHeartbeat: Identifiable, Equatable {
-    let id: String
-    let name: String
-    let colorRGB: Int
-    let createdBy: String
-    let createdAt: Date
-    let message: String
-    let intervals: [Int]
-}
-
-/// A request for a heartbeat (server `/heart/api/v2/requests`): sent by this account
-/// ("Pending request to:") or to it ("… is asking for your heartbeat").
-struct HeartRequest: Identifiable, Equatable {
-    let id: String
-    let fromUser: String
-    let fromUserName: String
-    let toUser: String
-    let createdAt: Date
 }

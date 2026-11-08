@@ -5,8 +5,6 @@ import UIKit
 struct PairingView: View {
     @EnvironmentObject var model: AppModel
     @State private var shareError: String?
-    @State private var inviteEmail = ""
-    @State private var inviting = false
     @State private var inviteResult: String?
     @State private var joinCode = ""
     @State private var joining = false
@@ -46,8 +44,6 @@ struct PairingView: View {
             }
 
             joinBlock
-
-            if model.legacySignedIn { emailInvite }
         }
         .padding()
         }
@@ -129,50 +125,6 @@ struct PairingView: View {
         }
         .padding(14)
         .background(Theme.amber.opacity(0.16), in: RoundedRectangle(cornerRadius: Metric.cornerMedium))
-    }
-
-    /// Invite someone who uses the original Bond Touch app, by their account email
-    /// (`POST bond/api/v4/bonds`). They accept it in their app.
-    private var emailInvite: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Divider().overlay(Theme.ink.opacity(0.1))
-            Text("Partner on the original Bond Touch app?")
-                .font(.headline).foregroundStyle(Theme.title)
-            Text("Invite them with the email on their Bond Touch account.")
-                .font(.footnote).foregroundStyle(Theme.subtitle)
-            TextField("name@email.com", text: $inviteEmail)
-                .textContentType(.emailAddress).keyboardType(.emailAddress)
-                .autocorrectionDisabled().textInputAutocapitalization(.never)
-                .padding(12).background(Theme.ink.opacity(0.08))
-                .clipShape(RoundedRectangle(cornerRadius: Metric.cornerMedium)).foregroundStyle(Theme.title)
-            Button {
-                Task {
-                    inviting = true; inviteResult = nil
-                    do {
-                        try await model.legacyInvite(email: inviteEmail)
-                        inviteResult = "Invite sent to \(inviteEmail)."
-                        inviteEmail = ""
-                    } catch {
-                        inviteResult = error.localizedDescription
-                    }
-                    inviting = false
-                }
-            } label: {
-                HStack {
-                    if inviting { ProgressView().tint(Theme.onAccent) }
-                    Text("Send invite").font(.headline)
-                }
-                .frame(maxWidth: .infinity).frame(height: Metric.buttonHeight)
-                .background(inviteEmail.contains("@") ? Theme.accent : Theme.ink.opacity(0.2))
-                .foregroundStyle(Theme.onAccent)
-                .clipShape(RoundedRectangle(cornerRadius: Metric.cornerMedium))
-            }
-            .buttonStyle(.plain)
-            .disabled(!inviteEmail.contains("@") || inviting)
-            if let inviteResult {
-                Text(inviteResult).font(.footnote).foregroundStyle(Theme.subtitle)
-            }
-        }
     }
 }
 

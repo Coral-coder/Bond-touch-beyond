@@ -1,4 +1,6 @@
 ThirdParty/libsignal-ffi/
+# Where archive/bond-touch-cloud/scripts/fetch-libsignal-ffi.sh puts the ~100 MB Rust core.
+archive/bond-touch-cloud/ThirdParty/libsignal-ffi/
 *.xcodeproj/
 build/
 .claude/

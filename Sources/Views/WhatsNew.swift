@@ -21,6 +21,8 @@ struct WhatsNewView: View {
     /// Newest first. Add to the top for each build; trim when it no longer needs to go back to 40.
     static let sections: [Section] = [
         Section(title: "This update", items: [
+            Item(icon: "icloud.fill", title: "Everything on iCloud",
+                 detail: "Partners on the original Bond Touch app are no longer supported; everything runs on iCloud (and Android pairing). Your bracelet still works over Bluetooth."),
             Item(icon: "chevron.left.forwardslash.chevron.right", title: "Matrix",
                  detail: "A new theme: digital rain in code greens, led by glitching hearts, with your partner's face coming through in the code. Touches you send from it glitch, and play in Matrix mode on your partner's phone."),
             Item(icon: "mouth.fill", title: "Kisses",

@@ -184,8 +184,7 @@ struct WidgetSnapshot: Codable, Equatable {
     }
 
     struct Meaning: Codable, Equatable, Identifiable {
-        /// The original backend's meaning id for an original-app partner (stable across
-        /// syncs), else the local meaning's UUID.
+        /// The local meaning's UUID (or the original-server id an older version kept for it).
         var id: String
         var label: String
         var emoji: String

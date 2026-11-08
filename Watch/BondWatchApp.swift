@@ -4,7 +4,7 @@ import WatchKit
 
 /// Bond Touch Beyond for Apple Watch: a touch bar (tap and slide, recorded like the Bond
 /// Touch More bar) and one-tap Touch Language meanings. The phone relays everything, so it
-/// works with iCloud and original-app partners alike; the watch needs no account.
+/// works with every partner; the watch needs no account.
 @main
 struct BondWatchApp: App {
     @WKApplicationDelegateAdaptor private var delegate: WatchAppDelegate
@@ -36,7 +36,7 @@ struct WatchMeaning: Identifiable, Equatable {
     let generation: Int
     let startRGB: Int
     let endRGB: Int
-    /// The meaning's id on the original backend (so it lights the partner's bracelet).
+    /// An id older versions kept from the original Bond Touch servers (unused).
     var serverID: String? = nil
     var favourite = false
 }

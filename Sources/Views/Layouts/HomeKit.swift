@@ -82,7 +82,7 @@ struct HomeRouter: View {
 // MARK: - Shared pieces
 
 extension AppModel {
-    func isMine(_ t: TouchMessage) -> Bool { t.senderID == myUserID || t.senderID == ChatMessage.legacySelf }
+    func isMine(_ t: TouchMessage) -> Bool { t.senderID == myUserID || t.senderID == ChatMessage.localSelf }
 
     /// Touches with `bondID` (the selected partner by default), newest first.
     func recentTouches(with bondID: String? = nil, limit: Int = 40) -> [TouchMessage] {
