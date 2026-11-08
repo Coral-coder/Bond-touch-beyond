@@ -35,7 +35,7 @@ extension AppModel {
             content.body = "❤️"
         }
         var info = TouchNotification.userInfo(touch, bondID: partner.id)
-        if let locator { info["bl"] = locator }
+        info["bl"] = locator
         content.userInfo = info
         // The app's chime (a kiss and a soft bell), with the vibration that comes with it.
         content.sound = UNNotificationSound(named: UNNotificationSoundName(TouchNotification.sound))
