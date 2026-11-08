@@ -16,7 +16,7 @@ struct PolyCalendarView: View {
 
     private var rows: [Row] {
         let start = Calendar.current.startOfDay(for: Date())
-        return model.partners.filter { !$0.bond.legacy }.flatMap { p in
+        return model.partners.flatMap { p in
             syncLive(together.space(p.id).events).filter { $0.end >= start }.map { Row(event: $0, partner: p) }
         }
         .sorted { $0.event.start < $1.event.start }
@@ -49,7 +49,7 @@ struct PolyCalendarView: View {
     private var legend: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
-                ForEach(model.partners.filter { !$0.bond.legacy }) { p in
+                ForEach(model.partners) { p in
                     HStack(spacing: 5) {
                         Circle().fill(Color(rgbInt: p.colorRGB)).frame(width: 10, height: 10)
                         Text(p.displayName).font(Theme.font(12, .bold)).foregroundStyle(Theme.title)
@@ -98,7 +98,7 @@ struct CalendarEventEditor: View {
         NavigationStack {
             Form {
                 Picker("Shared with", selection: $partnerID) {
-                    ForEach(model.partners.filter { !$0.bond.legacy }) { p in Text(p.displayName).tag(Optional(p.id)) }
+                    ForEach(model.partners) { p in Text(p.displayName).tag(Optional(p.id)) }
                 }
                 TextField("What, e.g. Date night", text: $title)
                 TextField("With (Us, a metamour, family…)", text: $with)

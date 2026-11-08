@@ -459,7 +459,7 @@ struct HomeView: View {
 
     /// "Last sent 5 min ago · Last received 2 hr ago", as the original's history header.
     private func summary(_ touches: [TouchMessage]) -> some View {
-        let isMine: (TouchMessage) -> Bool = { $0.senderID == model.myUserID || $0.senderID == ChatMessage.legacySelf }
+        let isMine: (TouchMessage) -> Bool = { $0.senderID == model.myUserID || $0.senderID == ChatMessage.localSelf }
         let sent = touches.first(where: isMine)?.sentAt
         let received = touches.first(where: { !isMine($0) })?.sentAt
         let missed = touches.filter { !isMine($0) && $0.missed == true }.count
@@ -528,7 +528,7 @@ struct HomeView: View {
     private static let rowHeight: CGFloat = 84
 
     private func touchRow(_ touch: TouchMessage) -> some View {
-        let mine = touch.senderID == model.myUserID || touch.senderID == ChatMessage.legacySelf
+        let mine = touch.senderID == model.myUserID || touch.senderID == ChatMessage.localSelf
         let meaning = model.meaningTag(for: touch)
         let h = Self.rowHeight
         return ZStack(alignment: .trailing) {

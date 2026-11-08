@@ -3,6 +3,10 @@
 Audited from the decompiled original Android app (jadx), checked against `docs/FEATURES.md`
 and our Swift code (October 2026). Sizes: S = small, M = medium, L = large.
 
+> Since then, everything that talked to Bond Touch's own servers has been removed
+> ([BOND_TOUCH_CLOUD.md](BOND_TOUCH_CLOUD.md)); items that depend on those servers (push from
+> the original backend, chat with original-app partners, account endpoints) are out of scope.
+
 ## Done since this audit (not yet tested on a device)
 
 - All of section 0: v2/v4/mini playback frames, v1 characteristic, taps/double-tap,

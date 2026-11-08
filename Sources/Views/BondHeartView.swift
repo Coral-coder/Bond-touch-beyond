@@ -1,8 +1,7 @@
 import SwiftUI
 
 /// Bond Heart — the heartbeat pendant: its status and pairing, the heartbeat it's wearing
-/// and how often it was felt, recording a heartbeat, the library, and heartbeats shared
-/// with you through the original Bond Touch account.
+/// and how often it was felt, recording a heartbeat, and the library.
 struct BondHeartView: View {
     @EnvironmentObject var model: AppModel
     var body: some View {
@@ -60,20 +59,12 @@ private struct BondHeartHome: View {
                          library.items.isEmpty ? "All heartbeats in one place" : "\(library.items.count) heartbeat\(library.items.count == 1 ? "" : "s")") {
                         HeartLibraryView()
                     }
-                    link("Shared & requests", "envelope.open", sharedSubtitle) { HeartSharedView() }
                     link("Tutorials", "book", "Get to know your Heart") { HeartTutorialsView() }
                 }
                 Color.clear.frame(height: 12)
             }
             .padding(20)
         }
-        .task { if model.legacySignedIn { await model.heartSync() } }
-    }
-
-    private var sharedSubtitle: String {
-        guard model.legacySignedIn else { return "Send & ask by email (Bond Touch account)" }
-        let n = library.pending.count + library.requests.filter { model.isReceived($0) }.count
-        return n == 0 ? "Send or ask for a heartbeat by email" : "\(n) waiting for you"
     }
 
     @ViewBuilder private var wearingCard: some View {
@@ -107,12 +98,6 @@ private struct BondHeartHome: View {
                             }
                         }
                         .buttonStyle(GlassButtonStyle(height: 40))
-                        if model.legacySignedIn {
-                            Button("Share count") {
-                                run { countText = await model.shareFeltCount() ?? "Heartbeat count successfully sent!" }
-                            }
-                            .buttonStyle(GlassButtonStyle(height: 40))
-                        }
                     }
                     .disabled(busy || !pendant.state.isUsable)
                 }
@@ -249,10 +234,8 @@ struct HeartTutorialsView: View {
           "A blinking red light means your Heart is charging. When the light is green, it's fully charged.",
           "Bond Heart needs to charge at least every 15 days. Check its battery here while waking it up."]),
         Lesson(title: "Feeling the heartbeat", icon: "heart.circle", lines: ["Grab the heart by touching the front light area. You’ll feel it beating after a few seconds. Don’t forget to wear a heartbeat before trying to feel one."]),
-        Lesson(title: "Heartbeat count", icon: "number", lines: ["Every time you hold the heart to feel its beat, that moment is counted.",
-          "Share this count with up to 3 loved ones (add their emails to the heartbeat), once every 24 hours."]),
-        Lesson(title: "Send & ask for a heartbeat", icon: "envelope", lines: ["You can send or request a heartbeat to and from your loved ones; all you need is their Bond Touch account email.",
-          "You can also send a heartbeat to a partner's bracelet from its page in the library."]),
+        Lesson(title: "Heartbeat count", icon: "number", lines: ["Every time you hold the heart to feel its beat, that moment is counted. Tap Heartbeat count to see how often you felt it."]),
+        Lesson(title: "Send a heartbeat", icon: "paperplane", lines: ["Send a heartbeat to a partner's bracelet from its page in the library."]),
     ]
 
     var body: some View {

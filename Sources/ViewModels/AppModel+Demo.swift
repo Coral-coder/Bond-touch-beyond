@@ -68,11 +68,11 @@ extension AppModel {
         var touches: [TouchMessage] = [
             TouchMessage(bondID: alex.id, senderID: partnerID, pattern: Self.demoSlide, generation: 3, colorRGB: 0x57C3BB,
                          endColorRGB: 0xB173DF, sentAt: now.addingTimeInterval(-7200)),
-            TouchMessage(bondID: alex.id, senderID: ChatMessage.legacySelf, pattern: [140, 120, 140, 120, 520],
+            TouchMessage(bondID: alex.id, senderID: ChatMessage.localSelf, pattern: [140, 120, 140, 120, 520],
                          colorRGB: 0x57C3BB, endColorRGB: 0x57C3BB, sentAt: now.addingTimeInterval(-5400)),
             TouchMessage(bondID: alex.id, senderID: partnerID, pattern: [140, 120, 140, 120, 520], colorRGB: 0xEC5A89,
                          endColorRGB: 0xB173DF, sentAt: now.addingTimeInterval(-3000), meaningLabel: "Love you", meaningEmoji: "💗"),
-            TouchMessage(bondID: alex.id, senderID: ChatMessage.legacySelf, pattern: EKG.onOff(bpm: 72), generation: 2,
+            TouchMessage(bondID: alex.id, senderID: ChatMessage.localSelf, pattern: EKG.onOff(bpm: 72), generation: 2,
                          colorRGB: 0xFF2E74, endColorRGB: 0xFF2E74, sentAt: now.addingTimeInterval(-1500), heartbeatBPM: 72),
             TouchMessage(bondID: alex.id, senderID: partnerID, pattern: Self.demoSlide.reversed(), generation: 3,
                          colorRGB: 0x9FD257, endColorRGB: 0x57C3BB, sentAt: now.addingTimeInterval(-120)),

@@ -1,14 +1,13 @@
 import Foundation
 
 /// A chat message in a bond: text, a photo, or a touch rendered inline. Relayed over
-/// CloudKit, or end-to-end encrypted through the original Bond backend for original-app
-/// partners.
+/// CloudKit.
 struct ChatMessage: Identifiable, Equatable, Codable {
     enum Kind: String, Codable { case text, touch, image }
 
-    /// `senderID` of the user's own messages on the original backend (the CloudKit user
-    /// id may be unknown or change, so those messages use this fixed marker).
-    static let legacySelf = "me"
+    /// A fixed `senderID` for the user's own messages and touches where no CloudKit user id
+    /// applies (the demo, and history saved by older versions). Treated as "mine".
+    static let localSelf = "me"
 
     let id: UUID
     let bondID: String
@@ -17,7 +16,8 @@ struct ChatMessage: Identifiable, Equatable, Codable {
     let text: String
     let colorRGB: Int
     let sentAt: Date
-    /// The message id on the original backend (dedup, delivery acks, deletion).
+    /// Unused: a message id from the original Bond Touch servers, kept so history saved by
+    /// older versions still decodes.
     var serverID: String? = nil
     /// File name of a photo saved in the app's chat-media folder.
     var imageFile: String? = nil
@@ -39,9 +39,8 @@ struct ChatMessage: Identifiable, Equatable, Codable {
     }
 }
 
-/// On-device history of chat with original-app partners (the server only holds messages
-/// until they are acknowledged), plus the decrypted photos. Stored in Application Support
-/// with complete file protection.
+/// On-device chat history, plus the photos. Stored in Application Support with complete
+/// file protection.
 enum ChatArchive {
     private static var dir: URL {
         let d = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -56,6 +55,7 @@ enum ChatArchive {
         return d
     }
 
+    // The file name dates from older versions; kept so existing history still loads.
     private static var file: URL { dir.appendingPathComponent("legacy-chat.json") }
 
     static func load() -> [String: [ChatMessage]] {

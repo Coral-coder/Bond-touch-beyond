@@ -10,11 +10,7 @@ struct PeopleView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                ForEach(model.incomingInvites) { bond in
-                    inviteRow(bond)
-                }
-
-                if model.partners.isEmpty && model.pendingBonds.isEmpty && model.incomingInvites.isEmpty {
+                if model.partners.isEmpty && model.pendingBonds.isEmpty {
                     Text("You haven't added a partner yet.")
                         .foregroundStyle(Theme.subtitle)
                         .frame(maxWidth: .infinity, alignment: .center)
@@ -102,43 +98,13 @@ struct PeopleView: View {
                 Circle().fill(Theme.ink.opacity(0.12)).frame(width: 40, height: 40)
                     .overlay(Image(systemName: "hourglass").foregroundStyle(Theme.subtitle))
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(bond.legacy ? bond.partnerName : "Pending invite").foregroundStyle(Theme.title)
-                    Text(bond.legacy ? "Invite sent · waiting for them to accept" : "Waiting for your partner to accept")
+                    Text("Pending invite").foregroundStyle(Theme.title)
+                    Text("Waiting for your partner to accept")
                         .font(.caption).foregroundStyle(Theme.subtitle)
                 }
                 Spacer()
                 Button(role: .destructive) { Task { await model.removeBond(bond) } } label: {
                     Text("Cancel").foregroundStyle(Theme.danger)
-                }
-                .buttonStyle(.plain)
-            }
-        }
-    }
-
-    /// A bond invite another original-app user sent to this account.
-    private func inviteRow(_ bond: Bond) -> some View {
-        GlassCard {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack(spacing: 14) {
-                    Circle().fill(Theme.accent.opacity(0.25)).frame(width: 40, height: 40)
-                        .overlay(Image(systemName: "envelope.fill").foregroundStyle(Theme.accent))
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(bond.partnerName).foregroundStyle(Theme.title)
-                        Text("wants to bond with you").font(.caption).foregroundStyle(Theme.subtitle)
-                    }
-                    Spacer()
-                }
-                HStack(spacing: 12) {
-                    Button { Task { await model.legacyAccept(bond) } } label: {
-                        Text("Accept").font(.headline).frame(maxWidth: .infinity).frame(height: 40)
-                            .background(Theme.accent).foregroundStyle(Theme.onAccent)
-                            .clipShape(RoundedRectangle(cornerRadius: Metric.cornerMedium))
-                    }
-                    Button { Task { await model.removeBond(bond) } } label: {
-                        Text("Decline").font(.headline).frame(maxWidth: .infinity).frame(height: 40)
-                            .background(Theme.ink.opacity(0.08)).foregroundStyle(Theme.title)
-                            .clipShape(RoundedRectangle(cornerRadius: Metric.cornerMedium))
-                    }
                 }
                 .buttonStyle(.plain)
             }

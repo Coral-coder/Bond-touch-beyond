@@ -14,9 +14,9 @@ extension AppModel {
         let center = UNUserNotificationCenter.current()
         // Same identifier as the partner's push for this bond (its collapse id), so if that
         // push's notification is already showing for this touch, this doesn't add a second.
-        let locator = partner.bond.legacy ? nil : BondCrypto.locator(forCode: partner.id)
+        let locator = BondCrypto.locator(forCode: partner.id)
         let prefix = kind == .heartbeats ? "h" : kind == .arrivals ? "a" : "t"
-        let id = locator.map { "\(prefix)-\($0.prefix(16))" } ?? "l-\(touch.id.uuidString)"
+        let id = "\(prefix)-\(locator.prefix(16))"
         let delivered = await center.deliveredNotifications()
         if delivered.contains(where: { n in
             n.request.identifier == id && abs(n.date.timeIntervalSince(touch.sentAt)) < 120
@@ -35,7 +35,7 @@ extension AppModel {
             content.body = "❤️"
         }
         var info = TouchNotification.userInfo(touch, bondID: partner.id)
-        if let locator { info["bl"] = locator }
+        info["bl"] = locator
         content.userInfo = info
         // The app's chime (a kiss and a soft bell), with the vibration that comes with it.
         content.sound = UNNotificationSound(named: UNNotificationSoundName(TouchNotification.sound))

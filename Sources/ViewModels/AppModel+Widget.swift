@@ -12,9 +12,8 @@ extension AppModel {
     func startWidgetSync() {
         let changes: [AnyPublisher<Void, Never>] = [
             $cloudPartners.map { _ in () }.eraseToAnyPublisher(),
-            $legacyPartners.map { _ in () }.eraseToAnyPublisher(),
             $selectedPartnerID.map { _ in () }.eraseToAnyPublisher(),
-            $legacyMeanings.map { _ in () }.eraseToAnyPublisher(),
+            store.$cloudMeanings.map { _ in () }.eraseToAnyPublisher(),
             $partnerPhotos.map { _ in () }.eraseToAnyPublisher(),
             store.$meanings.map { _ in () }.eraseToAnyPublisher(),
             $history.map { _ in () }.eraseToAnyPublisher(),
@@ -32,8 +31,9 @@ extension AppModel {
         Task { await processWidgetRequests() }
     }
 
-    /// The stable id a meaning has in the widget: its server id for an original-app partner
-    /// (the local UUID is new on every sync), else its UUID.
+    /// The stable id a meaning has in the widget: its UUID (or, for a meaning saved by an
+    /// older version for an original-app partner, the server id it kept, so existing
+    /// widgets keep working).
     private func widgetID(_ m: TouchMeaning) -> String { m.serverID ?? m.id.uuidString }
 
     func writeWidgetSnapshot() {
@@ -107,8 +107,6 @@ extension AppModel {
         WidgetShared.setStatus(.sending, for: request.meaningID)
         WidgetShared.reloadWidget()
         if !ready { await bootstrap() }
-        // Original-app partners only appear after the first sync with their backend.
-        if !partners.contains(where: { $0.id == request.bondID }), legacySignedIn { await legacySyncOnce() }
         var sent = false
         if let partner = partners.first(where: { $0.id == request.bondID }),
            let meaning = widgetMeaning(request.meaningID, bond: partner.bond) {
@@ -122,8 +120,7 @@ extension AppModel {
         return sent
     }
 
-    /// The meaning by its widget id: the loaded one, else the copy in the snapshot (the
-    /// original backend's meanings load only after the first sync).
+    /// The meaning by its widget id: the loaded one, else the copy in the snapshot.
     private func widgetMeaning(_ id: String, bond: Bond) -> TouchMeaning? {
         if let live = meanings(for: bond).first(where: { widgetID($0) == id }) { return live }
         guard let snapshot = WidgetShared.loadSnapshot(), snapshot.partner?.id == bond.id,

@@ -22,9 +22,6 @@ jobs:
       - name: Install XcodeGen
         run: brew install xcodegen
 
-      - name: Fetch libsignal_ffi
-        run: scripts/fetch-libsignal-ffi.sh
-
       - name: Generate Xcode project
         run: xcodegen generate
 

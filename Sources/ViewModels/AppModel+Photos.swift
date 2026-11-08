@@ -2,9 +2,7 @@ import UIKit
 
 /// Profile photos. The user picks their own in Settings; it is kept on this phone and sent to
 /// iCloud partners inside the profile record. iCloud partners' photos arrive the same way.
-/// Original-app partners' photos come from the original backend (Firebase Storage
-/// `images/<firebaseId>/profile`, for profiles with `hasImage`). All are cached on disk so
-/// they show immediately on the next launch.
+/// All are cached on disk so they show immediately on the next launch.
 extension AppModel {
     /// The user's own photo, as sent to partners (square JPEG).
     var myPhotoFileURL: URL? {
@@ -23,20 +21,14 @@ extension AppModel {
         guard let data = Self.profileJPEG(image) else { return }
         try? data.write(to: Self.myPhotoURL, options: .atomic)
         myPhoto = UIImage(data: data)
-        Task {
-            await publishProfile()
-            await legacyUploadMyPhoto(data)
-        }
+        Task { await publishProfile() }
     }
 
     func removeMyPhoto() {
         try? FileManager.default.removeItem(at: Self.myPhotoURL)
         try? FileManager.default.removeItem(at: Self.cacheURL("me"))
         myPhoto = nil
-        Task {
-            await publishProfile()
-            await legacyUploadMyPhoto(nil)
-        }
+        Task { await publishProfile() }
     }
 
     /// Centre-crops to a square and scales to 640 px, JPEG.
@@ -84,50 +76,10 @@ extension AppModel {
         return partnerPhotos[bondID]
     }
 
-    /// Shows the cached photo right away, then downloads it once per profile version.
-    /// The original servers only serve photos to the official app (Firebase App Check), so
-    /// once that's known, only the cached photo is used.
-    func loadPartnerPhoto(bondID: String, uid: String, version: Int64) {
-        let key = "\(bondID)#\(version)"
-        loadCachedPhoto(bondID: bondID)
-        guard !uid.isEmpty, !photoRequests.contains(key), !FirebaseStorage.appCheckBlocked else { return }
-        photoRequests.insert(key)
-        Task {
-            guard let token = try? await legacyToken(),
-                  let data = try? await FirebaseStorage.download("images/\(uid)/profile", token: token),
-                  let image = UIImage(data: data) else { return }
-            partnerPhotos[bondID] = image
-            try? data.write(to: Self.cacheURL("bond-" + bondID), options: .atomic)
-        }
-    }
-
-    /// The user's own photo: the one picked here, else the one on their original account.
+    /// The user's own photo: the one picked here, else one cached by an earlier version.
     func loadMyPhoto() {
         if let mine = UIImage(contentsOfFile: Self.myPhotoURL.path) { myPhoto = mine; return }
         if myPhoto == nil, let cached = UIImage(contentsOfFile: Self.cacheURL("me").path) { myPhoto = cached }
-        guard legacySignedIn, !photoRequests.contains("me"), !FirebaseStorage.appCheckBlocked else { return }
-        photoRequests.insert("me")
-        Task {
-            guard let token = try? await legacyToken(), let uid = BondBackend.tokenUID(token),
-                  let data = try? await FirebaseStorage.download("images/\(uid)/profile", token: token),
-                  let image = UIImage(data: data) else { return }
-            myPhoto = image
-            try? data.write(to: Self.cacheURL("me"), options: .atomic)
-        }
-    }
-
-    /// Puts the user's photo on their original account too, so partners on the original app
-    /// see it. The original servers usually refuse this app (App Check); then nothing changes
-    /// there, and the photo still reaches iCloud partners.
-    func legacyUploadMyPhoto(_ data: Data?) async {
-        guard legacySignedIn, !FirebaseStorage.appCheckBlocked,
-              let token = try? await legacyToken(), let uid = BondBackend.tokenUID(token) else { return }
-        do {
-            if let data {
-                try await FirebaseStorage.upload(data, to: "images/\(uid)/profile", contentType: "image/jpeg", token: token)
-            }
-            try await BondBackend.setProfileHasImage(data != nil, bearer: token)
-        } catch {}
     }
 
     /// The image to blur behind the app: the selected partner's photo when they have one

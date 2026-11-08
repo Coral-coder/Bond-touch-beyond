@@ -15,11 +15,6 @@ struct SettingsView: View {
                 Text("Settings").font(.title3.bold()).foregroundStyle(Theme.title).padding(.top, 10)
 
                 MyPhotoPicker(size: 110)
-                if model.myPhoto == nil, model.legacySignedIn, FirebaseStorage.appCheckBlocked {
-                    Text("Bond Touch's servers won't hand your photo to any app but theirs. Tap your picture and choose the same photo once — it's then shared with your partners.")
-                        .font(.caption).foregroundStyle(Theme.subtitle)
-                        .multilineTextAlignment(.center).padding(.horizontal, 20)
-                }
                 Text(store.profile.name.isEmpty ? "Me" : store.profile.name)
                     .font(.title2.bold()).foregroundStyle(Theme.title)
                 HStack(spacing: 6) {

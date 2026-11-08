@@ -69,7 +69,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
             DispatchQueue.main.async { application.registerForRemoteNotifications() }
         }
         // Start up straight away, even with no screen (a background launch for a push or a
-        // bracelet event), so iCloud, the bracelet and the original backend are ready.
+        // bracelet event), so iCloud and the bracelet are ready.
         Task { await model.bootstrap() }
         return true
     }

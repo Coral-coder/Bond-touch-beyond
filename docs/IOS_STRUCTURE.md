@@ -8,8 +8,8 @@ exists), so there are no editable layout files; pixel layout comes from the scre
 
 ## Authentication (Firebase Email Link)
 
-- iOS Firebase config (`GoogleService-Info.plist`): project `bond-touch`, API key
-  `AIzaSyBKWjCliQP5HvvM6QtTQfFaGTvD27847_c`, `GOOGLE_APP_ID 1:625752440215:ios:842cd2b4e290f0e5`,
+- iOS Firebase config (`GoogleService-Info.plist`): project `bond-touch`, API key and
+  `GOOGLE_APP_ID` (redacted here; see [BOND_TOUCH_CLOUD.md](BOND_TOUCH_CLOUD.md)),
   `DATABASE_URL https://bond-touch.firebaseio.com`, `STORAGE_BUCKET bond-touch.appspot.com`.
 - The app signs in with Firebase **Email Link**: `sendSignInLink(to:actionCodeSettings:)` then
   `signInWithEmailLink(email:link:)` (classes `EmailLinkSignInRequest/Response`,

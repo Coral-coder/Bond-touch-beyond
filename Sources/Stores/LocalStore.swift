@@ -42,23 +42,6 @@ final class LocalStore: ObservableObject {
     @Published var profile: UserProfile {
         didSet { save(profile, for: .profile) }
     }
-    /// Opt in to the legacy Firebase backend (experimental; see SettingsView footnote).
-    @Published var useLegacyFirebase: Bool {
-        didSet { UserDefaults.standard.set(useLegacyFirebase, forKey: Key.fbEnabled.rawValue) }
-    }
-    @Published var firebaseDatabaseURL: String {
-        didSet { UserDefaults.standard.set(firebaseDatabaseURL, forKey: Key.fbURL.rawValue) }
-    }
-    @Published var firebaseAuthToken: String {
-        didSet { UserDefaults.standard.set(firebaseAuthToken, forKey: Key.fbToken.rawValue) }
-    }
-    /// The email of the signed-in original Bond Touch account (empty if not logged in).
-    @Published var legacyEmail: String {
-        didSet { UserDefaults.standard.set(legacyEmail, forKey: Key.legacyEmail.rawValue) }
-    }
-    @Published var legacyRefreshToken: String {
-        didSet { UserDefaults.standard.set(legacyRefreshToken, forKey: Key.legacyRefresh.rawValue) }
-    }
     /// iCloud bond codes this device belongs to (created or joined), persisted so bonds
     /// come back after relaunch. Maps code → true if we created it.
     /// The user's order for their partners (bond ids, top first) — lists, the partner bar and
@@ -110,7 +93,7 @@ final class LocalStore: ObservableObject {
 
     func photoBackground(for bondID: String) -> Bool { photoBackgrounds[bondID] ?? true }
 
-    /// Keep running in the background so touches from original-app partners arrive while
+    /// Keep running in the background so touches from partners reach the bracelet while
     /// the phone is locked (uses low-accuracy background location).
     @Published var keepAliveInBackground: Bool {
         didSet {
@@ -123,15 +106,6 @@ final class LocalStore: ObservableObject {
         }
     }
 
-    /// Original-app partner (bond id) → the iCloud bond that carries chat with them.
-    @Published var chatLinks: [String: String] {
-        didSet { save(chatLinks, for: .chatLinks) }
-    }
-
-    /// The user turned on end-to-end encrypted chat with original-app partners on this phone.
-    @Published var legacyChatEnabled: Bool {
-        didSet { UserDefaults.standard.set(legacyChatEnabled, forKey: Key.legacyChat.rawValue) }
-    }
     /// Per-partner home greeting ("Hello, this is us"), keyed by bond id.
     @Published var greetings: [String: String] {
         didSet { save(greetings, for: .greetings) }
@@ -181,25 +155,38 @@ final class LocalStore: ObservableObject {
         greetings[bondID] = text
     }
 
-    private enum Key: String { case meanings, vibration, dnd, profile, fbEnabled, fbURL, fbToken, greetings, encounters, psPasscode, legacyEmail, legacyRefresh, legacyChat, photoBg, bgSoftness, touchWindow, chatLinks, keepAlive, cloudBonds, cloudMeanings, savedPlaces }
+    private enum Key: String { case meanings, vibration, dnd, profile, greetings, encounters, psPasscode, photoBg, bgSoftness, touchWindow, keepAlive, cloudBonds, cloudMeanings, savedPlaces }
+
+    /// What older versions stored for the original Bond Touch servers (account tokens,
+    /// email, the Signal chat keys, links between original-app partners and iCloud bonds).
+    /// Partners on the original app are no longer supported: it's all removed once, and the
+    /// rest of the saved data loads as before. See docs/BOND_TOUCH_CLOUD.md.
+    private static let removedBondCloudKeys = [
+        "fbEnabled", "fbURL", "fbToken", "legacyEmail", "legacyRefresh", "legacyChat", "chatLinks",
+        "LegacySeenTouchIDs", "ImportedLegacyMeanings",
+    ]
+
+    private static func removeBondCloudData() {
+        let defaults = UserDefaults.standard
+        for key in removedBondCloudKeys where defaults.object(forKey: key) != nil {
+            defaults.removeObject(forKey: key)
+        }
+        // The Signal protocol state (private keys and sessions) of the original app's chat.
+        let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        try? FileManager.default.removeItem(at: support.appendingPathComponent("signal-store.json"))
+    }
 
     init() {
+        LocalStore.removeBondCloudData()
         self.meanings = LocalStore.load([TouchMeaning].self, for: .meanings) ?? TouchMeaning.starters
         let v = UserDefaults.standard.object(forKey: Key.vibration.rawValue) as? Double
         self.vibrationStrength = v ?? 200
         self.doNotDisturb = UserDefaults.standard.bool(forKey: Key.dnd.rawValue)
         self.profile = LocalStore.load(UserProfile.self, for: .profile) ?? .empty
-        self.useLegacyFirebase = UserDefaults.standard.bool(forKey: Key.fbEnabled.rawValue)
-        self.firebaseDatabaseURL = UserDefaults.standard.string(forKey: Key.fbURL.rawValue) ?? ""
-        self.firebaseAuthToken = UserDefaults.standard.string(forKey: Key.fbToken.rawValue) ?? ""
-        self.legacyEmail = UserDefaults.standard.string(forKey: Key.legacyEmail.rawValue) ?? ""
-        self.legacyRefreshToken = UserDefaults.standard.string(forKey: Key.legacyRefresh.rawValue) ?? ""
-        self.legacyChatEnabled = UserDefaults.standard.bool(forKey: Key.legacyChat.rawValue)
         self.cloudBondCodes = LocalStore.load([String: Bool].self, for: .cloudBonds) ?? [:]
         self.cloudMeanings = LocalStore.load([String: [TouchMeaning]].self, for: .cloudMeanings) ?? [:]
         self.savedPlaces = LocalStore.load([SavedPlace].self, for: .savedPlaces) ?? []
         self.photoBackgrounds = LocalStore.load([String: Bool].self, for: .photoBg) ?? [:]
-        self.chatLinks = LocalStore.load([String: String].self, for: .chatLinks) ?? [:]
         // Prefer the iCloud-latched choice, then this device's, then the default (on).
         let kv = NSUbiquitousKeyValueStore.default
         kv.synchronize()
@@ -227,12 +214,6 @@ final class LocalStore: ObservableObject {
                 }
             }
         }
-    }
-
-    var legacyFirebase: LegacyFirebaseClient? {
-        guard useLegacyFirebase, !firebaseDatabaseURL.isEmpty else { return nil }
-        return LegacyFirebaseClient(databaseURL: firebaseDatabaseURL,
-                                    authToken: firebaseAuthToken.isEmpty ? nil : firebaseAuthToken)
     }
 
     private func save<T: Encodable>(_ value: T, for key: Key) {

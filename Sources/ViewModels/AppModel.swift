@@ -16,39 +16,14 @@ final class AppModel: ObservableObject {
     /// iCloud invites the user created that no partner has accepted yet.
     @Published var cloudPending: [Bond] = []
 
-    // Original Bond Touch backend (runs in parallel with iCloud; see AppModel+Legacy).
-    @Published var legacyPartners: [Partner] = []
-    @Published var legacyPending: [Bond] = []
-    /// Bond invites other original-app users sent to this account (accept / decline).
-    @Published var incomingInvites: [Bond] = []
-    /// Touch Language per original-app bond, as stored on the server.
-    @Published var legacyMeanings: [String: [TouchMeaning]] = [:]
-    @Published var legacyStatus = "Not signed in"
-    @Published var legacyLastSync: Date?
-    var legacyTask: Task<Void, Never>?
     /// Polls iCloud bonds every few seconds while the app is foregrounded, so a live
     /// back-and-forth updates without waiting on a silent push (iOS throttles those heavily
     /// in the foreground). Cancelled when the app leaves the foreground — pushes cover that.
     var cloudPollTask: Task<Void, Never>?
-    var legacyProfileTask: Task<Void, Never>?
-    var legacyPrimed = false
-    var legacyCycle = 0
-    var legacyLastLocationPush = Date.distantPast
-
-    // Encrypted chat with original-app partners (see AppModel+Chat).
-    let chat = BondChat()
-    /// Partner Firebase UID + legacy phone number per bond, for their key files and photos.
-    var legacyPartnerAccounts: [String: (uid: String, phone: String)] = [:]
-    var chatSessionAttempts: [String: Date] = [:]
-    /// Partner icon from the bond's settings (kept when updating the colour).
-    var legacyPartnerIcons: [String: String] = [:]
-    var chatMaintenanceDone = false
-    @Published var legacyChatStatus = ""
 
     // Profile photos (see AppModel+Photos).
     @Published var partnerPhotos: [String: UIImage] = [:]
     @Published var myPhoto: UIImage?
-    var photoRequests: Set<String> = []
     /// This device's APNs token (set once iOS registers it), published to partners so they can
     /// wake this phone directly. Each partner's token, by bond, for the same in reverse.
     var myPushToken = ""
@@ -63,15 +38,12 @@ final class AppModel: ObservableObject {
     var widgetPhotoData: [String: Data] = [:]
     /// Repairs a bracelet stuck in firmware-update mode.
     let recovery = FirmwareRecovery()
-    /// Keeps the app running in the background for original-app partners.
+    /// Keeps the app running in the background so touches reach the bracelet.
     let keeper = BackgroundKeeper()
 
-    /// Every partner, once each: iCloud partners, plus original-app partners who aren't on
-    /// iCloud with you yet. A partner who has moved to iCloud is shown (and synced) only
-    /// through their iCloud bond.
+    /// Every partner (all on iCloud), in the user's order.
     var partners: [Partner] {
-        let migrated = migratedLegacyIDs
-        let all = cloudPartners + legacyPartners.filter { !migrated.contains($0.id) }
+        let all = cloudPartners
         // In the user's order; anyone not placed yet keeps their place after those who are.
         let order = store.partnerOrder
         return all.enumerated().sorted { a, b in
@@ -87,7 +59,7 @@ final class AppModel: ObservableObject {
         store.partnerOrder = ids
     }
     /// Every invite the user sent that has not been accepted yet.
-    var pendingBonds: [Bond] { cloudPending + legacyPending }
+    var pendingBonds: [Bond] { cloudPending }
     @Published var selectedPartnerID: String?
     @Published var history: [TouchMessage] = []                  // sent + received touches
     private var historyIDs: Set<UUID> = []
@@ -123,7 +95,7 @@ final class AppModel: ObservableObject {
     @Published private(set) var myUserID: String = ""
     @Published private(set) var ready = false
     /// nil when iCloud is usable; otherwise why it isn't, shown to the user. iCloud features
-    /// (pairing, photos, heartbeat relay) need this to be nil; the original backend doesn't.
+    /// (pairing, photos, heartbeat relay) need this to be nil.
     @Published var iCloudStatus: String?
 
     /// Re-checks iCloud and, if it became available, finishes the iCloud setup bootstrap did
@@ -185,7 +157,7 @@ final class AppModel: ObservableObject {
         }
         if foreground { haptics.playHeartbeat(bpm: bpm, seconds: seconds) }
         guard foreground else { return }
-        let mine = touch.senderID == myUserID || touch.senderID == ChatMessage.legacySelf
+        let mine = touch.senderID == myUserID || touch.senderID == ChatMessage.localSelf
         let name = mine ? "Your" : (partners.first { $0.id == touch.bondID }?.displayName ?? "Partner")
         let show = HeartbeatShow(bpm: bpm, colorRGB: touch.colorRGB, name: mine ? "Your" : name,
                                  start: Date(), seconds: seconds, touchID: touch.id)
@@ -295,9 +267,9 @@ final class AppModel: ObservableObject {
         }
         // The bracelet's partner slots follow the partner list: one slot per partner (up to
         // three), lit in that partner's colour — what the original app sends after pairing.
-        Publishers.CombineLatest3($cloudPartners, $legacyPartners, store.$partnerOrder)
+        Publishers.CombineLatest($cloudPartners, store.$partnerOrder)
             .debounce(for: .milliseconds(300), scheduler: DispatchQueue.main)
-            .sink { [weak self] _, _, _ in
+            .sink { [weak self] _, _ in
                 Task { @MainActor in
                     guard let self else { return }
                     self.bracelet.setPartnerMenu(self.partners.map { (id: $0.id, rgb: $0.colorRGB) })
@@ -390,7 +362,7 @@ final class AppModel: ObservableObject {
     /// Kept running, the app keeps checking iCloud and plays every touch on the bracelet.
     var needsBackgroundKeepAlive: Bool {
         guard store.keepAliveInBackground else { return false }
-        return !cloudPartners.isEmpty || (legacySignedIn && hasOriginalOnlyPartners)
+        return !cloudPartners.isEmpty
     }
 
     func updateKeepAlive() {
@@ -405,7 +377,6 @@ final class AppModel: ObservableObject {
     func setLocationSharing(_ on: Bool) {
         sharingLocation = on
         StickySetting.set("shareLocation", on)
-        Task { await legacySetSharing(on) }
         if on {
             location.start()
         } else {
@@ -448,7 +419,6 @@ final class AppModel: ObservableObject {
 
     private func broadcastLocation(_ fix: CLLocation) async {
         guard sharingLocation else { return }
-        await legacyPushLocation(fix.coordinate)
         await publishPresence(force: false)   // throttled — fixes can arrive every few seconds
     }
 
@@ -461,7 +431,6 @@ final class AppModel: ObservableObject {
     func sendKiss(toBondID: String? = nil) async -> Bool {
         if let toBondID { selectedPartnerID = toBondID }
         guard let bond = activeBond else { statusLine = "Choose a partner first."; return false }
-        guard !bond.legacy else { statusLine = "Kisses go to partners on iCloud."; return false }
         guard partnerPushTokens[bond.id]?.isEmpty == false else {
             statusLine = "Can't reach \(bond.partnerName)'s phone yet."; return false
         }
@@ -569,8 +538,6 @@ final class AppModel: ObservableObject {
         startTogetherSync()
         loadMyPhoto()
         bracelet.startScanning()
-        // The original backend works without iCloud, so start it first and independently.
-        startLegacySync()
         // Sharing stays as the user left it (on by default) — it isn't reset by an update.
         if sharingLocation { setLocationSharing(true) }
         iCloudStatus = await relay.accountStatusMessage()
@@ -613,8 +580,7 @@ final class AppModel: ObservableObject {
         }
     }
 
-    /// Foreground / background: presence on both backends, and the original backend's
-    /// sync loop runs only while the app is active.
+    /// Foreground / background: presence, and the iCloud polling loop's pace.
     func setActive(_ active: Bool) async {
         location.setBackground(!active)
         if active {
@@ -624,10 +590,7 @@ final class AppModel: ObservableObject {
             await refreshICloudStatus()   // the user may have just signed into iCloud
             updateKeepAlive()
             // Restart the loops so they drop from the slow background pace straight away.
-            stopLegacySync()
             stopCloudPolling()
-            startLegacySync()
-            await legacySetOnline(true)
             await setOnline(true)
             await refreshAll()
             requestPartnerLocations()
@@ -639,9 +602,7 @@ final class AppModel: ObservableObject {
             // bracelet.
             startCloudPolling()
         } else {
-            stopLegacySync()
             stopCloudPolling()
-            await legacySetOnline(false)
             await setOnline(false)
         }
     }
@@ -797,7 +758,7 @@ final class AppModel: ObservableObject {
 
     /// Creates an iCloud bond and its invite link. Returns an error message when it can't
     /// (chiefly: not signed into iCloud), so the UI can show it instead of a dead end.
-    /// `forExistingPartner`: an invite to move an original-app partner (already counted) to iCloud.
+    /// `forExistingPartner`: an invite for someone already counted as a partner (skips the limit).
     @discardableResult
     func createBond(forExistingPartner: Bool = false) async -> String? {
         if !forExistingPartner, let full = partnerLimitMessage { return full }
@@ -873,14 +834,12 @@ final class AppModel: ObservableObject {
         return activeBond
     }
 
-    /// Sends a touch to a bond (the selected partner when `toBondID` is nil): iCloud partners
-    /// get an encrypted relay record, original-app partners go through the Bond API. Records
-    /// it to the local feed either way.
+    /// Sends a touch to a bond (the selected partner when `toBondID` is nil) as an encrypted
+    /// iCloud relay record, and records it to the local feed.
     ///
     /// Unless `meaning` is given (or `matchMeaning` is false), the touch is first checked
     /// against the partner's saved meanings: a close match is sent *as* that meaning — its
-    /// colours and name, and for an original-app partner by meaning id, so their bracelet
-    /// plays it as the meaning.
+    /// colours and name.
     ///
     /// Returns whether it was sent (for the widget's Sent / Failed).
     @discardableResult
@@ -897,7 +856,7 @@ final class AppModel: ObservableObject {
                                                                in: meanings(for: bond)) : nil)
         // Sent from Matrix mode (iCloud partners): a glitchy touch in code green, and it
         // plays in Matrix mode on their phone.
-        let matrix = Theme.style == .matrix && !bond.legacy && heartbeatBPM == nil && effect == nil
+        let matrix = Theme.style == .matrix && heartbeatBPM == nil && effect == nil
         if let meaning, given == nil {
             NetLog.shared.log(.ok, "Touch matches \"\(meaning.label)\" — sending it as that meaning")
         }
@@ -922,38 +881,23 @@ final class AppModel: ObservableObject {
     /// Returns whether it was sent.
     @discardableResult
     private func transmit(_ touch: TouchMessage, bond: Bond, meaning: TouchMeaning?) async -> Bool {
-        let route = bond.legacy ? "original Bond API" : "iCloud"
+        let route = "iCloud"
         NetLog.shared.log(.send, "Send \(meaning.map { "\"\($0.label)\"" } ?? "touch") → \(bond.partnerName) (\(route))",
                           "gen \(touch.generation), \(touch.pattern.count) samples")
         do {
-            if bond.legacy, let serverID = meaning?.serverID {
-                // The original app sends a saved meaning by id; the partner's bracelet then
-                // lights and buzzes it as that meaning.
-                try await BondBackend.sendMeaningTouch(bondId: bond.id, meaningId: serverID,
-                                                       bearer: try await legacyToken())
-                updateHistory(touch.id) { $0.delivery = .sent }
-            } else if bond.legacy {
-                // As the original: the server tells us which saved meaning it matched.
-                let matched = try await legacySendTouch(touch, bond: bond)
-                updateHistory(touch.id) { t in
-                    t.delivery = .sent
-                    if let matched, t.meaningLabel == nil { t.meaningLabel = matched.label; t.meaningEmoji = matched.emoji }
-                }
+            let seq = try await relay.sendTouch(touch, bond: bond)
+            updateHistory(touch.id) { $0.delivery = .sent; $0.ringSeq = seq }
+            askForRatingIfDue()
+            NetLog.shared.log(.ok, "Touch → iCloud accepted", "\(bond.partnerName)")
+            // Wake their phone right away (CloudKit's own push can lag in deep sleep).
+            let me = store.profile.name.isEmpty ? "Someone" : store.profile.name
+            if let bpm = touch.heartbeatBPM {
+                await pushPartner(bondID: bond.id, title: "\(me)'s heartbeat", body: "\(bpm) BPM", touch: touch, group: "h")
+            } else if touch.meaningEmoji == "📍", let label = touch.meaningLabel {
+                await pushPartner(bondID: bond.id, title: "\(me) arrived", body: label, touch: touch, group: "a")
             } else {
-                let seq = try await relay.sendTouch(touch, bond: bond)
-                updateHistory(touch.id) { $0.delivery = .sent; $0.ringSeq = seq }
-                askForRatingIfDue()
-                NetLog.shared.log(.ok, "Touch → iCloud accepted", "\(bond.partnerName)")
-                // Wake their phone right away (CloudKit's own push can lag in deep sleep).
-                let me = store.profile.name.isEmpty ? "Someone" : store.profile.name
-                if let bpm = touch.heartbeatBPM {
-                    await pushPartner(bondID: bond.id, title: "\(me)'s heartbeat", body: "\(bpm) BPM", touch: touch, group: "h")
-                } else if touch.meaningEmoji == "📍", let label = touch.meaningLabel {
-                    await pushPartner(bondID: bond.id, title: "\(me) arrived", body: label, touch: touch, group: "a")
-                } else {
-                    let body = touch.meaningLabel.map { "\(touch.meaningEmoji ?? "") \($0)".trimmingCharacters(in: .whitespaces) } ?? "❤️"
-                    await pushPartner(bondID: bond.id, title: "\(me) touched you", body: body, touch: touch)
-                }
+                let body = touch.meaningLabel.map { "\(touch.meaningEmoji ?? "") \($0)".trimmingCharacters(in: .whitespaces) } ?? "❤️"
+                await pushPartner(bondID: bond.id, title: "\(me) touched you", body: body, touch: touch)
             }
             return true
         } catch {
@@ -1033,8 +977,8 @@ final class AppModel: ObservableObject {
                                toBondID: toBondID, matchMeaning: false, effect: "rainbow")
     }
 
-    /// Sends a saved meaning (Touch Language) — by id to an original-app partner, as a
-    /// labelled touch over iCloud. Returns whether it was sent.
+    /// Sends a saved meaning (Touch Language) as a labelled touch over iCloud. Returns
+    /// whether it was sent.
     @discardableResult
     func sendMeaning(_ meaning: TouchMeaning, toBondID: String? = nil) async -> Bool {
         await sendTouch(pattern: meaning.pattern, generation: meaning.touchGeneration,
@@ -1044,12 +988,10 @@ final class AppModel: ObservableObject {
 
     // MARK: - Profile
 
-    /// Pushes the user's profile (name, colour, photo) to every partner: the original backend
-    /// and each iCloud bond.
+    /// Pushes the user's profile (name, colour, photo) to every iCloud partner.
     func publishProfile() async {
         let p = store.profile
         guard p.isComplete else { return }
-        legacyPublishProfile(name: p.name, colorRGB: p.colorRGB)
         for partner in cloudPartners {
             try? await relay.sendProfile(name: p.name, colorRGB: p.colorRGB, photo: myPhotoFileURL,
                                          pushToken: myPushToken, meanings: sharedLibrary(partner.id),
@@ -1114,7 +1056,7 @@ final class AppModel: ObservableObject {
     }
 
     /// Plays a partner's incoming touch on the bracelet (or the phone) once — however many
-    /// ways it arrives (push, iCloud fetch, original backend) — from any partner, in their
+    /// ways it arrives (push, iCloud fetch) — from any partner, in their
     /// slot, up to 15 minutes old (as the original app), and not during Do Not Disturb.
     private var deliveredTouchIDs: Set<UUID> = []
     func deliver(_ touch: TouchMessage, notify: Bool = true) {
@@ -1132,15 +1074,12 @@ final class AppModel: ObservableObject {
         feel(touch)
         watch.forward(touch)
         if touch.isMatrix { showMatrix(for: touch) }
-        // A touch that didn't come with its own push (picked up from iCloud, or from an
-        // original-app partner) still gets the rich notification on the phone and the watch.
+        // A touch that didn't come with its own push (picked up from iCloud) still gets the rich notification on the phone and the watch.
         if notify { Task { await notifyTouch(touch) } }
     }
 
-    /// Unbonds: deletes the iCloud bond (owner only) or cancels the original-app bond, and
-    /// drops the partner locally.
+    /// Unbonds: deletes the iCloud bond (owner only) and drops the partner locally.
     func removeBond(_ bond: Bond) async {
-        if bond.legacy { await legacyCancelBond(bond); return }
         do {
             try await relay.deleteBond(bond)
             cloudPartners.removeAll { $0.id == bond.id }
@@ -1175,10 +1114,7 @@ final class AppModel: ObservableObject {
     }
 
     func refreshAll() async {
-        defer {
-            autoLinkPartners()
-            Task { await refreshPartnerWeather() }
-        }
+        defer { Task { await refreshPartnerWeather() } }
         // An invite we created: once the partner's profile appears, they've joined — make
         // them a partner (no relaunch needed).
         for bond in cloudPending {
@@ -1283,15 +1219,9 @@ final class AppModel: ObservableObject {
         statusLine = ""
         defer { Task { @MainActor in try? await Task.sleep(nanoseconds: 5_000_000_000); self.sendingHeartbeat = false } }
         // It goes as a touch tagged with the BPM: over iCloud the EKG itself (in the touch ring
-        // and inside the push, so it plays right away and shows in history on both phones);
-        // to an original-app partner, a press per beat (their app only knows touches).
-        if bond.legacy {
-            await sendTouch(pattern: EKG.onOff(bpm: bpm), generation: 2, colorRGB: EKG.colorRGB,
-                            toBondID: bond.id, matchMeaning: false, heartbeatBPM: bpm)
-        } else {
-            await sendTouch(pattern: EKG.samples(bpm: bpm), generation: 3, colorRGB: EKG.colorRGB,
-                            toBondID: bond.id, matchMeaning: false, heartbeatBPM: bpm)
-        }
+        // and inside the push, so it plays right away and shows in history on both phones).
+        await sendTouch(pattern: EKG.samples(bpm: bpm), generation: 3, colorRGB: EKG.colorRGB,
+                        toBondID: bond.id, matchMeaning: false, heartbeatBPM: bpm)
         if statusLine.hasPrefix("Send failed") { statusLine = "Heartbeat " + statusLine.lowercased(); return nil }
         return bpm
     }
