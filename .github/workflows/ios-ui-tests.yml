@@ -56,13 +56,19 @@ jobs:
           xcodebuild -project BondTouchBeyond.xcodeproj -scheme ThemeUITests \
             -destination "id=${{ steps.sim.outputs.udid }}" -configuration Debug \
             -derivedDataPath build -resultBundlePath ui.xcresult \
-            CODE_SIGNING_ALLOWED=NO test 2>&1 | tee ui.log | grep -E "THEME |error|failed|passed|Test Case|XCTAssert" | head -200
+            CODE_SIGNING_ALLOWED=NO test > ui.log 2>&1
+      - name: Test results
+        if: always()
+        run: |
+          # The test's own lines only (the build's warnings would bury them).
+          grep -E "^THEME |Test Case|t = .*(Check|Swipe|Tap|not running)|error: -|crash|\*\* TEST" ui.log | grep -v "warning:" | tail -150 || true
       - name: Collect screenshots
         if: always()
         run: |
           mkdir -p out
           cp ui.log out/ 2>/dev/null || true
           xcrun xcresulttool export attachments --path ui.xcresult --output-path out 2>&1 | tail -5 || true
+          rm -f out/*.mp4
           ls out | head -50
       - name: Push to the uitest-shots branch
         if: always()

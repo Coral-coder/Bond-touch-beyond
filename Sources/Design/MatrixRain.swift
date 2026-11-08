@@ -26,26 +26,13 @@ struct MatrixRain: View {
                          Color(red: 0.0, green: 0.70, blue: 0.18), Color(red: 0.0, green: 0.42, blue: 0.11)]
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 24, paused: !animated)) { timeline in
-            let t = animated ? timeline.date.timeIntervalSinceReferenceDate : 1_000
-            Canvas(rendersAsynchronously: true) { ctx, size in
-                draw(&ctx, size: size, t: t)
-            } symbols: {
-                ForEach(Self.shades.indices, id: \.self) { s in
-                    ForEach(Self.glyphs.indices, id: \.self) { g in
-                        Text(String(Self.glyphs[g]))
-                            .font(.system(size: 14, weight: .medium, design: .monospaced))
-                            .foregroundColor(Self.shades[s])
-                            .tag(s * 1000 + g)
-                    }
+        Group {
+            if animated {
+                TimelineView(.animation(minimumInterval: 1.0 / 24)) { timeline in
+                    rain(t: timeline.date.timeIntervalSinceReferenceDate)
                 }
-                ForEach(Self.hearts.indices, id: \.self) { h in
-                    Text(Self.hearts[h])
-                        .font(.system(size: 15, weight: .black, design: .monospaced))
-                        .foregroundColor(Self.lead)
-                        .shadow(color: Self.shades[1], radius: 5)
-                        .tag(9000 + h)
-                }
+            } else {
+                rain(t: 1_000)     // a still frame (the theme picker's tile)
             }
         }
         .background {
@@ -68,6 +55,20 @@ struct MatrixRain: View {
         }
     }
 
+    /// One frame of the rain. The glyphs are small pictures drawn once (`MatrixGlyphs`), so the
+    /// canvas holds no child views (which a scrolling list kept rebuilding).
+    private func rain(t: Double) -> some View {
+        Canvas { ctx, size in
+            guard size.width.isFinite, size.height.isFinite, size.width > 1, size.height > 1 else { return }
+            let atlas = MatrixGlyphs.shared
+            let shades = atlas.shades.map { row in row.map { ctx.resolve(Image(uiImage: $0)) } }
+            let hearts = atlas.hearts.map { ctx.resolve(Image(uiImage: $0)) }
+            draw(&ctx, size: size, t: t) { id in
+                id >= 9000 ? hearts[(id - 9000) % hearts.count] : shades[min(id / 1000, shades.count - 1)][(id % 1000) % atlas.glyphCount]
+            }
+        }
+    }
+
     private static func hash(_ a: Int, _ b: Int, _ c: Int = 0) -> Int {
         var h = UInt64(bitPattern: Int64(a &* 73_856_093 ^ b &* 19_349_663 ^ c &* 83_492_791))
         h ^= h >> 33; h &*= 0xff51afd7ed558ccd; h ^= h >> 33
@@ -75,7 +76,8 @@ struct MatrixRain: View {
     }
     private static func unit(_ a: Int, _ b: Int, _ c: Int = 0) -> Double { Double(hash(a, b, c)) / 1_000_003 }
 
-    private func draw(_ ctx: inout GraphicsContext, size: CGSize, t: Double) {
+    private func draw(_ ctx: inout GraphicsContext, size: CGSize, t: Double,
+                      glyph: @escaping (Int) -> GraphicsContext.ResolvedImage) {
         let cell: CGFloat = 15
         let cols = Int(size.width / cell) + 1, rows = Int(size.height / cell) + 1
         let map = faceMap
@@ -87,7 +89,8 @@ struct MatrixRain: View {
         let bandShift = (Self.unit(tick, 3) - 0.5) * 30
 
         func put(_ id: Int, col: Int, row: Int, opacity: Double, jitter: CGFloat = 0) {
-            guard opacity > 0.02, let symbol = ctx.resolveSymbol(id: id) else { return }
+            guard opacity > 0.02 else { return }
+            let symbol = glyph(id)
             var x = CGFloat(col) * cell + cell / 2 + jitter
             if glitchOn, row >= bandTop, row < bandTop + bandRows { x += bandShift }
             var c = ctx
@@ -141,6 +144,41 @@ struct MatrixRain: View {
                     put(shade * 1000 + g, col: col, row: row, opacity: min(1, (0.25 + fade * 0.85) * lift))
                 }
             }
+        }
+    }
+}
+
+/// The rain's glyphs as small pictures, drawn once: every glyph in each code green, and the
+/// glowing heart leads.
+final class MatrixGlyphs {
+    static let shared = MatrixGlyphs()
+    let shades: [[UIImage]]
+    let hearts: [UIImage]
+    var glyphCount: Int { MatrixRain.glyphs.count }
+
+    private init() {
+        func picture(_ text: String, size: CGFloat, weight: UIFont.Weight, color: UIColor, glow: UIColor?) -> UIImage {
+            let font = UIFont.monospacedSystemFont(ofSize: size, weight: weight)
+            var attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: color]
+            if let glow {
+                let shadow = NSShadow()
+                shadow.shadowColor = glow
+                shadow.shadowBlurRadius = 5
+                shadow.shadowOffset = .zero
+                attrs[.shadow] = shadow
+            }
+            let string = NSAttributedString(string: text, attributes: attrs)
+            let box = CGSize(width: 22, height: 22)
+            return UIGraphicsImageRenderer(size: box).image { _ in
+                let s = string.size()
+                string.draw(at: CGPoint(x: (box.width - s.width) / 2, y: (box.height - s.height) / 2))
+            }
+        }
+        shades = MatrixRain.shades.map { shade in
+            MatrixRain.glyphs.map { picture(String($0), size: 14, weight: .medium, color: UIColor(shade), glow: nil) }
+        }
+        hearts = MatrixRain.hearts.map {
+            picture($0, size: 15, weight: .black, color: UIColor(MatrixRain.lead), glow: UIColor(MatrixRain.shades[1]))
         }
     }
 }
