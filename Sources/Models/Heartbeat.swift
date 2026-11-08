@@ -32,21 +32,22 @@ enum EKG {
         return level(elapsed.truncatingRemainder(dividingBy: period(bpm: bpm)), bpm: bpm)
     }
 
-    /// The heartbeat on a Bond Touch More bar, as 50 ms position samples: the light rests in
-    /// the middle of the band between beats, and each beat jumps it up to one end and down
-    /// to the other, then back to the middle.
+    /// The heartbeat on a Bond Touch More bar, as 50 ms samples in one message: each beat is a
+    /// small P flick, the spike up to one end and down to the other (R, S), then a soft T,
+    /// and between beats the "no finger" sample — the bar goes dark and still, so only the
+    /// beats light and buzz, and the gaps keep the rhythm inside the message itself.
     static func samples(bpm: Int, seconds: Double = 5) -> [Int] {
         let total = min(TouchPattern.maxSamples, Int(seconds * 1000) / TouchPattern.sampleMs)
         let perBeat = max(6, Int((period(bpm: bpm) * 1000).rounded()) / TouchPattern.sampleMs)
-        let middle = 4
-        //               P     Q        R up  S down        T
-        let beat = [middle, 5, middle, 6, 8, 0, 2, middle, middle, 5, 5]
+        let gap = -1
+        //           P     ·    R up  S down     ·    T
+        let beat = [5, gap, 6, 8, 0, 2, gap, 5, 5]
+        let spikeEnd = 6          // too fast for the whole beat: keep up to the spike, drop the T
         var out: [Int] = []
         while out.count < total {
             for k in 0..<perBeat where out.count < total {
-                // Too fast for the whole beat: keep the spike, drop the T wave.
-                let p = k < beat.count && (k < 7 || perBeat >= beat.count) ? beat[k] : middle
-                out.append(TouchPattern.sample([p]))
+                let p = k < beat.count && (k < spikeEnd || perBeat >= beat.count) ? beat[k] : gap
+                out.append(p == gap ? TouchPattern.sample([]) : TouchPattern.sample([p]))
             }
         }
         return out
