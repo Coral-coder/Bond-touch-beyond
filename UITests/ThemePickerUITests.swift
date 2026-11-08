@@ -28,9 +28,16 @@ final class ThemePickerUITests: XCTestCase {
         for title in order {
             let tile = app.buttons["\(title) theme"]
             var swipes = 0
-            while !(tile.exists && tile.isHittable) && swipes < 16 {
+            // Hittable isn't enough: the floating tab bar sits over the bottom of the screen and
+            // takes taps there, so the tile has to be clear of it (and of the top bar).
+            func clear() -> Bool {
+                guard tile.exists && tile.isHittable else { return false }
+                let h = app.frame.height
+                return tile.frame.minY > 100 && tile.frame.maxY < h - 120
+            }
+            while !clear() && swipes < 16 {
                 // Scroll towards the tile, whichever way it is.
-                if tile.exists && tile.frame.minY < 0 { app.swipeDown(velocity: .slow) } else { app.swipeUp(velocity: .slow) }
+                if tile.exists && tile.frame.minY < 100 { app.swipeDown(velocity: .slow) } else { app.swipeUp(velocity: .slow) }
                 swipes += 1
             }
             shot(app, "\(title)-before-\(order.firstIndex(of: title) ?? 0)")
