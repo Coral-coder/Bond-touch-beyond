@@ -5,7 +5,7 @@ import XCTest
 /// attached to the result.
 final class ThemePickerUITests: XCTestCase {
     private let titles = ["Aero Glass", "Midnight Neon", "Soft Pastel", "Minimal Mono", "Liquid Aurora",
-                          "Paper & Ink", "Chalkboard", "Bubble", "Raindrop", "Citrus"]
+                          "Paper & Ink", "Chalkboard", "Bubble", "Raindrop", "Citrus", "Matrix"]
 
     override func setUp() { continueAfterFailure = true }
 
@@ -23,7 +23,8 @@ final class ThemePickerUITests: XCTestCase {
         app.launch()
         sleep(4)
         // Start from the most likely offenders, then the rest.
-        let order = ["Raindrop", "Bubble", "Raindrop", "Citrus", "Aero Glass", "Raindrop", "Midnight Neon", "Bubble"]
+        // Matrix is the last tile: scrolling it into view (with the picker open) crashed build 72.
+        let order = ["Matrix", "Aero Glass", "Matrix", "Raindrop", "Bubble", "Raindrop", "Citrus", "Aero Glass", "Raindrop", "Midnight Neon", "Bubble"]
         for title in order {
             let tile = app.buttons["\(title) theme"]
             var swipes = 0
