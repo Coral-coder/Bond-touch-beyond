@@ -145,6 +145,8 @@ final class AppModel: ObservableObject {
     func feel(_ touch: TouchMessage) {
         // totwoo jewellery lights in the touch's colour, whatever else plays it.
         totwoo.play(touch)
+        // Sent from Matrix mode: the screen goes Matrix while it plays (arriving or replayed).
+        if touch.isMatrix { showMatrix(for: touch) }
         if let bpm = touch.heartbeatBPM { feelHeartbeat(touch, bpm: bpm); return }
         let foreground = UIApplication.shared.applicationState == .active
         if bracelet.play(touch, holdIfOffline: !foreground) { return }
@@ -1131,7 +1133,6 @@ final class AppModel: ObservableObject {
         }
         feel(touch)
         watch.forward(touch)
-        if touch.isMatrix { showMatrix(for: touch) }
         // A touch that didn't come with its own push (picked up from iCloud, or from an
         // original-app partner) still gets the rich notification on the phone and the watch.
         if notify { Task { await notifyTouch(touch) } }
