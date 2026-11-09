@@ -93,10 +93,12 @@ extension AppModel {
 
     /// A touch sent from Matrix mode is playing: the screen goes Matrix for as long as it plays.
     func showMatrix(for touch: TouchMessage) {
-        guard UIApplication.shared.applicationState == .active, !isMine(touch) else { return }
-        let name = partners.first { $0.id == touch.bondID }?.displayName ?? "Partner"
+        guard UIApplication.shared.applicationState == .active else { return }
+        let mine = isMine(touch)
+        let name = mine ? "You" : partners.first { $0.id == touch.bondID }?.displayName ?? "Partner"
         let seconds = min(max(Double(TouchPattern.durationMs(touch.pattern, generation: touch.generation)) / 1000 + 1.5, 4), 9)
-        let label = touch.meaningLabel.map { "\(touch.meaningEmoji ?? "") \($0)".trimmingCharacters(in: .whitespaces) } ?? "touched you"
+        let label = touch.meaningLabel.map { "\(touch.meaningEmoji ?? "") \($0)".trimmingCharacters(in: .whitespaces) }
+            ?? (mine ? "sent a touch" : "touched you")
         showMatrix(bondID: touch.bondID, name: name, label: label, seconds: seconds)
     }
 
