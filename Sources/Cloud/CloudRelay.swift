@@ -355,11 +355,12 @@ actor CloudRelay {
         return bond
     }
 
-    /// Loads the bonds this phone belongs to (`roles`: code → created it here). A bond whose
-    /// record is gone (the inviter unbonded) is left out; one that can't be reached right now
-    /// is kept, so a bad connection at launch doesn't drop a partner.
-    func loadBonds(roles: [String: Bool]) async -> [Bond] {
+    /// Loads the bonds this phone belongs to (`roles`: code → created it here). One that
+    /// can't be reached right now is kept. One whose record iCloud didn't return is reported in
+    /// `missing` (code → created here), never dropped here: the caller decides.
+    func loadBonds(roles: [String: Bool]) async -> (bonds: [Bond], missing: [String: Bool]) {
         var bonds: [Bond] = []
+        var missing: [String: Bool] = [:]
         for (code, isOwner) in roles {
             let probe = Bond(id: code, partnerName: "", isOwner: isOwner)
             let partnerProfile = theirs(probe, "pf", .profile)
@@ -368,14 +369,15 @@ actor CloudRelay {
                 continue
             }
             guard let info = open(BondPayload.self, found[bondRef(code).id], code) else {
-                log(.fail, "iCloud: a bond no longer exists")
+                log(.fail, "iCloud: a bond's record wasn't returned")
+                missing[code] = isOwner
                 continue
             }
             let profile = open(ProfilePayload.self, found[partnerProfile.id], code)
             let name = profile?.name ?? (isOwner ? "Pending…" : info.name)
             bonds.append(Bond(id: code, partnerName: name, isOwner: isOwner, pending: isOwner && profile == nil))
         }
-        return bonds
+        return (bonds, missing)
     }
 
     /// The partner's name once they've joined an invite we created; nil while still pending.

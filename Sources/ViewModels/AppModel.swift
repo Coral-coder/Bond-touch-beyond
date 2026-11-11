@@ -12,7 +12,11 @@ import UIKit
 @MainActor
 final class AppModel: ObservableObject {
     /// Partners bonded over iCloud (CloudKit shared zones).
-    @Published var cloudPartners: [Partner] = []
+    @Published var cloudPartners: [Partner] = [] {
+        didSet { BondKeeper.remember(cloudPartners) }
+    }
+    /// Partners whose bond iCloud couldn't find for days, kept 30 days to restore.
+    @Published var removedBonds: [RemovedBond] = BondKeeper.removed()
     /// iCloud invites the user created that no partner has accepted yet.
     @Published var cloudPending: [Bond] = []
 
@@ -476,7 +480,7 @@ final class AppModel: ObservableObject {
     }
 
     /// An iCloud partner, showing their last report (kept on this phone) until a new one comes in.
-    private func cloudPartner(_ bond: Bond) -> Partner {
+    func cloudPartner(_ bond: Bond) -> Partner {
         var partner = Partner(bond: bond)
         if let last = PresenceCache.load(bond.id) {
             partner.presence = last
@@ -582,11 +586,10 @@ final class AppModel: ObservableObject {
         }
         do {
             myUserID = try await relay.currentUserID()
-            let bonds = await relay.loadBonds(roles: store.cloudBondCodes)
-            // Forget bonds the inviter has deleted (ones merely unreachable are still listed).
-            for code in store.cloudBondCodes.keys where !bonds.contains(where: { $0.id == code }) {
-                store.cloudBondCodes[code] = nil
-            }
+            // A bond iCloud doesn't return is kept: one bad read used to delete a partner for
+            // good. Only one missing for days goes to Recently removed (People), restorable.
+            let loaded = await relay.loadBonds(roles: store.cloudBondCodes)
+            let bonds = keepPartners(found: loaded.bonds, missing: loaded.missing)
             cloudPartners = bonds.filter { !$0.pending }.map { cloudPartner($0) }
             cloudPartners.forEach { loadCachedPhoto(bondID: $0.id) }
             cloudPending = bonds.filter { $0.pending }
