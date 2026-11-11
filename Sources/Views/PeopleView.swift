@@ -48,6 +48,17 @@ struct PeopleView: View {
                     pendingRow(bond)
                 }
 
+                if !model.removedBonds.isEmpty {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Recently removed").font(Theme.font(13, .bold)).foregroundStyle(Theme.subtitle)
+                        ForEach(model.removedBonds) { removed in
+                            removedRow(removed)
+                        }
+                        Text("iCloud couldn't find these bonds for several days. Restore puts them back; if they still have you, touches flow again with your history.")
+                            .font(.caption).foregroundStyle(Theme.subtitle)
+                    }
+                }
+
                 NavigationLink {
                     PairingView().screenBackground().navigationTitle("Add partner")
                 } label: {
@@ -112,6 +123,29 @@ struct PeopleView: View {
                 }
                 .buttonStyle(.plain)
             }
+        }
+    }
+
+    /// A partner taken off the list because iCloud couldn't find their bond, with Restore.
+    private func removedRow(_ r: RemovedBond) -> some View {
+        GlassCard {
+            HStack(spacing: 14) {
+                Circle().fill(Color(rgbInt: r.colorRGB).opacity(0.5)).frame(width: 40, height: 40)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(r.name).foregroundStyle(Theme.title)
+                    Text("Removed " + r.removedAt.formatted(.relative(presentation: .named)))
+                        .font(.caption).foregroundStyle(Theme.subtitle)
+                }
+                Spacer()
+                Button { Task { await model.restoreBond(r) } } label: {
+                    Text("Restore").font(.headline).foregroundStyle(Theme.accent)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Restore \(r.name)")
+            }
+        }
+        .contextMenu {
+            Button(role: .destructive) { model.forgetRemovedBond(r) } label: { Label("Forget", systemImage: "trash") }
         }
     }
 

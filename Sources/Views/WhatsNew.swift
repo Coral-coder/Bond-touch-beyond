@@ -21,6 +21,8 @@ struct WhatsNewView: View {
     /// Newest first. Add to the top for each build; trim when it no longer needs to go back to 40.
     static let sections: [Section] = [
         Section(title: "This update", items: [
+            Item(icon: "person.2.badge.gearshape.fill", title: "Partners don't vanish",
+                 detail: "A hiccup in iCloud could make a partner disappear for good. Now they stay. If iCloud can't find a bond for several days, it moves to People → Recently removed, where Restore puts it back."),
             Item(icon: "chevron.left.forwardslash.chevron.right", title: "Matrix",
                  detail: "A new theme: digital rain in code greens, led by glitching hearts, with your partner's face coming through in the code. Touches you send from it glitch, and play in Matrix mode on your partner's phone."),
             Item(icon: "mouth.fill", title: "Kisses",
