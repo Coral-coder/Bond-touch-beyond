@@ -33,7 +33,13 @@ struct WhatsNewView: View {
     static let sections: [Section] = [
         Section(title: "Build 76", items: [
             Item(icon: "gauge", title: "Where we stand",
-                 detail: "A new part of Us: say how close you feel and what kind of relationship it is, and see how you line up, never each other's number unless you share it. Add wishes (even secret ones that only show when you both want the same thing), make promises, and check in as often as suits you; a triad or quad gets an \"All of us\" space too.", go: .route(.us("stand"))),
+                 detail: "A new part of Us, one for each relationship. Say how close you feel, what kind of relationship it is (Anchor, Comet, FWB, your own words) and whether you're happy with it. You both see how you line up, never each other's number unless you share it.", go: .route(.us("stand"))),
+            Item(icon: "sparkles", title: "Wishes",
+                 detail: "Things you'd like that aren't there yet, closer or with more space. Your partner answers Yes, let's, Not yet or Let's talk. A Not yet sets when it can come back, so nobody is pressed. A wish can stay hidden until you both want the same thing.", go: .route(.us("stand"))),
+            Item(icon: "hands.sparkles.fill", title: "Promises",
+                 detail: "Turn a wish into a promise, with a day if you like. Gentle reminders as it comes up; one that slips by can be renewed, changed or let go. Kept ones gather into What we've done for each other, with thank-yous.", go: .route(.us("stand"))),
+            Item(icon: "person.3.fill", title: "Check-ins and All of us",
+                 detail: "A check-in as often as suits you, which offers to move on a rough day. Mark a quiet season, or pause. When three or more of you are all connected, an All of us space appears by itself. Before unbonding, you can export your relationship to keep.", go: .route(.us("stand"))),
             Item(icon: "flame.fill", title: "Streaks",
                  detail: "Each partner's page shows how many days in a row you've been in touch, and your best. Any touch, kiss, heartbeat or message counts, either way. Missing a day just starts it again.", go: .partner),
             Item(icon: "bell.and.waves.left.and.right.fill", title: "Gentle nudges",
