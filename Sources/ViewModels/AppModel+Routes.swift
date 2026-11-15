@@ -36,6 +36,10 @@ extension AppModel {
         case "c": return .us("stress")
         case "bracelet": return .bracelet
         case "date": return id.hasPrefix("date-radar-") ? .us("radar") : .us("dates")
+        case "stand":
+            // The check-in reminder opens straight onto the update.
+            if id.hasPrefix("stand-checkin-") { StandLink.openUpdate = true }
+            return .us("stand")
         case "t", "h", "a", "k", "l": return .home
         default:
             guard kind.hasPrefix("u.") else { return .home }
@@ -57,6 +61,7 @@ extension AppModel {
             case "radar": return .us("radar")
             case "calendar": return .us("polycal")
             case "metamours": return .us("metamours")
+            case let k where k.hasPrefix("stand"): return .us("stand")
             default: return .us(nil)
             }
         }

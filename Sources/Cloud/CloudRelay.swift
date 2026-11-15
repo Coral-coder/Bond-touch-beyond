@@ -54,6 +54,10 @@ actor CloudRelay {
         var partnerMeanings: [TouchMeaning]?
         /// The partner's shared profile, when their profile changed.
         var partnerAbout: AboutMe?
+        /// Where we stand: the partner's person id and the hashes of their partners' ids,
+        /// when their profile changed (see StandPeople).
+        var partnerPersonID: String?
+        var partnerLinks: [String]?
         /// The partner's copy of the Us space and whiteboard, when they changed.
         var space: TogetherSpace?
         var board: Whiteboard?
@@ -389,7 +393,8 @@ actor CloudRelay {
 
     func deleteBond(_ bond: Bond) async throws {
         var refs = [mine(bond, "pf", .profile), mine(bond, "ph", .photo), mine(bond, "pr", .presence),
-                    mine(bond, "hb", .heartbeat), mine(bond, "cur", .cursor)]
+                    mine(bond, "hb", .heartbeat), mine(bond, "cur", .cursor),
+                    mine(bond, "sx", .profile), mine(bond, "wb", .profile)]
         refs += (0..<Self.ringSize).map { mine(bond, "t-\($0)", .touch) }
         refs += (0..<Self.ringSize).map { mine(bond, "m-\($0)", .message) }
         if bond.isOwner { refs.append(bondRef(bond.id)) }
@@ -602,6 +607,8 @@ actor CloudRelay {
             events.partnerPushToken = p.pushToken
             events.partnerMeanings = p.meanings
             events.partnerAbout = p.about
+            events.partnerPersonID = p.personID
+            events.partnerLinks = p.links
             let photoRef = theirs(bond, "ph", .photo)
             if let hash = p.photoHash, hash != seenPhotoHash[code],
                let photo = try? await get([photoRef]),
@@ -662,6 +669,11 @@ private struct ProfilePayload: Codable {
     var meanings: [TouchMeaning]? = nil
     /// What this person shares about themselves (optional: older builds).
     var about: AboutMe? = nil
+    /// Where we stand: this install's random person id and the hashes of its partners' person
+    /// ids, so partners can tell when they're all bonded with each other (optional: older
+    /// builds; only while Where we stand is on).
+    var personID: String? = Feature.stand.isOn ? StandPeople.myID : nil
+    var links: [String]? = Feature.stand.isOn ? StandPeople.myLinks : nil
 }
 private struct PhotoPayload: Codable { let data: Data }
 /// A phone's status snapshot, shared (encrypted) with its partner and shown on their card.

@@ -56,6 +56,15 @@ final class TogetherStore: ObservableObject {
         schedule(bondID, board: true)
     }
 
+    /// Forgets the space and whiteboard shared with a partner (after unbonding).
+    func remove(_ bondID: String) {
+        guard spaces[bondID] != nil || boards[bondID] != nil else { return }
+        spaces[bondID] = nil
+        boards[bondID] = nil
+        Self.save(spaces, "together.json")
+        Self.save(boards, "whiteboards.json")
+    }
+
     /// Merges the partner's copies in. Returns true when something here changed.
     @discardableResult
     func mergeRemote(space remote: TogetherSpace?, board remoteBoard: Whiteboard?, bondID: String) -> Bool {
@@ -181,6 +190,11 @@ extension AppModel {
         guard space != nil || board != nil else { return }
         if together.mergeRemote(space: space, board: board, bondID: bondID), space != nil { scheduleDateReminders() }
         if space?.battleship != nil { answerBattleship(bondID) }
+        if space != nil, Feature.stand.isOn {
+            // Where we stand: open wishes you both hid, and keep group items the same everywhere.
+            matchStandWishes(bondID)
+            syncStandGroups()
+        }
     }
 
     /// Local reminders for every special date with every partner: on the day at 9:00 and
@@ -231,6 +245,7 @@ extension AppModel {
             center.removePendingNotificationRequests(withIdentifiers: old.map(\.identifier).filter { $0.hasPrefix("date-") })
             requests.prefix(60).forEach { center.add($0) }
         }
+        scheduleStandReminders()
     }
 }
 

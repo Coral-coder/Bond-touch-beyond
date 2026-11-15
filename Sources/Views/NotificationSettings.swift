@@ -13,9 +13,10 @@ enum NotificationKind: String, CaseIterable, Identifiable {
     case touches, heartbeats, arrivals, kisses, chat, care
     // Us updates from a partner, one switch per part of Us.
     case usTodos, usNotes, usWhiteboard, usDates, usLikes, usLanguage, usGames, usLove, usJar,
-         usRoulette, usQuestion, usAgreements, usRepair, usMemories, usRadar, usCalendar, usMetamours, usOther
+         usRoulette, usQuestion, usAgreements, usRepair, usMemories, usRadar, usCalendar, usMetamours,
+         usStandWishes, usStandAnswers, usStandPromises, usOther
     // Scheduled on this phone.
-    case dates, radar, bracelet
+    case dates, radar, standReminders, bracelet
     // Nudges, scheduled on this phone; nothing is ever sent to a partner.
     case nudgeWhile, nudgeReply, nudgeMoments, nudgeQuiet, nudgeStreak, nudgeBalance
 
@@ -27,7 +28,7 @@ enum NotificationKind: String, CaseIterable, Identifiable {
     var section: Section {
         switch self {
         case .touches, .heartbeats, .arrivals, .kisses, .chat, .care: return .partners
-        case .dates, .radar, .bracelet: return .reminders
+        case .dates, .radar, .standReminders, .bracelet: return .reminders
         case .nudgeWhile, .nudgeReply, .nudgeMoments, .nudgeQuiet, .nudgeStreak, .nudgeBalance: return .nudges
         default: return .us
         }
@@ -42,7 +43,7 @@ enum NotificationKind: String, CaseIterable, Identifiable {
         case .kisses: return "k"
         case .chat: return "m"
         case .care: return "c"
-        case .dates, .radar, .bracelet: return nil
+        case .dates, .radar, .standReminders, .bracelet: return nil
         case .nudgeWhile, .nudgeReply, .nudgeMoments, .nudgeQuiet, .nudgeStreak, .nudgeBalance: return nil
         default: return "u." + rawValue.dropFirst(2).lowercased()
         }
@@ -73,9 +74,13 @@ enum NotificationKind: String, CaseIterable, Identifiable {
         case .usRadar: return "R.A.D.A.R."
         case .usCalendar: return "Poly calendar"
         case .usMetamours: return "Metamours & compersion"
+        case .usStandWishes: return "Where we stand: wishes"
+        case .usStandAnswers: return "Where we stand: answers"
+        case .usStandPromises: return "Where we stand: promises"
         case .usOther: return "Everything else in Us"
         case .dates: return "Anniversaries & birthdays"
         case .radar: return "R.A.D.A.R. reminders"
+        case .standReminders: return "Where we stand"
         case .bracelet: return "Bracelet battery"
         case .nudgeWhile: return "It's been a while"
         case .nudgeReply: return "Touches you haven't answered"
@@ -98,6 +103,10 @@ enum NotificationKind: String, CaseIterable, Identifiable {
         case .usRepair: return "Time-outs, feelings and making up"
         case .dates: return "The day before and on the day"
         case .radar: return "Before a check-in"
+        case .usStandWishes: return "A new wish (never what it is), or when you both want the same thing"
+        case .usStandAnswers: return "A partner answers one of your wishes"
+        case .usStandPromises: return "A promise made or kept"
+        case .standReminders: return "Your check-in, a promise coming up, and a wish that can come back. Quiet seasons pause them"
         case .bracelet: return "When the bracelet runs low"
         case .nudgeWhile: return "When you haven't reached out to someone in a while (set per partner on their page)"
         case .nudgeReply: return "A few hours after someone reaches out, if you haven't answered"
@@ -134,6 +143,9 @@ enum NotificationKind: String, CaseIterable, Identifiable {
         case .usRadar, .radar: return "dot.radiowaves.left.and.right"
         case .usCalendar: return "calendar.badge.clock"
         case .usMetamours: return "person.3.fill"
+        case .usStandWishes: return "sparkles"
+        case .usStandAnswers: return "bubble.left.and.text.bubble.right.fill"
+        case .usStandPromises, .standReminders: return "gauge"
         case .usOther: return "ellipsis.circle.fill"
         case .dates: return "gift.fill"
         case .bracelet: return "battery.25"
@@ -165,6 +177,7 @@ enum NotificationKind: String, CaseIterable, Identifiable {
         case .usRadar, .radar: return Feature.radar.isOn
         case .usCalendar: return Feature.polyCalendar.isOn
         case .usMetamours: return Feature.metamours.isOn
+        case .usStandWishes, .usStandAnswers, .usStandPromises, .standReminders: return Feature.stand.isOn
         case .care: return Feature.stress.isOn
         default: return true
         }
@@ -174,6 +187,11 @@ enum NotificationKind: String, CaseIterable, Identifiable {
     static func us(for text: String) -> NotificationKind {
         let t = text.lowercased()
         func has(_ words: String...) -> Bool { words.contains { t.contains($0) } }
+        if has("where we stand") {
+            if has("promise") { return .usStandPromises }
+            if has("answered") { return .usStandAnswers }
+            return .usStandWishes
+        }
         if has("r.a.d.a.r") { return .usRadar }
         if has("calendar") { return .usCalendar }
         if has("metamour", "compersion") { return .usMetamours }
@@ -257,7 +275,7 @@ struct NotificationSettingsView: View {
         if kind.pushGroup != nil {
             // Tell partners' phones now, so they stop (or start) notifying.
             Task { await model.publishPresence(force: true) }
-        } else if kind == .dates || kind == .radar {
+        } else if kind == .dates || kind == .radar || kind == .standReminders {
             model.scheduleDateReminders()
         } else if kind.section == .nudges {
             Task { await model.scheduleNudges() }

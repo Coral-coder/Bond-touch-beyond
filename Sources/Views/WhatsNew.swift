@@ -32,6 +32,8 @@ struct WhatsNewView: View {
     /// Add a section at the top for each build.
     static let sections: [Section] = [
         Section(title: "Build 76", items: [
+            Item(icon: "gauge", title: "Where we stand",
+                 detail: "A new part of Us: say how close you feel and what kind of relationship it is, and see how you line up, never each other's number unless you share it. Add wishes (even secret ones that only show when you both want the same thing), make promises, and check in as often as suits you; a triad or quad gets an \"All of us\" space too.", go: .route(.us("stand"))),
             Item(icon: "flame.fill", title: "Streaks",
                  detail: "Each partner's page shows how many days in a row you've been in touch, and your best. Any touch, kiss, heartbeat or message counts, either way. Missing a day just starts it again.", go: .partner),
             Item(icon: "bell.and.waves.left.and.right.fill", title: "Gentle nudges",

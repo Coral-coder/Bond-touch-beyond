@@ -24,7 +24,7 @@ enum Poly {
 /// Parts of the app that can be switched off in Settings → Features (all on by default).
 enum Feature: String, CaseIterable, Identifiable {
     case us, dates, likes, todos, notes, whiteboard, games, coop, stress, loveLanguages, appreciation, dateRoulette,
-         question, agreements, repair, memories, radar, polyCalendar, metamours, weather
+         question, agreements, repair, stand, memories, radar, polyCalendar, metamours, weather
     var id: String { rawValue }
     var key: String { "feature.\(rawValue)" }
     var isPoly: Bool { self == .radar || self == .polyCalendar || self == .metamours }
@@ -54,6 +54,7 @@ enum Feature: String, CaseIterable, Identifiable {
         case .question: return "Question of the day"
         case .agreements: return "Agreements"
         case .repair: return "Repair tools"
+        case .stand: return "Where we stand"
         case .memories: return "Memory lane"
         case .polyCalendar: return "Poly calendar"
         case .metamours: return "Metamours & compersion"
@@ -79,6 +80,7 @@ enum Feature: String, CaseIterable, Identifiable {
         case .question: return "questionmark.bubble.fill"
         case .agreements: return "hand.raised.fingers.spread.fill"
         case .repair: return "bandage.fill"
+        case .stand: return "gauge"
         case .memories: return "photo.stack.fill"
         case .polyCalendar: return "calendar.badge.clock"
         case .metamours: return "person.3.fill"

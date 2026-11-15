@@ -183,6 +183,7 @@ private struct DemoScreen: View {
                 case "chat": ChatView()
                 case "games": GamesView()
                 case "radar": RadarView()
+                case "stand": WhereWeStandView()
                 case "battery": BatteryView()
                 case "pool": PoolView()
                 case "checkers": CheckersView()

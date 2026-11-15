@@ -1156,6 +1156,15 @@ final class AppModel: ObservableObject {
             cloudPending.removeAll { $0.id == bond.id }
             store.cloudBondCodes[bond.id] = nil
             if selectedPartnerID == bond.id { selectedPartnerID = partners.first?.id }
+            // The shared Us data (Where we stand included) goes with the bond; it can be
+            // exported first (UnbondExport).
+            if !bond.pending {
+                together.remove(bond.id)
+                var known = StandPeople.known()
+                known[bond.id] = nil
+                StandPeople.saveKnown(known)
+                await refreshStandLinks()
+            }
         } catch {
             statusLine = "Couldn't remove: \(error.localizedDescription)"
         }
@@ -1239,6 +1248,7 @@ final class AppModel: ObservableObject {
             if let seen = events.partnerSeenMessage { partnerSeenMessage[partner.id] = seen }
             if let shared = events.partnerMeanings { mergeMeanings(shared, bondID: partner.id) }
             if let about = events.partnerAbout, store.partnerAbout[partner.id] != about { store.partnerAbout[partner.id] = about }
+            noteStandPerson(bondID: partner.id, personID: events.partnerPersonID, links: events.partnerLinks)
             receiveTogether(space: events.space, board: events.board, bondID: partner.id)
             if let incoming = events.presence {
                 // Anything this snapshot lacks stays as last reported, with its own time.
@@ -1270,6 +1280,10 @@ final class AppModel: ObservableObject {
                 deliver(hb)
             }
         }
+        // Where we stand: tell partners when who I'm bonded with changed (as hashes), and keep
+        // group items the same in every pair space of a group.
+        await refreshStandLinks()
+        syncStandGroups()
     }
 
     // MARK: - Heartbeat (a button press sends 5 s of your heartbeat)

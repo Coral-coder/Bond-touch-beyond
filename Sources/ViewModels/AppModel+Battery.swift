@@ -18,6 +18,8 @@ extension AppModel {
     /// every partner also gets a gentle notification.
     func logMood(_ entry: MoodEntry) async {
         battery.log(entry)
+        // A low mood changes how the Where-we-stand check-in reminder is worded.
+        scheduleStandReminders()
         await publishPresence(force: true)
         if entry.level == "stressed" || entry.level == "overwhelmed" {
             await alertPartnersForCare("is feeling \(entry.label.lowercased()) \(entry.emoji) — a gentle touch might help 💛")
