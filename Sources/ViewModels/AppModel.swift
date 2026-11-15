@@ -453,6 +453,7 @@ final class AppModel: ObservableObject {
     }
 
     private func broadcastLocation(_ fix: CLLocation) async {
+        checkMeetings()
         guard sharingLocation else { return }
         await legacyPushLocation(fix.coordinate)
         await publishPresence(force: false)   // throttled — fixes can arrive every few seconds
@@ -1180,6 +1181,7 @@ final class AppModel: ObservableObject {
 
     func refreshAll() async {
         defer {
+            checkMeetings()
             autoLinkPartners()
             Task { await refreshPartnerWeather() }
         }

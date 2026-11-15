@@ -141,9 +141,18 @@ final class LocalStore: ObservableObject {
         didSet { save(encounters, for: .encounters) }
     }
 
+    /// The next meeting date, or nil once that day has passed (it stops counting down then).
     func nextMeeting(for bondID: String?) -> Date? {
-        guard let bondID else { return nil }
-        return encounters[bondID]
+        guard let bondID, let date = encounters[bondID] else { return nil }
+        let cal = Calendar.current
+        return cal.startOfDay(for: date) < cal.startOfDay(for: Date()) ? nil : date
+    }
+
+    /// Drops meeting dates whose day has passed.
+    func pruneEncounters() {
+        let today = Calendar.current.startOfDay(for: Date())
+        let past = encounters.filter { Calendar.current.startOfDay(for: $0.value) < today }.map(\.key)
+        past.forEach { encounters.removeValue(forKey: $0) }
     }
 
     func setNextMeeting(_ date: Date?, for bondID: String?) {
