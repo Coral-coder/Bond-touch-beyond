@@ -15,6 +15,8 @@ final class AppModel: ObservableObject {
     @Published var cloudPartners: [Partner] = [] {
         didSet { BondKeeper.remember(cloudPartners) }
     }
+    /// Contact with each partner as this phone saw it (nudges, streaks, balance).
+    @Published var contactLogs: [String: ContactLog] = ContactLogStore.load()
     /// Partners whose bond iCloud couldn't find for days, kept 30 days to restore.
     @Published var removedBonds: [RemovedBond] = BondKeeper.removed()
     /// iCloud invites the user created that no partner has accepted yet.
@@ -108,6 +110,7 @@ final class AppModel: ObservableObject {
             history.append(t)
             historyIDs.insert(t.id)
             added = true
+            noteContact(bondID: t.bondID, mine: isMine(t), at: t.sentAt)
         }
         guard added else { return }
         history = TouchArchive.recent(history)   // 3 days
@@ -453,6 +456,7 @@ final class AppModel: ObservableObject {
     }
 
     private func broadcastLocation(_ fix: CLLocation) async {
+        checkMeetings()
         guard sharingLocation else { return }
         await legacyPushLocation(fix.coordinate)
         await publishPresence(force: false)   // throttled — fixes can arrive every few seconds
@@ -475,6 +479,7 @@ final class AppModel: ObservableObject {
         await pushPartner(bondID: bond.id, title: "\(me) kissed you! 💋", body: "💋", group: "k",
                           sound: TouchNotification.kissSound, extra: Theme.style == .matrix ? ["fx": "matrix"] : [:])
         NetLog.shared.log(.send, "Kiss → \(bond.partnerName)")
+        noteContact(bondID: bond.id, mine: true)
         haptics.sent()
         return true
     }
@@ -1151,6 +1156,15 @@ final class AppModel: ObservableObject {
             cloudPending.removeAll { $0.id == bond.id }
             store.cloudBondCodes[bond.id] = nil
             if selectedPartnerID == bond.id { selectedPartnerID = partners.first?.id }
+            // The shared Us data (Where we stand included) goes with the bond; it can be
+            // exported first (UnbondExport).
+            if !bond.pending {
+                together.remove(bond.id)
+                var known = StandPeople.known()
+                known[bond.id] = nil
+                StandPeople.saveKnown(known)
+                await refreshStandLinks()
+            }
         } catch {
             statusLine = "Couldn't remove: \(error.localizedDescription)"
         }
@@ -1180,6 +1194,8 @@ final class AppModel: ObservableObject {
 
     func refreshAll() async {
         defer {
+            checkMeetings()
+            scheduleNudgesSoon()
             autoLinkPartners()
             Task { await refreshPartnerWeather() }
         }
@@ -1232,6 +1248,7 @@ final class AppModel: ObservableObject {
             if let seen = events.partnerSeenMessage { partnerSeenMessage[partner.id] = seen }
             if let shared = events.partnerMeanings { mergeMeanings(shared, bondID: partner.id) }
             if let about = events.partnerAbout, store.partnerAbout[partner.id] != about { store.partnerAbout[partner.id] = about }
+            noteStandPerson(bondID: partner.id, personID: events.partnerPersonID, links: events.partnerLinks)
             receiveTogether(space: events.space, board: events.board, bondID: partner.id)
             if let incoming = events.presence {
                 // Anything this snapshot lacks stays as last reported, with its own time.
@@ -1263,6 +1280,10 @@ final class AppModel: ObservableObject {
                 deliver(hb)
             }
         }
+        // Where we stand: tell partners when who I'm bonded with changed (as hashes), and keep
+        // group items the same in every pair space of a group.
+        await refreshStandLinks()
+        syncStandGroups()
     }
 
     // MARK: - Heartbeat (a button press sends 5 s of your heartbeat)

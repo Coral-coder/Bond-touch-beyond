@@ -128,6 +128,8 @@ extension AppModel {
         list.sort { $0.sentAt < $1.sentAt }
         messagesByBond[bondID] = list
         ChatArchive.save(messagesByBond)
+        // "me" is how this phone marks its own messages on the original backend.
+        for m in fresh { noteContact(bondID: bondID, mine: m.senderID == myUserID || m.senderID == "me", at: m.sentAt) }
         if fresh.contains(where: { $0.senderID != myUserID && $0.senderID != ChatMessage.legacySelf
                                    && Date().timeIntervalSince($0.sentAt) < 5 * 60 }) {
             notifyBracelet(bondID: bondID)

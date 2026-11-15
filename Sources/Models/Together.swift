@@ -37,6 +37,16 @@ struct TogetherSpace: Codable, Equatable {
     var memories: [Memory]?
     var story: [StoryLine]?
     var wavelength: [WavelengthPick]?
+    /// Where we stand (see Standing.swift): meter readings, wishes, promises and the small
+    /// marks (seen, answers, thanks, pause, quiet season, rhythm). The group lists hold items
+    /// shared by everyone in a triad or quad, tagged with the group's key.
+    var standReadings: [StandReading]?
+    var standWishes: [StandWish]?
+    var standPromises: [StandPromise]?
+    var standMarks: [StandMark]?
+    var standGroupWishes: [StandWish]?
+    var standGroupPromises: [StandPromise]?
+    var standGroupMarks: [StandMark]?
 
     /// Combines the partner's copy into ours.
     mutating func merge(_ other: TogetherSpace) {
@@ -70,6 +80,13 @@ struct TogetherSpace: Codable, Equatable {
         memories = Self.mergeOptional(memories, other.memories)
         story = Self.mergeOptional(story, other.story)
         wavelength = Self.mergeOptional(wavelength, other.wavelength)
+        standReadings = Self.mergeOptional(standReadings, other.standReadings)
+        standWishes = Self.mergeOptional(standWishes, other.standWishes)
+        standPromises = Self.mergeOptional(standPromises, other.standPromises)
+        standMarks = Self.mergeOptional(standMarks, other.standMarks)
+        standGroupWishes = Self.mergeOptional(standGroupWishes, other.standGroupWishes)
+        standGroupPromises = Self.mergeOptional(standGroupPromises, other.standGroupPromises)
+        standGroupMarks = Self.mergeOptional(standGroupMarks, other.standGroupMarks)
     }
 
     static func mergeOptional<T: SyncItem>(_ a: [T]?, _ b: [T]?) -> [T]? {

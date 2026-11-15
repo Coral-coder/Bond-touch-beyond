@@ -6,6 +6,7 @@ import SwiftUI
 struct PeopleView: View {
     @EnvironmentObject var model: AppModel
     @State private var reordering = false
+    @State private var unbonding: Partner?
 
     var body: some View {
         ScrollView {
@@ -44,6 +45,10 @@ struct PeopleView: View {
                     }
                 }
 
+                if model.partners.filter({ !$0.bond.pending }).count > 1 {
+                    BalanceCard()
+                }
+
                 ForEach(model.pendingBonds) { bond in
                     pendingRow(bond)
                 }
@@ -77,6 +82,7 @@ struct PeopleView: View {
         }
         .screenBackground()
         .sheet(isPresented: $reordering) { ReorderPartnersSheet() }
+        .unbondConfirm($unbonding)
     }
 
     private func partnerRow(_ partner: Partner) -> some View {
@@ -101,7 +107,7 @@ struct PeopleView: View {
         .contentShape(Rectangle())
         .onTapGesture { model.selectedPartnerID = partner.id }
         .contextMenu {
-            Button(role: .destructive) { Task { await model.removeBond(partner.bond) } } label: {
+            Button(role: .destructive) { unbonding = partner } label: {
                 Label("Remove partner", systemImage: "trash")
             }
         }

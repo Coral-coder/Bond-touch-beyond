@@ -16,7 +16,7 @@ struct PartnerDetailView: View {
 
     @State private var color = Color.white
     @State private var showEncounters = false
-    @State private var confirmUnbond = false
+    @State private var unbonding: Partner?
     @State private var showShare = false
     @State private var shareError: String?
     @State private var inviting = false
@@ -94,6 +94,8 @@ struct PartnerDetailView: View {
                             TouchOrKissRow(bondID: partner.id, name: partner.displayName)
                         }
 
+                        StreakCard(partner: partner)
+
                         AboutCard(name: partner.displayName, about: model.partnerAbout(partner.id))
 
                         PulseButton(partner: partner)
@@ -154,7 +156,7 @@ struct PartnerDetailView: View {
                                     .frame(maxWidth: .infinity).frame(height: 56).glass(cornerRadius: 20)
                             }
                             .buttonStyle(.plain)
-                            Button { confirmUnbond = true } label: {
+                            Button { unbonding = partner } label: {
                                 Text("Unbond").font(Theme.font(14, .bold)).foregroundStyle(Theme.danger)
                                     .frame(maxWidth: .infinity).frame(height: 56).glass(cornerRadius: 20)
                             }
@@ -176,12 +178,7 @@ struct PartnerDetailView: View {
         .alert("Can't invite", isPresented: Binding(get: { shareError != nil }, set: { if !$0 { shareError = nil } })) {
             Button("OK", role: .cancel) { shareError = nil }
         } message: { Text(shareError ?? "") }
-        .confirmationDialog("Unbond from \(partner?.displayName ?? "this partner")?",
-                            isPresented: $confirmUnbond, titleVisibility: .visible) {
-            Button("Unbond", role: .destructive) {
-                if let bond = partner?.bond { Task { await model.removeBond(bond); dismiss() } }
-            }
-        }
+        .unbondConfirm($unbonding) { dismiss() }
     }
 
     /// How this partner syncs: iCloud, or the original servers with an invite to move.

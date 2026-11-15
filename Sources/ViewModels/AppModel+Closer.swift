@@ -77,6 +77,7 @@ extension AppModel {
         // One push can reach here twice (shown in the foreground and its background wake).
         if let last = receivedKisses.first, last.bondID == partner.id, Date().timeIntervalSince(last.at) < 3 { return }
         receivedKisses.insert(KissEvent(bondID: partner.id, name: partner.displayName), at: 0)
+        noteContact(bondID: partner.id, mine: false)
         if receivedKisses.count > 30 { receivedKisses.removeLast(receivedKisses.count - 30) }
         KissEvent.save(receivedKisses)
         CarPlayActivity.changed()

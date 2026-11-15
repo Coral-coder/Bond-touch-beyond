@@ -192,6 +192,7 @@ struct TogetherView: View {
         add(Feature.memories.isOn, "memories", "Memory lane", "photo.stack.fill", memoryStatus, Theme.lime) { MemoryLaneView() }
         add(Feature.agreements.isOn, "agreements", "Agreements", "hand.raised.fingers.spread.fill", agreementStatus, Theme.accent) { AgreementsView() }
         add(Feature.repair.isOn, "repair", "Repair", "bandage.fill", repairStatus, Theme.pink) { RepairView() }
+        add(Feature.stand.isOn, "stand", "Where we stand", "gauge", standStatus, Theme.accent) { WhereWeStandView() }
         add(Feature.radar.isOn, "radar", "R.A.D.A.R.", "dot.radiowaves.left.and.right", radarStatus, Theme.pink) { RadarView() }
         add(Feature.polyCalendar.isOn, "polycal", "Poly calendar", "calendar.badge.clock", "Plans with everyone", Theme.magenta) { PolyCalendarView() }
         add(Feature.metamours.isOn, "metamours", "Metamours", "person.3.fill", "& compersion", Theme.lime) { MetamoursView() }
@@ -310,6 +311,23 @@ struct TogetherView: View {
             return "They're taking a breather"
         }
         return "Time-outs & making up"
+    }
+
+    private var standStatus: String {
+        let id = model.selectedPartnerID, me = model.myRole(id), them = model.standThem(id)
+        if model.standPaused(id, them) { return "\(model.selectedPartner?.displayName ?? "They") paused it" }
+        if model.standPaused(id, me) { return "Paused" }
+        if let next = model.standNextCheckIn(id), next <= Date() { return "Time for a check-in" }
+        let mine = model.standLatest(id, by: me), theirs = model.standLatest(id, by: them)
+        let scope = model.standScope(id)
+        let waiting = model.standWishes(scope).filter { w in
+            w.by != me && !w.isHidden && !w.both
+                && !model.standMarks(scope).live(.answer).contains { $0.item == w.id && $0.by == me }
+        }.count
+        if waiting > 0 { return "\(waiting) wish\(waiting == 1 ? "" : "es") for you" }
+        if model.standQuiet(id) { return "A quiet season 🌙" }
+        if mine == nil { return "Closeness, wishes, promises" }
+        return StandAlignment.of(mine, theirs).title
     }
 
     private var radarStatus: String {

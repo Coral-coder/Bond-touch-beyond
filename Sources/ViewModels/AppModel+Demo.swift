@@ -101,6 +101,7 @@ extension AppModel {
             s.notes = [SharedNote(title: "Trip ideas", body: "Montmartre at sunrise, picnic by the canal, that tiny bakery.")]
             s.chess = ChessGame(moves: ["e2e4", "e7e5", "g1f3", "b8c6", "f1c4"])
         }
+        loadStandDemo(alexID: alex.id, joID: jo.id, now: now)
         together.editBoard(alex.id) { b in
             b.strokes = [Whiteboard.Stroke(rgb: 0xEC5A89, width: 6, points: Self.demoHeart, by: "A"),
                          Whiteboard.Stroke(rgb: 0x57C3BB, width: 4, points: [0.15, 0.85, 0.3, 0.8, 0.45, 0.86, 0.6, 0.8, 0.75, 0.86], by: "B")]
@@ -117,6 +118,78 @@ extension AppModel {
         mine.place = "London"; mine.temp = 12; mine.summary = "Cloudy"; mine.symbol = "cloud.fill"
         myWeather = mine
         statusLine = ""
+    }
+
+    /// Where we stand for the demo: both meters with some history, a few wishes (one answered
+    /// "Not yet", one hidden), a promise coming up and a kept one, and an "All of us" group
+    /// with Alex and Jo.
+    private func loadStandDemo(alexID: String, joID: String, now: Date) {
+        let cal = Calendar.current
+        func ago(_ days: Int) -> Date { cal.date(byAdding: .day, value: -days, to: now) ?? now }
+        func ahead(_ days: Int) -> Date { cal.date(byAdding: .day, value: days, to: now) ?? now }
+
+        var readings: [StandReading] = []
+        for (days, c) in [(120, 6), (90, 7), (60, 7), (31, 8), (3, 8)] {
+            var r = StandReading(by: "A", closeness: c, band: StandReading.band(c), note: days == 3 ? "Feeling really settled with you" : nil,
+                                 styles: ["Anchor", "Nesting", "Partners"], happiness: StandHappiness.content.rawValue,
+                                 working: ["Sunday mornings", "How we talk things through"], moreOf: ["Weekends away"],
+                                 pace: StandPace.steady.rawValue)
+            r.created = ago(days); r.edited = r.created
+            readings.append(r)
+        }
+        for (days, c, happy) in [(118, 6, StandHappiness.more), (62, 7, StandHappiness.more), (30, 8, StandHappiness.content), (2, 9, StandHappiness.content)] {
+            var r = StandReading(by: "B", band: StandReading.band(c), styles: ["Anchor", "Partners", "Long-distance"],
+                                 happiness: happy.rawValue, working: ["Our calls before bed", "Feeling like a team"],
+                                 moreOf: ["Trips together"], lessOf: ["Rushed goodbyes"], pace: StandPace.ready.rawValue)
+            r.created = ago(days); r.edited = r.created
+            readings.append(r)
+        }
+
+        var weekend = StandWish(by: "B", title: "A weekend away", library: "weekend", matters: true)
+        weekend.created = ago(20)
+        var family = StandWish(by: "A", title: "Meet family", library: "family")
+        family.created = ago(14)
+        var travel = StandWish(by: "B", title: "Travel together", library: "travel")
+        travel.created = ago(1)
+        let moveIn = StandLibrary.item("movein").map { StandWish(by: "A", hidden: StandLibrary.hiddenHash($0, bondCode: alexID)) }
+
+        var asheville = StandPromise(by: "B", title: "Asheville weekend", due: ahead(12), note: "The cabin with the porch", wish: weekend.id)
+        asheville.created = ago(18)
+        weekend.promise = asheville.id
+        var risotto = StandPromise(by: "A", title: "Cook for Alex's birthday", state: StandPromiseState.kept.rawValue, stateAt: ago(20))
+        risotto.created = ago(40)
+
+        together.edit(alexID) { s in
+            s.standReadings = readings
+            s.standWishes = [weekend, family, travel] + (moveIn.map { [$0] } ?? [])
+            s.standPromises = [risotto, asheville]
+            s.standMarks = [
+                StandMark(.rhythm, by: "A", value: "30", shared: true),
+                StandMark(.answer, item: weekend.id, by: "A", value: StandAnswer.yes.rawValue),
+                StandMark(.answer, item: family.id, by: "B", value: StandAnswer.notYet.rawValue, until: ahead(60)),
+                StandMark(.seen, item: family.id, by: "B"),
+                StandMark(.seen, item: weekend.id, by: "A"),
+                StandMark(.thanks, item: risotto.id, by: "B", value: "Best risotto of my life 💛"),
+            ]
+        }
+
+        // A triad: Alex and Jo are bonded with each other too.
+        let alexPerson = "D0000000-0000-0000-0000-00000000A1E7", joPerson = "D0000000-0000-0000-0000-0000000000B0"
+        var known = StandPeople.known()
+        known[alexID] = .init(personID: alexPerson, links: [StandPeople.linkHash(joPerson), StandPeople.linkHash(StandPeople.myID)])
+        known[joID] = .init(personID: joPerson, links: [StandPeople.linkHash(alexPerson), StandPeople.linkHash(StandPeople.myID)])
+        StandPeople.saveKnown(known)
+        let key = StandPeople.groupKey([alexPerson, joPerson, StandPeople.myID])
+        var night = StandWish(by: joPerson, title: "A games night, all of us", matters: true, groupKey: key)
+        night.created = ago(4)
+        let picnic = StandPromise(by: alexPerson, title: "Picnic at the lake", due: ahead(5), groupKey: key)
+        for id in [alexID, joID] {
+            together.edit(id) { s in
+                s.standGroupWishes = [night]
+                s.standGroupPromises = [picnic]
+                s.standGroupMarks = [StandMark(.answer, item: night.id, by: alexPerson, value: StandAnswer.yes.rawValue, groupKey: key)]
+            }
+        }
     }
 
     /// A slide up the bar, a hold, and back down.
