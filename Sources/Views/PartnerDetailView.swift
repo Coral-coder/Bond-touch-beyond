@@ -94,6 +94,8 @@ struct PartnerDetailView: View {
                             TouchOrKissRow(bondID: partner.id, name: partner.displayName)
                         }
 
+                        StreakCard(partner: partner)
+
                         AboutCard(name: partner.displayName, about: model.partnerAbout(partner.id))
 
                         PulseButton(partner: partner)

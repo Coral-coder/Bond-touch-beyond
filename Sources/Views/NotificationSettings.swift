@@ -16,16 +16,19 @@ enum NotificationKind: String, CaseIterable, Identifiable {
          usRoulette, usQuestion, usAgreements, usRepair, usMemories, usRadar, usCalendar, usMetamours, usOther
     // Scheduled on this phone.
     case dates, radar, bracelet
+    // Nudges, scheduled on this phone; nothing is ever sent to a partner.
+    case nudgeWhile, nudgeReply, nudgeMoments, nudgeQuiet, nudgeStreak, nudgeBalance
 
     var id: String { rawValue }
     var key: String { "notify.\(rawValue)" }
     var isOn: Bool { UserDefaults.standard.object(forKey: key) as? Bool ?? true }
 
-    enum Section: String, CaseIterable { case partners = "From your partners", us = "Us", reminders = "Reminders" }
+    enum Section: String, CaseIterable { case partners = "From your partners", us = "Us", reminders = "Reminders", nudges = "Nudges" }
     var section: Section {
         switch self {
         case .touches, .heartbeats, .arrivals, .kisses, .chat, .care: return .partners
         case .dates, .radar, .bracelet: return .reminders
+        case .nudgeWhile, .nudgeReply, .nudgeMoments, .nudgeQuiet, .nudgeStreak, .nudgeBalance: return .nudges
         default: return .us
         }
     }
@@ -40,6 +43,7 @@ enum NotificationKind: String, CaseIterable, Identifiable {
         case .chat: return "m"
         case .care: return "c"
         case .dates, .radar, .bracelet: return nil
+        case .nudgeWhile, .nudgeReply, .nudgeMoments, .nudgeQuiet, .nudgeStreak, .nudgeBalance: return nil
         default: return "u." + rawValue.dropFirst(2).lowercased()
         }
     }
@@ -73,6 +77,12 @@ enum NotificationKind: String, CaseIterable, Identifiable {
         case .dates: return "Anniversaries & birthdays"
         case .radar: return "R.A.D.A.R. reminders"
         case .bracelet: return "Bracelet battery"
+        case .nudgeWhile: return "It's been a while"
+        case .nudgeReply: return "Touches you haven't answered"
+        case .nudgeMoments: return "Before you meet"
+        case .nudgeQuiet: return "When a partner goes quiet"
+        case .nudgeStreak: return "Keep your streak"
+        case .nudgeBalance: return "Weekly balance"
         }
     }
 
@@ -89,6 +99,12 @@ enum NotificationKind: String, CaseIterable, Identifiable {
         case .dates: return "The day before and on the day"
         case .radar: return "Before a check-in"
         case .bracelet: return "When the bracelet runs low"
+        case .nudgeWhile: return "When you haven't reached out to someone in a while (set per partner on their page)"
+        case .nudgeReply: return "A few hours after someone reaches out, if you haven't answered"
+        case .nudgeMoments: return "The evening before a meeting date"
+        case .nudgeQuiet: return "When someone hasn't reached out in a week. They're never told"
+        case .nudgeStreak: return "In the evening, if you're on a streak and haven't been in touch today"
+        case .nudgeBalance: return "Sundays, with more than one partner: who you reached out to this week. Only you see it"
         default: return nil
         }
     }
@@ -121,6 +137,12 @@ enum NotificationKind: String, CaseIterable, Identifiable {
         case .usOther: return "ellipsis.circle.fill"
         case .dates: return "gift.fill"
         case .bracelet: return "battery.25"
+        case .nudgeWhile: return "hourglass"
+        case .nudgeReply: return "arrowshape.turn.up.left.fill"
+        case .nudgeMoments: return "calendar.badge.clock"
+        case .nudgeQuiet: return "moon.zzz.fill"
+        case .nudgeStreak: return "flame.fill"
+        case .nudgeBalance: return "scale.3d"
         }
     }
 
@@ -194,6 +216,8 @@ struct NotificationSettingsView: View {
                 } footer: {
                     if section == .partners {
                         Text("Things you switch off still arrive and sync — just without a banner or sound. Your partners' phones learn what you've switched off within a minute.")
+                    } else if section == .nudges {
+                        Text("Gentle reminders from this phone to you, between 10:00 and 21:00. Nothing is ever sent for you, and no one is told.")
                     }
                 }
             }
@@ -235,6 +259,8 @@ struct NotificationSettingsView: View {
             Task { await model.publishPresence(force: true) }
         } else if kind == .dates || kind == .radar {
             model.scheduleDateReminders()
+        } else if kind.section == .nudges {
+            Task { await model.scheduleNudges() }
         }
     }
 }

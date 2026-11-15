@@ -21,6 +21,10 @@ struct WhatsNewView: View {
     /// Newest first. Add to the top for each build; trim when it no longer needs to go back to 40.
     static let sections: [Section] = [
         Section(title: "This update", items: [
+            Item(icon: "flame.fill", title: "Streaks and gentle nudges",
+                 detail: "Each partner's page shows how many days in a row you've been in touch. Gentle reminders: when it's been a while (you choose how long, per partner), when you haven't answered, the evening before you meet, when someone's been quiet for a week, and to keep a streak going. Nothing is ever sent for you. Settings → Notifications → Nudges."),
+            Item(icon: "scale.3d", title: "Balance",
+                 detail: "With more than one partner, People shows who you reached out to this week, and Sundays bring a private summary."),
             Item(icon: "calendar.badge.checkmark", title: "Meeting countdown resets",
                  detail: "\"You meet today\" no longer sticks. It clears when that day ends, or as soon as you're together: both phones within about 100 ft on the day."),
             Item(icon: "person.2.badge.gearshape.fill", title: "Partners don't vanish",

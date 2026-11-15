@@ -44,6 +44,10 @@ struct PeopleView: View {
                     }
                 }
 
+                if model.partners.filter({ !$0.bond.pending }).count > 1 {
+                    BalanceCard()
+                }
+
                 ForEach(model.pendingBonds) { bond in
                     pendingRow(bond)
                 }

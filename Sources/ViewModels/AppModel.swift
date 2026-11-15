@@ -15,6 +15,8 @@ final class AppModel: ObservableObject {
     @Published var cloudPartners: [Partner] = [] {
         didSet { BondKeeper.remember(cloudPartners) }
     }
+    /// Contact with each partner as this phone saw it (nudges, streaks, balance).
+    @Published var contactLogs: [String: ContactLog] = ContactLogStore.load()
     /// Partners whose bond iCloud couldn't find for days, kept 30 days to restore.
     @Published var removedBonds: [RemovedBond] = BondKeeper.removed()
     /// iCloud invites the user created that no partner has accepted yet.
@@ -108,6 +110,7 @@ final class AppModel: ObservableObject {
             history.append(t)
             historyIDs.insert(t.id)
             added = true
+            noteContact(bondID: t.bondID, mine: isMine(t), at: t.sentAt)
         }
         guard added else { return }
         history = TouchArchive.recent(history)   // 3 days
@@ -476,6 +479,7 @@ final class AppModel: ObservableObject {
         await pushPartner(bondID: bond.id, title: "\(me) kissed you! 💋", body: "💋", group: "k",
                           sound: TouchNotification.kissSound, extra: Theme.style == .matrix ? ["fx": "matrix"] : [:])
         NetLog.shared.log(.send, "Kiss → \(bond.partnerName)")
+        noteContact(bondID: bond.id, mine: true)
         haptics.sent()
         return true
     }
@@ -1182,6 +1186,7 @@ final class AppModel: ObservableObject {
     func refreshAll() async {
         defer {
             checkMeetings()
+            scheduleNudgesSoon()
             autoLinkPartners()
             Task { await refreshPartnerWeather() }
         }
