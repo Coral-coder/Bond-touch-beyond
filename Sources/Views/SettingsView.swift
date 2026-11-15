@@ -689,7 +689,7 @@ private struct LayoutPickerCard: View {
 }
 
 /// Settings → Theme: every look as a small live preview, and for Paper & Ink, the ink colour.
-private struct ThemePickerCard: View {
+struct ThemePickerCard: View {
     /// A theme change rebuilds every screen (so all colours update), which would put Settings
     /// back at the top; this marks that it should come back to the theme card instead.
     static let returnKey = "settingsReturnToTheme"
@@ -883,7 +883,7 @@ private struct NeonStyleCard: View {
 }
 
 /// Settings → Display size: how big text and icons are across the app.
-private struct DisplaySizeCard: View {
+struct DisplaySizeCard: View {
     @AppStorage("displayScale") private var displayScale = 0.92
     private static let sizes: [(String, Double)] = [("Smaller", 0.86), ("Small", 0.92), ("Standard", 1.0)]
 

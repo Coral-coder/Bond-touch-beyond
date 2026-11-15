@@ -1,14 +1,24 @@
 import SwiftUI
 
-/// What's new: from Settings → What's new (it no longer pops up after updates). Lists
-/// everything since build 40, newest first.
+/// What's new: from Settings → What's new (it no longer pops up after updates). One section
+/// per build since 59, newest first, then the earlier highlights.
 struct WhatsNewView: View {
     @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject var model: AppModel
+    @State private var showPartner = false
+
+    /// Where "Show me" takes you.
+    enum Go {
+        case route(AppRoute)        // a tab, or a part of Us
+        case partner                // the selected partner's page
+        case people, profile, notifications, totwoo, themes, displaySize
+    }
 
     struct Item: Identifiable {
         let icon: String
         let title: String
         let detail: String
+        var go: Go? = nil
         var id: String { title }
     }
 
@@ -18,25 +28,106 @@ struct WhatsNewView: View {
         var id: String { title }
     }
 
-    /// Newest first. Add to the top for each build; trim when it no longer needs to go back to 40.
+    /// Newest first, one section per TestFlight build since 59, then the earlier highlights.
+    /// Add a section at the top for each build.
     static let sections: [Section] = [
-        Section(title: "This update", items: [
-            Item(icon: "flame.fill", title: "Streaks and gentle nudges",
-                 detail: "Each partner's page shows how many days in a row you've been in touch. Gentle reminders: when it's been a while (you choose how long, per partner), when you haven't answered, the evening before you meet, when someone's been quiet for a week, and to keep a streak going. Nothing is ever sent for you. Settings → Notifications → Nudges."),
+        Section(title: "Build 76", items: [
+            Item(icon: "flame.fill", title: "Streaks",
+                 detail: "Each partner's page shows how many days in a row you've been in touch, and your best. Any touch, kiss, heartbeat or message counts, either way. Missing a day just starts it again.", go: .partner),
+            Item(icon: "bell.and.waves.left.and.right.fill", title: "Gentle nudges",
+                 detail: "When it's been a while (you choose how long, per partner), when you haven't answered, the evening before you meet, when someone's been quiet for a week, and to keep a streak going. Each has Kiss and Send a touch built in. Nothing is ever sent for you, and no one is told. Settings → Notifications → Nudges.", go: .notifications),
             Item(icon: "scale.3d", title: "Balance",
-                 detail: "With more than one partner, People shows who you reached out to this week, and Sundays bring a private summary."),
+                 detail: "With more than one partner, People shows who you reached out to this week, and Sundays bring a private summary. Only you see it.", go: .people),
             Item(icon: "calendar.badge.checkmark", title: "Meeting countdown resets",
-                 detail: "\"You meet today\" no longer sticks. It clears when that day ends, or as soon as you're together: both phones within about 100 ft on the day."),
+                 detail: "\"You meet today\" no longer sticks. It clears when that day ends, or as soon as you're together: both phones within about 100 ft on the day.", go: .partner),
+            Item(icon: "sparkles", title: "What's new, build by build",
+                 detail: "This screen now lists every build since 59."),
+        ]),
+        Section(title: "Build 75", items: [
             Item(icon: "person.2.badge.gearshape.fill", title: "Partners don't vanish",
-                 detail: "A hiccup in iCloud could make a partner disappear for good. Now they stay. If iCloud can't find a bond for several days, it moves to People → Recently removed, where Restore puts it back."),
+                 detail: "A hiccup in iCloud could make a partner disappear for good. Now they stay. If iCloud can't find a bond for several days, it moves to People → Recently removed, where Restore puts it back.", go: .people),
+        ]),
+        Section(title: "Build 74", items: [
+            Item(icon: "chevron.left.forwardslash.chevron.right", title: "Matrix replays",
+                 detail: "Replaying a touch that was sent from Matrix plays it in Matrix mode again, your own included.", go: .route(.home)),
+        ]),
+        Section(title: "Build 73", items: [
+            Item(icon: "waveform.path.ecg", title: "One beat, one buzz",
+                 detail: "A heartbeat on the bracelet is one vibration per beat, with nothing in between.", go: .route(.home)),
+            Item(icon: "wrench.and.screwdriver.fill", title: "Theme list fixed",
+                 detail: "Scrolling Settings with the themes open no longer crashes.", go: .themes),
+        ]),
+        Section(title: "Build 72", items: [
             Item(icon: "chevron.left.forwardslash.chevron.right", title: "Matrix",
-                 detail: "A new theme: digital rain in code greens, led by glitching hearts, with your partner's face coming through in the code. Touches you send from it glitch, and play in Matrix mode on your partner's phone."),
+                 detail: "A new theme: digital rain in code greens, led by glitching hearts, with your partner's face coming through in the code. Touches you send from it glitch, and play in Matrix mode on your partner's phone.", go: .themes),
             Item(icon: "mouth.fill", title: "Kisses",
-                 detail: "A kiss now says \"{name} kissed you! 💋\". Every notification has Kiss back and Send a touch, and a partner's page has both buttons too."),
+                 detail: "A kiss now says \"{name} kissed you! 💋\". Every notification has Kiss back and Send a touch, and a partner's page has both buttons too. A kiss that arrives with the app open floats up the screen.", go: .partner),
             Item(icon: "waveform.path.ecg", title: "Heartbeats in time",
-                 detail: "A heartbeat goes to the bracelet as one message, so it beats steadily instead of drifting."),
-            Item(icon: "car.fill", title: "CarPlay",
-                 detail: "Kisses, touches and heartbeats show on the car screen and Siri can read them out. Kiss back or send a touch without picking up your phone."),
+                 detail: "A heartbeat goes to the bracelet as one message, so it beats steadily instead of drifting.", go: .route(.home)),
+            Item(icon: "person.wave.2.fill", title: "Notifications from your partner",
+                 detail: "Touches and kisses arrive as messages from your partner, with their name on top, so Siri can read them out.", go: .notifications),
+            Item(icon: "hand.tap.fill", title: "Easier tab bar",
+                 detail: "The whole tab takes the tap, at every display size.", go: .displaySize),
+        ]),
+        Section(title: "Build 71", items: [
+            Item(icon: "person.crop.circle.fill", title: "My profile",
+                 detail: "Your own page: a line about you, pronouns, birthday and the things you like. Your partners see it, and Us shows both profiles side by side.", go: .profile),
+            Item(icon: "heart.fill", title: "Feel their pulse",
+                 detail: "Tap a partner's pulse to feel it on your bracelet, phone and watch.", go: .partner),
+            Item(icon: "textformat.size", title: "Display size",
+                 detail: "Everything is a little smaller by default; Settings → Display size has Smaller, Small and Standard.", go: .displaySize),
+            Item(icon: "sparkles", title: "totwoo jewellery",
+                 detail: "Pair a totwoo piece and your partners' touches light it in their colour.", go: .totwoo),
+        ]),
+        Section(title: "Build 70", items: [
+            Item(icon: "bolt.horizontal.fill", title: "Lighter syncing with Android partners",
+                 detail: "Partners paired across iPhone and Android sync only what changed, using far less.", go: .people),
+        ]),
+        Section(title: "Build 69", items: [
+            Item(icon: "iphone.gen3.radiowaves.left.and.right", title: "Pair with Android",
+                 detail: "New pairings work with partners on Android, and without iCloud. Existing partners carry on as before.", go: .people),
+        ]),
+        Section(title: "Build 68", items: [
+            Item(icon: "chart.xyaxis.line", title: "Charts show the last reading",
+                 detail: "Stress & mood charts end at the last reading, with its date and time, and show heart rate. A partner's last report stays until a new one replaces it.", go: .route(.us("stress"))),
+        ]),
+        Section(title: "Build 67", items: [
+            Item(icon: "waveform.path.ecg.rectangle.fill", title: "Everyone's HRV on one chart",
+                 detail: "Your partners' heart-rate variability together, with smooth lines that no longer swing between readings.", go: .route(.us("stress"))),
+        ]),
+        Section(title: "Build 66", items: [
+            Item(icon: "applewatch", title: "Watch stand-in, your choice",
+                 detail: "Stand-in mode is opt-in and ends itself after an hour. The watch app only comes forward once, when a connected bracelet drops off."),
+        ]),
+        Section(title: "Build 65", items: [
+            Item(icon: "map.fill", title: "Map fixed",
+                 detail: "A crash around partner pins on the map is gone.", go: .route(.map)),
+        ]),
+        Section(title: "Build 64", items: [
+            Item(icon: "sparkles", title: "What's new stays out of the way",
+                 detail: "It no longer pops up after updates. It's always in Settings → What's new."),
+        ]),
+        Section(title: "Build 63", items: [
+            Item(icon: "dot.radiowaves.left.and.right", title: "Partners stay live",
+                 detail: "Partners show online while the app is in the background, refresh when you open it, and show when their last reading was taken.", go: .route(.map)),
+        ]),
+        Section(title: "Build 62", items: [
+            Item(icon: "applewatch.radiowaves.left.and.right", title: "Smoother touches on the watch",
+                 detail: "A received touch held in one place plays as one steady vibration."),
+        ]),
+        Section(title: "Build 61", items: [
+            Item(icon: "hand.point.up.left.fill", title: "Feel it while you draw on the watch",
+                 detail: "One steady vibration while your finger is on the watch's touch bar."),
+        ]),
+        Section(title: "Build 60", items: [
+            Item(icon: "location.fill", title: "Location like Find My",
+                 detail: "Low-power location in the background with a fresh fix when it's asked for, so sharing costs far less battery.", go: .route(.map)),
+        ]),
+        Section(title: "Build 59", items: [
+            Item(icon: "chart.line.uptrend.xyaxis", title: "Stress as a filled line",
+                 detail: "The stress chart is a filled line, and the watch pages use the whole screen.", go: .route(.us("stress"))),
+        ]),
+        Section(title: "Earlier", items: [
             Item(icon: "person.3.sequence.fill", title: "Room for up to 10 partners",
                  detail: "With more than three, the others gather in a cluster on the partner bar — tap it and everyone bursts out around it to pick from."),
             Item(icon: "rainbow", title: "Rainbow wave",
@@ -56,7 +147,7 @@ struct WhatsNewView: View {
             Item(icon: "bell.slash.fill", title: "Quiet while you're in the app",
                  detail: "With the app open — playing a game or anything else — notifications stay quiet; touches still play. Only a chat message shows, and not for the chat you're reading."),
             Item(icon: "heart.circle", title: "The kiss button",
-                 detail: "On Home next to the heartbeat: one tap sends a kiss — your partner hears it, \"Thinking of you\"."),
+                 detail: "On Home next to the heartbeat: one tap sends a kiss."),
             Item(icon: "face.smiling", title: "Mood check-in on Home",
                  detail: "A button next to the heartbeat: pick how you feel, set your energy and send it to your partners in two taps."),
             Item(icon: "chart.bar.xaxis", title: "Stress charts scroll with the page",
@@ -68,7 +159,7 @@ struct WhatsNewView: View {
             Item(icon: "map.fill", title: "Feature tour",
                  detail: "A quick swipe through what the app can do. It opens once, and any time from Settings → Feature tour."),
             Item(icon: "sparkles", title: "What's new",
-                 detail: "This screen, after every update, and any time from Settings."),
+                 detail: "This screen, any time from Settings."),
         ]),
         Section(title: "Themes", items: [
             Item(icon: "drop.fill", title: "Bubble, Raindrop and Citrus",
@@ -147,9 +238,10 @@ struct WhatsNewView: View {
                                     Text(item.title).font(Theme.font(16, .bold)).foregroundStyle(Theme.title)
                                     Text(item.detail).font(Theme.font(13)).foregroundStyle(Theme.subtitle)
                                         .fixedSize(horizontal: false, vertical: true)
+                                    if let go = item.go { showMe(go, item.title).padding(.top, 4) }
                                 }
                             }
-                            .accessibilityElement(children: .combine)
+                            .accessibilityElement(children: .contain)
                         }
                     }
                     .padding(18)
@@ -161,6 +253,57 @@ struct WhatsNewView: View {
                     .padding(.top, 4)
             }
             .padding(20)
+        }
+        .sheet(isPresented: $showPartner) {
+            if let p = model.selectedPartner { PartnerDetailView(partnerID: p.id) }
+        }
+    }
+
+    private func showMeLabel() -> some View {
+        HStack(spacing: 4) {
+            Text("Show me")
+            Image(systemName: "arrow.right")
+        }
+        .font(Theme.font(13, .bold)).foregroundStyle(Theme.accent)
+        .padding(.horizontal, 12).padding(.vertical, 6)
+        .background(Capsule().fill(Theme.accent.opacity(0.14)))
+        .contentShape(Capsule())
+    }
+
+    /// A button that opens the feature: a pushed screen, the partner's page, or a tab.
+    @ViewBuilder private func showMe(_ go: Go, _ title: String) -> some View {
+        switch go {
+        case .route(let route):
+            Button {
+                dismiss()
+                model.route = route
+            } label: { showMeLabel() }
+            .buttonStyle(.plain).accessibilityLabel("Show me \(title)")
+        case .partner:
+            if model.selectedPartner != nil {
+                Button { showPartner = true } label: { showMeLabel() }
+                    .buttonStyle(.plain).accessibilityLabel("Show me \(title)")
+            }
+        default:
+            NavigationLink { destination(go) } label: { showMeLabel() }
+                .buttonStyle(.plain).accessibilityLabel("Show me \(title)")
+        }
+    }
+
+    @ViewBuilder private func destination(_ go: Go) -> some View {
+        switch go {
+        case .people: PeopleView().navigationTitle("My people")
+        case .profile: MyProfileView().screenBackground()
+        case .notifications: NotificationSettingsView().screenBackground()
+        case .totwoo: TotwooView().screenBackground()
+        case .themes:
+            ScrollView { ThemePickerCard().padding(16) }
+                .screenBackground().navigationTitle("Themes")
+                .onAppear { UserDefaults.standard.set(true, forKey: "themePickerOpen") }
+        case .displaySize:
+            ScrollView { DisplaySizeCard().padding(16) }
+                .screenBackground().navigationTitle("Display size")
+        case .route, .partner: EmptyView()
         }
     }
 

@@ -12,6 +12,8 @@ enum AppRoute: Equatable {
     case us(String?)
     /// Settings → My Bond Touch Bracelet.
     case bracelet
+    /// The Map tab.
+    case map
 }
 
 extension AppModel {

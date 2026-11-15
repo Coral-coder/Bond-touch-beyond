@@ -151,6 +151,9 @@ struct RootView: View {
         case .bracelet:
             tab = .settings
             stackReset += 1
+        case .map:
+            tab = .map
+            model.route = nil
         }
     }
 }
