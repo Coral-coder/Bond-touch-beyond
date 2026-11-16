@@ -70,7 +70,7 @@ targets:
     info:
       path: Sources/App/Info.plist
       properties:
-        CFBundleDisplayName: Bond Touch Beyond
+        CFBundleDisplayName: Constellation
         # Bind version/build to the build settings so the TestFlight workflow's per-build
         # override (CURRENT_PROJECT_VERSION / MARKETING_VERSION) reaches the archive. Without
         # this, XcodeGen hardcodes CFBundleVersion to "1" and every upload collides.
@@ -95,19 +95,19 @@ targets:
         UIRequiresFullScreen: true
         ITSAppUsesNonExemptEncryption: false
         # CoreBluetooth usage strings are required or the app is rejected / crashes on first scan.
-        NSBluetoothAlwaysUsageDescription: Bond Touch Beyond uses Bluetooth to talk to your bracelet and your Bond Heart pendant.
-        NSBluetoothPeripheralUsageDescription: Bond Touch Beyond uses Bluetooth to talk to your bracelet and your Bond Heart pendant.
+        NSBluetoothAlwaysUsageDescription: Constellation uses Bluetooth to talk to your bracelet and your Bond Heart pendant.
+        NSBluetoothPeripheralUsageDescription: Constellation uses Bluetooth to talk to your bracelet and your Bond Heart pendant.
         # Bond Heart: a heartbeat is recorded with the camera and flash (fingertip on the lens).
-        NSCameraUsageDescription: Bond Touch Beyond records your heartbeat with the camera and flash while your fingertip covers them. Nothing is photographed or stored.
-        NSHealthShareUsageDescription: Bond Touch Beyond reads your heart rate (and Apple Watch beat-to-beat recordings, for Bond Heart) so you can send your heartbeat to your partner's bracelet or pendant, and your heart-rate variability, resting heart rate and sleep to work out your personal battery, which you can share with your partners.
-        NSHealthUpdateUsageDescription: Bond Touch Beyond does not write to Health; this permission is required by the HealthKit framework.
-        NSLocationWhenInUseUsageDescription: Bond Touch Beyond keeps running in the background so your partner's touches reach your bracelet while your phone is locked, and shows your location on the map if you share it with your partner.
-        NSFaceIDUsageDescription: Bond Touch Beyond uses Face ID to unlock your Private Space.
+        NSCameraUsageDescription: Constellation records your heartbeat with the camera and flash while your fingertip covers them. Nothing is photographed or stored.
+        NSHealthShareUsageDescription: Constellation reads your heart rate (and Apple Watch beat-to-beat recordings, for Bond Heart) so you can send your heartbeat to your partner's bracelet or pendant, and your heart-rate variability, resting heart rate and sleep to work out your personal battery, which you can share with your partners.
+        NSHealthUpdateUsageDescription: Constellation does not write to Health; this permission is required by the HealthKit framework.
+        NSLocationWhenInUseUsageDescription: Constellation keeps running in the background so your partner's touches reach your bracelet while your phone is locked, and shows your location on the map if you share it with your partner.
+        NSFaceIDUsageDescription: Constellation uses Face ID to unlock your Private Space.
         UIBackgroundModes:
           - bluetooth-central
           - remote-notification
           - location
-        NSLocationAlwaysAndWhenInUseUsageDescription: Bond Touch Beyond keeps running in the background so touches from your partner reach your bracelet while your phone is locked, shares your location with your partner if you turn that on, and tells your partner when you arrive at a place you saved.
+        NSLocationAlwaysAndWhenInUseUsageDescription: Constellation keeps running in the background so touches from your partner reach your bracelet while your phone is locked, shares your location with your partner if you turn that on, and tells your partner when you arrive at a place you saved.
         # Open official bracelet firmware (.zip) shared from Files or another app, so a
         # bracelet stuck in update mode can be repaired.
         CFBundleDocumentTypes:
@@ -158,8 +158,8 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: $(APP_BUNDLE_ID)
-        # The original icon stays selectable in Settings → App icon.
-        ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES: AppIconClassic
+        # Every other icon stays selectable in Settings → App icon.
+        ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES: AppIconClassic AppIconHeart AppIconStarInfinity AppIconInfinityHeart AppIconYourStars AppIconHeartbeat AppIconInfinityStars AppIconMinimal
         ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS: YES
         # LibSignalClient imports the SignalFfi C module; the app must see it too, and the
         # final link pulls in the prebuilt Rust core for the SDK/arch being built.
@@ -184,7 +184,7 @@ targets:
     info:
       path: Watch/Info.plist
       properties:
-        CFBundleDisplayName: Bond Touch Beyond
+        CFBundleDisplayName: Constellation
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         WKApplication: true
@@ -194,7 +194,7 @@ targets:
         # the wrist the moment they arrive.
         WKBackgroundModes:
           - workout-processing
-        NSHealthShareUsageDescription: Stand-in mode keeps Bond Touch Beyond awake on your watch so your partner's touches play on your wrist as they arrive.
+        NSHealthShareUsageDescription: Stand-in mode keeps Constellation awake on your watch so your partner's touches play on your wrist as they arrive.
         NSHealthUpdateUsageDescription: Stand-in mode runs as a quiet session on your watch so your partner's touches play on your wrist as they arrive. Nothing is recorded.
     entitlements:
       path: Watch/BondTouchBeyondWatch.entitlements
@@ -223,7 +223,7 @@ targets:
     info:
       path: WatchWidget/Info.plist
       properties:
-        CFBundleDisplayName: Bond Touch Beyond
+        CFBundleDisplayName: Constellation
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         BTKeychainGroup: $(AppIdentifierPrefix)$(APP_BUNDLE_ID).shared
@@ -261,7 +261,7 @@ targets:
     info:
       path: Widget/Info.plist
       properties:
-        CFBundleDisplayName: Bond Touch Beyond
+        CFBundleDisplayName: Constellation
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         BTKeychainGroup: $(AppIdentifierPrefix)$(APP_BUNDLE_ID).shared
@@ -295,7 +295,7 @@ targets:
     info:
       path: NotificationService/Info.plist
       properties:
-        CFBundleDisplayName: Bond Touch Beyond
+        CFBundleDisplayName: Constellation
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         BTKeychainGroup: $(AppIdentifierPrefix)$(APP_BUNDLE_ID).shared
@@ -330,7 +330,7 @@ targets:
     info:
       path: NotificationContent/Info.plist
       properties:
-        CFBundleDisplayName: Bond Touch Beyond
+        CFBundleDisplayName: Constellation
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         NSExtension:

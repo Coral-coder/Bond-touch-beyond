@@ -17,7 +17,7 @@ struct WatchRootView: View {
         if link.partners.isEmpty {
             VStack(spacing: 8) {
                 Image(systemName: "iphone").font(.title2).foregroundStyle(accent)
-                Text("Open Bond Touch Beyond on your iPhone to see your partners.")
+                Text("Open Constellation on your iPhone to see your partners.")
                     .font(.footnote).multilineTextAlignment(.center)
             }
             .padding()

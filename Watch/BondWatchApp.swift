@@ -2,7 +2,7 @@ import SwiftUI
 import WatchConnectivity
 import WatchKit
 
-/// Bond Touch Beyond for Apple Watch: a touch bar (tap and slide, recorded like the Bond
+/// Constellation for Apple Watch: a touch bar (tap and slide, recorded like the Bond
 /// Touch More bar) and one-tap Touch Language meanings. The phone relays everything, so it
 /// works with iCloud and original-app partners alike; the watch needs no account.
 @main

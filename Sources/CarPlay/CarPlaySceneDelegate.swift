@@ -8,7 +8,7 @@ enum CarPlayActivity {
     static func changed() { NotificationCenter.default.post(name: didChange, object: nil) }
 }
 
-/// Bond Touch Beyond on CarPlay (a communication app): the kisses, touches and heartbeats your
+/// Constellation on CarPlay (a communication app): the kisses, touches and heartbeats your
 /// partners sent, newest first, and your partners. Tap one to kiss back, send a touch or send
 /// your heartbeat — all one tap, nothing to read while driving. The notifications themselves
 /// come through as communication notifications, which CarPlay shows and Siri reads out.
@@ -23,7 +23,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     func templateApplicationScene(_ templateApplicationScene: CPTemplateApplicationScene,
                                   didConnect interfaceController: CPInterfaceController) {
         interface = interfaceController
-        let list = CPListTemplate(title: "Bond Touch", sections: sections())
+        let list = CPListTemplate(title: "Constellation", sections: sections())
         list.emptyViewTitleVariants = ["Nothing yet"]
         list.emptyViewSubtitleVariants = ["Kisses and touches from your partners show up here."]
         self.list = list

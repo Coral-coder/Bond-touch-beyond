@@ -31,6 +31,20 @@ struct WhatsNewView: View {
     /// Newest first, one section per TestFlight build since 59, then the earlier highlights.
     /// Add a section at the top for each build.
     static let sections: [Section] = [
+        Section(title: "Build 77", items: [
+            Item(icon: "photo.fill", title: "Photos in chat work",
+                 detail: "Photos now send every time: they're sized to fit before they go.", go: .route(.chat)),
+            Item(icon: "timer", title: "View timers on photos",
+                 detail: "When you send a photo, choose how long it can be viewed: 3 seconds to a minute, or no limit. The timer starts when it's opened; when it ends, the photo is deleted from that phone. It stays locked in the chat until tapped.", go: .route(.chat)),
+            Item(icon: "lock.shield.fill", title: "Photos locked down",
+                 detail: "Photos are encrypted end to end, and again on your phone with a key that never leaves it. They're kept out of backups, hidden while the screen is recorded, and you're told if a screenshot is taken."),
+            Item(icon: "sparkles", title: "We're Constellation now",
+                 detail: "Bond Touch Beyond has a new name: Constellation. Everything you had is still here, your partners, your bracelet and your history."),
+            Item(icon: "star.fill", title: "New app icons",
+                 detail: "The app has a new icon, a heart of stars, and six more to choose from: star infinity, infinity heart, your stars, heartbeat, infinity of stars and minimal. The two earlier icons are still there. Settings → App icon."),
+            Item(icon: "sparkles", title: "What's new pops up",
+                 detail: "This screen opens once after each update. It's always in Settings too."),
+        ]),
         Section(title: "Build 76", items: [
             Item(icon: "gauge", title: "Where we stand",
                  detail: "A new part of Us, one for each relationship. Say how close you feel, what kind of relationship it is (Anchor, Comet, FWB, your own words) and whether you're happy with it. You both see how you line up, never each other's number unless you share it.", go: .route(.us("stand"))),
@@ -48,7 +62,7 @@ struct WhatsNewView: View {
                  detail: "With more than one partner, People shows who you reached out to this week, and Sundays bring a private summary. Only you see it.", go: .people),
             Item(icon: "calendar.badge.checkmark", title: "Meeting countdown resets",
                  detail: "\"You meet today\" no longer sticks. It clears when that day ends, or as soon as you're together: both phones within about 100 ft on the day.", go: .partner),
-            Item(icon: "sparkles", title: "What's new, build by build",
+            Item(icon: "list.bullet.rectangle", title: "What's new, build by build",
                  detail: "This screen now lists every build since 59."),
         ]),
         Section(title: "Build 75", items: [

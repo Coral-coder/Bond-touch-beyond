@@ -425,10 +425,11 @@ actor CloudRelay {
     func sendChat(_ message: ChatMessage, bond: Bond) async throws -> Int {
         var image: Data?
         if message.kind == .image, let file = message.imageFile {
-            image = try? Data(contentsOf: ChatArchive.imageURL(file))
+            image = ChatArchive.imageData(file)
         }
         let body = MessagePayload(id: message.id, sentAt: message.sentAt, kind: message.kind.rawValue,
-                                  text: message.text, colorRGB: message.colorRGB, image: image)
+                                  text: message.text, colorRGB: message.colorRGB, image: image,
+                                  viewSeconds: message.viewSeconds)
         return try await sendEvent(.message, bond: bond) { (seq: Int) -> MessagePayload in var b = body; b.seq = seq; return b }
     }
 
@@ -645,7 +646,7 @@ actor CloudRelay {
                 if kind == .image, let img = m.image { imageFile = ChatArchive.saveImage(img) }
                 events.messages.append(ChatMessage(id: m.id, bondID: code, senderID: partnerID, kind: kind,
                                                    text: m.text, colorRGB: m.colorRGB, sentAt: m.sentAt,
-                                                   imageFile: imageFile))
+                                                   imageFile: imageFile, viewSeconds: m.viewSeconds))
             }
             if let touchRange { UserDefaults.standard.set(touchRange.upperBound, forKey: seenKey(code, .touch)) }
             if let messageRange { UserDefaults.standard.set(messageRange.upperBound, forKey: seenKey(code, .message)) }
@@ -787,6 +788,8 @@ private struct MessagePayload: Codable {
     let text: String
     let colorRGB: Int
     let image: Data?
+    /// A photo's view timer in seconds (nil: no limit).
+    var viewSeconds: Int? = nil
 }
 
 enum CloudRelayError: LocalizedError {

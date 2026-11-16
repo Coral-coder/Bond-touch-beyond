@@ -28,8 +28,12 @@ struct RootView: View {
     /// The root has appeared, so the tour can open.
     @State private var launchChecked = false
     /// The feature tour has been seen (or skipped); until then it opens once the profile is set
-    /// up. (What's new no longer pops up by itself; it's in Settings.)
+    /// up.
     @AppStorage(FeatureTour.seenKey) private var walkthroughSeen = false
+    /// The build What's new last opened for. It opens once after each update (never on top of
+    /// the tour: finishing the tour counts as seen for that build).
+    @AppStorage("whatsNewSeenBuild") private var whatsNewSeenBuild = ""
+    private static let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? ""
 
     var body: some View {
         ZStack {
@@ -78,8 +82,13 @@ struct RootView: View {
             }
         }
         .fullScreenCover(isPresented: Binding(get: { launchChecked && store.profile.isComplete && !walkthroughSeen && !AppModel.isDemo },
-                                              set: { if !$0 { walkthroughSeen = true } })) {
-            FeatureTour { walkthroughSeen = true }
+                                              set: { if !$0 { walkthroughSeen = true; whatsNewSeenBuild = Self.build } })) {
+            FeatureTour { walkthroughSeen = true; whatsNewSeenBuild = Self.build }
+        }
+        .sheet(isPresented: Binding(get: { launchChecked && store.profile.isComplete && walkthroughSeen
+                                           && !Self.build.isEmpty && whatsNewSeenBuild != Self.build && !AppModel.isDemo },
+                                    set: { if !$0 { whatsNewSeenBuild = Self.build } })) {
+            NavigationStack { WhatsNewView().screenBackground() }
         }
         .preferredColorScheme(Theme.colorScheme)
         .tint(Theme.accent)

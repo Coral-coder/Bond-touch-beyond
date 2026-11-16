@@ -9,7 +9,7 @@ import NordicDFU
 /// reconnects to the bracelet.
 ///
 /// The firmware belongs to Impossible Labs and is not shipped in this open-source app; the
-/// user imports the official file once (Files, or "Open in Bond Touch Beyond" from the
+/// user imports the official file once (Files, or "Open in Constellation" from the
 /// share sheet). It is kept in Application Support, one file per bracelet model.
 ///
 /// It also runs the firmware updates the user asks for (`startUpdate`): the connected
@@ -84,7 +84,7 @@ final class FirmwareRecovery: NSObject, ObservableObject {
         if let device = bracelet?.dfuDevice, device.model == model { recover(device) }
     }
 
-    /// A .zip opened in the app ("Open in Bond Touch Beyond" / share sheet).
+    /// A .zip opened in the app ("Open in Constellation" / share sheet).
     func handleOpened(_ url: URL) {
         guard url.pathExtension.lowercased() == "zip" else { return }
         if let model = BraceletModel.guess(fromFileName: url.lastPathComponent) {
