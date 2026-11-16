@@ -23,7 +23,7 @@ struct BondTouchWidget: Widget {
         StaticConfiguration(kind: WidgetShared.kind, provider: BondProvider()) { entry in
             BondWidgetView(entry: entry)
         }
-        .configurationDisplayName("Bond Touch")
+        .configurationDisplayName("Constellation")
         .description("Your partner and your meanings. Tap one to send it to their bracelet.")
         .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
     }
@@ -131,7 +131,7 @@ struct BondWidgetView: View {
                     .font(.system(size: 22, weight: .bold))
                     .foregroundStyle(Theme.accent)
                 Spacer(minLength: 0)
-                Text("Bond Touch")
+                Text("Constellation")
                     .font(Theme.font(15, .heavy))
                     .foregroundStyle(Theme.title)
                 Text("Pair with your partner in the app to send touches from here.")

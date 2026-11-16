@@ -23,7 +23,7 @@ struct LegacyDataView: View {
                     if let testResult { Text(testResult).font(.footnote).foregroundStyle(.secondary) }
                 }
             } footer: {
-                Text("Experimental. Bond Touch Beyond uses iCloud by default. The original Firebase project only accepts the original app, so unless its owner registers this app (\(AppConfig.bundleID)) or you provide a working database URL and token, the connection will be rejected.")
+                Text("Experimental. Constellation uses iCloud by default. The original Firebase project only accepts the original app, so unless its owner registers this app (\(AppConfig.bundleID)) or you provide a working database URL and token, the connection will be rejected.")
             }
         }
         .scrollContentBackground(.hidden)

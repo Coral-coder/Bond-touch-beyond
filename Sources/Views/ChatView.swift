@@ -172,7 +172,7 @@ struct ChatView: View {
         return VStack(alignment: .leading, spacing: 12) {
             Label("Chat goes through iCloud", systemImage: "icloud.fill")
                 .font(Theme.font(17, .heavy)).foregroundStyle(.white)
-            Text("Messages and photos with \(name) are sent privately through iCloud. Invite them to Bond Touch Beyond chat — they open the link on their iPhone — or link the iCloud partner you already share with them.")
+            Text("Messages and photos with \(name) are sent privately through iCloud. Invite them to Constellation chat — they open the link on their iPhone — or link the iCloud partner you already share with them.")
                 .font(Theme.font(14)).foregroundStyle(Theme.subtitle)
                 .fixedSize(horizontal: false, vertical: true)
             Button {
