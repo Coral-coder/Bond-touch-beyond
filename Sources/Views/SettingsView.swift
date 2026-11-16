@@ -511,12 +511,20 @@ private struct ComingSoonView: View {
     }
 }
 
-/// Switches the home-screen icon between the new heart-and-infinity icon and the original.
+/// Chooses the home-screen icon: the heart of stars (the default), six more star icons, and
+/// the two earlier ones.
 struct AppIconPicker: View {
     @State private var current = UIApplication.shared.alternateIconName
 
     private let options: [(name: String?, label: String, preview: String)] = [
-        (nil, "New", "IconPreviewNew"),
+        (nil, "Heart of stars", "IconPreviewStars"),
+        ("AppIconStarInfinity", "Star infinity", "IconPreviewStarInfinity"),
+        ("AppIconInfinityHeart", "Infinity heart", "IconPreviewInfinityHeart"),
+        ("AppIconYourStars", "Your stars", "IconPreviewYourStars"),
+        ("AppIconHeartbeat", "Heartbeat", "IconPreviewHeartbeat"),
+        ("AppIconInfinityStars", "Infinity of stars", "IconPreviewInfinityStars"),
+        ("AppIconMinimal", "Minimal", "IconPreviewMinimal"),
+        ("AppIconHeart", "Heart", "IconPreviewHeart"),
         ("AppIconClassic", "Classic", "IconPreviewClassic"),
     ]
 
@@ -524,7 +532,7 @@ struct AppIconPicker: View {
         GlassCard(padding: 20) {
             VStack(alignment: .leading, spacing: 12) {
                 Text("App icon").foregroundStyle(Theme.title)
-                HStack(spacing: 20) {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 76), spacing: 12, alignment: .top)], spacing: 14) {
                     ForEach(options, id: \.label) { option in
                         Button { choose(option.name) } label: {
                             VStack(spacing: 6) {
@@ -533,15 +541,17 @@ struct AppIconPicker: View {
                                     .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                                     .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous)
                                         .stroke(current == option.name ? Theme.accent : .clear, lineWidth: 3))
-                                Text(option.label).font(.caption)
+                                Text(option.label).font(.caption).multilineTextAlignment(.center)
+                                    .lineLimit(2).fixedSize(horizontal: false, vertical: true)
                                     .foregroundStyle(current == option.name ? Theme.accent : Theme.subtitle)
                             }
+                            .frame(maxWidth: .infinity)
+                            .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel("\(option.label) app icon")
                         .accessibilityAddTraits(current == option.name ? .isSelected : [])
                     }
-                    Spacer()
                 }
             }
         }

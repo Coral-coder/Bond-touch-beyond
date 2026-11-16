@@ -38,6 +38,8 @@ struct WhatsNewView: View {
                  detail: "When you send a photo, choose how long it can be viewed: 3 seconds to a minute, or no limit. The timer starts when it's opened; when it ends, the photo is deleted from that phone. It stays locked in the chat until tapped.", go: .route(.chat)),
             Item(icon: "lock.shield.fill", title: "Photos locked down",
                  detail: "Photos are encrypted end to end, and again on your phone with a key that never leaves it. They're kept out of backups, hidden while the screen is recorded, and you're told if a screenshot is taken."),
+            Item(icon: "star.fill", title: "New app icons",
+                 detail: "The app has a new icon, a heart of stars, and six more to choose from: star infinity, infinity heart, your stars, heartbeat, infinity of stars and minimal. The two earlier icons are still there. Settings → App icon."),
             Item(icon: "sparkles", title: "What's new pops up",
                  detail: "This screen opens once after each update. It's always in Settings too."),
         ]),
