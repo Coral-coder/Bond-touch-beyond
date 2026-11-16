@@ -220,23 +220,75 @@ extension AppModel {
         }
     }
 
-    /// Sends a photo (JPEG) over iCloud.
-    func sendChatImage(_ jpeg: Data, toBondID: String? = nil) async {
+    /// Sends a photo (JPEG, already sized by `ChatPhoto.prepare`), sealed end to end, with an
+    /// optional view timer in seconds.
+    func sendChatImage(_ jpeg: Data, viewSeconds: Int? = nil, toBondID: String? = nil) async {
         guard let bond = chatBond(for: toBondID ?? selectedPartnerID) else {
             statusLine = "Invite this partner to iCloud chat first."
             return
         }
-        guard let file = ChatArchive.saveImage(jpeg) else { return }
+        guard let file = ChatArchive.saveImage(jpeg) else { statusLine = "Couldn't save the photo."; return }
         let msg = ChatMessage(bondID: bond.id, senderID: myUserID, kind: .image,
-                              colorRGB: store.profile.colorRGB, imageFile: file)
+                              colorRGB: store.profile.colorRGB, imageFile: file,
+                              viewSeconds: (viewSeconds ?? 0) > 0 ? viewSeconds : nil)
         do {
             var sent = msg
             sent.ringSeq = try await relay.sendChat(msg, bond: bond)
             appendChat([sent], bondID: bond.id)
             await pushChat(bond)
         } catch {
+            ChatArchive.deleteImage(file)
             statusLine = "Photo failed: \(error.localizedDescription)"
+            NetLog.shared.log(.fail, "Chat photo failed (\(jpeg.count / 1024) KB)", error.localizedDescription)
         }
+    }
+
+    // MARK: - Timed photos
+
+    func chatMessage(_ id: UUID, bondID: String) -> ChatMessage? {
+        messagesByBond[bondID]?.first { $0.id == id }
+    }
+
+    private func updateChatMessage(_ id: UUID, bondID: String, _ change: (inout ChatMessage) -> Void) {
+        guard var list = messagesByBond[bondID], let i = list.firstIndex(where: { $0.id == id }) else { return }
+        change(&list[i])
+        messagesByBond[bondID] = list
+        ChatArchive.save(messagesByBond)
+    }
+
+    /// A photo was opened. A timed one starts its timer the first time, and is deleted from
+    /// this phone when the time is up (also if the app was closed meanwhile: see `sweepChatPhotos`).
+    func openChatPhoto(_ msg: ChatMessage) {
+        guard msg.isTimed, msg.expired != true else { return }
+        if msg.openedAt == nil { updateChatMessage(msg.id, bondID: msg.bondID) { $0.openedAt = Date() } }
+        let left = (chatMessage(msg.id, bondID: msg.bondID) ?? msg).viewTimeLeft()
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: UInt64((left + 0.05) * 1_000_000_000))
+            self.sweepChatPhotos()
+        }
+    }
+
+    /// Deletes every timed photo whose time is up, leaving "Photo expired" in the chat.
+    func sweepChatPhotos() {
+        var changed = false
+        for (bondID, list) in messagesByBond {
+            var list = list
+            for i in list.indices where list[i].isTimed && list[i].expired != true
+                && list[i].openedAt != nil && list[i].viewTimeLeft() <= 0 {
+                if let file = list[i].imageFile { ChatArchive.deleteImage(file) }
+                list[i].imageFile = nil
+                list[i].expired = true
+                changed = true
+            }
+            if changed { messagesByBond[bondID] = list }
+        }
+        if changed { ChatArchive.save(messagesByBond) }
+    }
+
+    /// A screenshot was taken while a partner's photo was open: they're told in the chat.
+    func reportPhotoScreenshot(_ msg: ChatMessage) {
+        guard msg.senderID != myUserID, msg.senderID != ChatMessage.legacySelf else { return }
+        Task { await sendChatText("📸 I took a screenshot of your photo", toBondID: msg.bondID) }
     }
 
     /// Wakes the partner's phone so the message arrives now. The notification never shows

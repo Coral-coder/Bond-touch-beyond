@@ -9,6 +9,16 @@ struct ChatView: View {
     @EnvironmentObject var store: LocalStore
     @State private var draft = ""
     @State private var photo: PhotosPickerItem?
+    /// A picked photo, sized and waiting for its view timer before it's sent.
+    @State private var pending: PendingPhoto?
+    @State private var viewing: ChatMessage?
+    @State private var photoNote: String?
+
+    private struct PendingPhoto: Identifiable {
+        let id = UUID()
+        let image: UIImage
+        let jpeg: Data
+    }
     @State private var inviting = false
     @State private var showShare = false
     @State private var shareError: String?
@@ -121,13 +131,28 @@ struct ChatView: View {
         .onChange(of: photo) { item in
             guard let item else { return }
             Task {
+                // Sized to travel in one sealed message; then choose its view timer.
                 if let data = try? await item.loadTransferable(type: Data.self),
-                   let image = UIImage(data: data), let jpeg = image.jpegData(compressionQuality: 0.7) {
-                    await model.sendChatImage(jpeg)
+                   let image = UIImage(data: data), let jpeg = ChatPhoto.prepare(image),
+                   let preview = UIImage(data: jpeg) {
+                    pending = PendingPhoto(image: preview, jpeg: jpeg)
+                } else {
+                    photoNote = "That photo couldn't be read. Try another one."
                 }
                 photo = nil
             }
         }
+        .sheet(item: $pending) { p in
+            PhotoSendSheet(image: p.image, partnerName: model.selectedPartner?.displayName ?? "they") { seconds in
+                Task { await model.sendChatImage(p.jpeg, viewSeconds: seconds) }
+            }
+            .presentationDetents([.large])
+        }
+        .fullScreenCover(item: $viewing) { msg in ChatPhotoViewer(message: msg) }
+        .alert("Photo", isPresented: Binding(get: { photoNote != nil }, set: { if !$0 { photoNote = nil } })) {
+            Button("OK", role: .cancel) { photoNote = nil }
+        } message: { Text(photoNote ?? "") }
+        .onAppear { model.sweepChatPhotos() }
         .sheet(isPresented: $showShare) {
             InviteCodeSheet(url: model.pendingInviteURL)
         }
@@ -238,11 +263,23 @@ struct ChatView: View {
                     GlassCard { TouchViz(pattern: [], colorRGB: msg.colorRGB) }
                         .frame(maxWidth: 260)
                 case .image:
-                    if let file = msg.imageFile, let image = UIImage(contentsOfFile: ChatArchive.imageURL(file).path) {
-                        Image(uiImage: image)
-                            .resizable().scaledToFill()
-                            .frame(maxWidth: 240, maxHeight: 300)
+                    if msg.expired == true {
+                        Label("Photo expired", systemImage: "timer")
+                            .font(Theme.font(14)).foregroundStyle(Theme.subtitle)
+                            .padding(14).background(Color.white.opacity(0.08))
                             .clipShape(RoundedRectangle(cornerRadius: 18))
+                    } else if msg.isTimed, msg.imageFile != nil {
+                        // A timed photo stays locked in the chat; it only shows full screen.
+                        Button { viewing = msg } label: { TimedPhotoTile(message: msg) }
+                            .buttonStyle(.plain)
+                    } else if let file = msg.imageFile, let image = ChatArchive.image(file) {
+                        Button { viewing = msg } label: {
+                            Image(uiImage: image)
+                                .resizable().scaledToFill()
+                                .frame(maxWidth: 240, maxHeight: 300)
+                                .clipShape(RoundedRectangle(cornerRadius: 18))
+                        }
+                        .buttonStyle(.plain).accessibilityLabel("Photo. Tap to view")
                     } else {
                         Text("Photo").foregroundStyle(Theme.subtitle)
                             .padding(14).background(Color.white.opacity(0.08))

@@ -248,14 +248,21 @@ private struct PrivateGallery: View {
                 .padding(12)
             }
         }
-        .fullScreenCover(item: $open) { msg in PhotoViewer(message: msg) }
+        .fullScreenCover(item: $open) { msg in ChatPhotoViewer(message: msg) }
+        .onAppear { model.sweepChatPhotos() }
     }
 
     private func tile(_ msg: ChatMessage) -> some View {
         Color.clear
             .aspectRatio(1, contentMode: .fit)
             .overlay {
-                if let file = msg.imageFile, let image = UIImage(contentsOfFile: ChatArchive.imageURL(file).path) {
+                if msg.isTimed {
+                    // Timed photos stay locked here too.
+                    ZStack {
+                        Theme.accent.opacity(0.45)
+                        Image(systemName: "lock.fill").font(.system(size: Theme.s(22))).foregroundStyle(.white)
+                    }
+                } else if let file = msg.imageFile, let image = ChatArchive.image(file) {
                     Image(uiImage: image).resizable().scaledToFill()
                 }
             }
@@ -273,24 +280,5 @@ private struct PrivateGallery: View {
         let left = max(0, ChatArchive.lifetime - Date().timeIntervalSince(msg.sentAt))
         let hours = Int(left / 3600)
         return hours >= 1 ? "\(hours)h left" : "\(max(1, Int(left / 60)))m left"
-    }
-}
-
-private struct PhotoViewer: View {
-    @Environment(\.dismiss) private var dismiss
-    let message: ChatMessage
-
-    var body: some View {
-        ZStack(alignment: .topTrailing) {
-            Color.black.ignoresSafeArea()
-            if let file = message.imageFile, let image = UIImage(contentsOfFile: ChatArchive.imageURL(file).path) {
-                Image(uiImage: image).resizable().scaledToFit().frame(maxWidth: .infinity, maxHeight: .infinity)
-            }
-            Button { dismiss() } label: {
-                Image(systemName: "xmark.circle.fill").font(.system(size: Theme.s(30))).foregroundStyle(.white.opacity(0.85))
-            }
-            .padding()
-            .accessibilityLabel("Close")
-        }
     }
 }
