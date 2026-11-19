@@ -346,12 +346,13 @@ struct VFDMetrics: Equatable {
     var lit: CGFloat { CGFloat(pitchPx - 1) / scale }
 
     init(size: CGSize, safe: EdgeInsets, scale: CGFloat) {
-        self.scale = max(1, scale)
-        pitchPx = self.scale >= 3 ? 5 : 4
-        let wPx = Int((size.width * self.scale).rounded()), hPx = Int((size.height * self.scale).rounded())
-        cols = max(1, wPx / pitchPx); rows = max(1, hPx / pitchPx)
-        func cellsUp(_ pt: CGFloat) -> Int { Int((pt * self.scale / CGFloat(pitchPx)).rounded(.up)) }
-        top = min(rows, cellsUp(safe.top))
+        let s = max(1, scale), p = s >= 3 ? 5 : 4
+        let wPx = Int((size.width * s).rounded()), hPx = Int((size.height * s).rounded())
+        let cols = max(1, wPx / p), rows = max(1, hPx / p)
+        func cellsUp(_ pt: CGFloat) -> Int { Int((pt * s / CGFloat(p)).rounded(.up)) }
+        let top = min(rows, cellsUp(safe.top))
+        self.scale = s; pitchPx = p; self.cols = cols; self.rows = rows
+        self.top = top
         bottom = max(top, rows - cellsUp(safe.bottom))
     }
 

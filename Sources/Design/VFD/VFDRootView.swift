@@ -110,6 +110,7 @@ final class VFDUI: ObservableObject {
 // MARK: - The root
 
 /// The app in Amber VFD: one full-screen pixel matrix with its own header and tab bar.
+@MainActor
 struct VFDRootView: View {
     @EnvironmentObject var model: AppModel
     @EnvironmentObject var store: LocalStore

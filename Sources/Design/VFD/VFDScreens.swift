@@ -235,9 +235,9 @@ struct VFDScreens {
         b.text(ix, yy + 11, beat?.heartbeatBPM.map(String.init) ?? "--", .big, beat == nil ? V.dim : V.base)
         let shape: [Double] = [0, 0, 0, 0, 1, 0, -1, 8, -3, 0, 1, 1, 0, 0, 0, 0, 0]
         let shift = Int(now.timeIntervalSince1970) % shape.count
-        let trace = (0..<(shape.count * 3)).map { shape[($0 + shift) % shape.count] }
+        let ekg = (0..<(shape.count * 3)).map { shape[($0 + shift) % shape.count] }
         let cx = ix + 60
-        b.chart(cx, yy + 4, ix + iw - cx, 30, trace, beat == nil ? V.dim : V.base, lo: -4, hi: 9)
+        b.chart(cx, yy + 4, ix + iw - cx, 30, ekg, beat == nil ? V.dim : V.base, lo: -4, hi: 9)
         y += ph + 5
 
         // Touch, kiss, heartbeat.
