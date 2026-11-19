@@ -31,6 +31,10 @@ struct WhatsNewView: View {
     /// Newest first, one section per TestFlight build since 59, then the earlier highlights.
     /// Add a section at the top for each build.
     static let sections: [Section] = [
+        Section(title: "Build 78", items: [
+            Item(icon: "square.grid.3x3.fill", title: "Amber VFD theme",
+                 detail: "A new theme beside Matrix: the whole app on one glowing dot-matrix display, like an old vacuum-fluorescent screen. Pick a base colour to swap the amber for green, teal, blue, pink or white. Settings → Theme.", go: .themes),
+        ]),
         Section(title: "Build 77", items: [
             Item(icon: "photo.fill", title: "Photos in chat work",
                  detail: "Photos now send every time: they're sized to fit before they go.", go: .route(.chat)),

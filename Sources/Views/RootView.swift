@@ -100,6 +100,9 @@ struct RootView: View {
         // dashboard is shown either way (it offers "Add a partner" when there is none).
         if !store.profile.isComplete {
             OnboardingView()
+        } else if Theme.style == .vfd && !AppModel.isDemo {
+            // Amber VFD: the whole app on one pixel matrix, with its own header and tab bar.
+            VFDRootView()
         } else {
             ZStack(alignment: .bottom) {
                 Group {
