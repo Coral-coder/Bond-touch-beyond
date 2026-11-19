@@ -3,7 +3,7 @@ import SwiftUI
 /// The app's look, picked under Settings → Theme. Each one changes the backdrop, the glass
 /// panels, the colours and the type; the touches keep their own colours in every theme.
 enum AppStyle: String, CaseIterable, Identifiable {
-    case aero, neon, pastel, mono, aurora, paper, chalk, bubble, raindrop, citrus, matrix
+    case aero, neon, pastel, mono, aurora, paper, chalk, bubble, raindrop, citrus, matrix, vfd
     var id: String { rawValue }
 
     var title: String {
@@ -19,6 +19,7 @@ enum AppStyle: String, CaseIterable, Identifiable {
         case .raindrop: return "Raindrop"
         case .citrus: return "Citrus"
         case .matrix: return "Matrix"
+        case .vfd: return "Amber VFD"
         }
     }
 
@@ -35,6 +36,7 @@ enum AppStyle: String, CaseIterable, Identifiable {
         case .raindrop: return "Frutiger Aero: fresh green, rain on glass"
         case .citrus: return "Frutiger Aero: sunny, juicy, glossy fruit"
         case .matrix: return "Digital rain of glitching hearts, your love in the code"
+        case .vfd: return "An old vacuum-fluorescent dot-matrix display, every pixel lit"
         }
     }
 
@@ -57,6 +59,7 @@ enum AppStyle: String, CaseIterable, Identifiable {
         case .raindrop: return 28
         case .citrus: return 30
         case .matrix: return 4
+        case .vfd: return 0
         }
     }
 
@@ -75,6 +78,7 @@ enum AppStyle: String, CaseIterable, Identifiable {
         case .raindrop: return [("Mint", 0x12A594), ("Rain", 0x3D8BD9), ("Leaf", 0x5FB83A), ("Iris", 0x7A6CF0), ("Rose", 0xE86A92), ("Dew", 0x2BB3D9)]
         case .citrus: return [("Orange", 0xFF8A00), ("Lime", 0x6DB935), ("Lemon", 0xE6B800), ("Grapefruit", 0xFF5E7E), ("Tangerine", 0xFF6A2B), ("Kiwi", 0x4FAE3D)]
         case .matrix: return [("Code", 0x00FF41), ("Phosphor", 0x39FF88), ("Emerald", 0x00C853), ("Acid", 0xB6FF3B), ("Mint", 0x7CFFB2), ("Jade", 0x00A86B)]
+        case .vfd: return VFDPalette.bases
         }
     }
 }
@@ -235,6 +239,14 @@ struct Palette {
                            magenta: c(0x3D8BD9), pink: c(0xE8578A), lime: c(0x5FB83A), amber: c(0xF0A020), danger: c(0xE5484D),
                            touchSent: c(0xE2F7F1), touchReceived: c(0xD2F0EA), surface: white,
                            glassTop: white.opacity(0.85), glassBottom: white.opacity(0.35))
+        case .vfd:
+            let v = VFDPalette.current(tint: ThemeTints.tint(for: .vfd))
+            return Palette(bgTop: .black, bgBottom: .black, ink: c(v.text),
+                           title: c(v.text), subtitle: c(v.dim), mutedHeadline: c(v.text),
+                           accent: c(v.base), accentDeep: c(v.dim), accentTop: c(v.base), onAccent: .black,
+                           magenta: c(v.base), pink: c(v.base), lime: c(v.base), amber: c(v.base), danger: c(v.alarm),
+                           touchSent: c(0x141414), touchReceived: c(0x0C0C0C), surface: .black,
+                           glassTop: .clear, glassBottom: .clear)
         case .citrus:
             return Palette(bgTop: c(0xFFF8D6), bgBottom: c(0xFFE08A), ink: c(0x3B2F0B),
                            title: c(0x3B2F0B), subtitle: c(0x7A6420), mutedHeadline: c(0x4A3B0E),
@@ -333,7 +345,7 @@ enum Theme {
             return .custom(bold.contains(weight) ? "ChalkboardSE-Bold" : weight == .light ? "ChalkboardSE-Light" : "ChalkboardSE-Regular",
                            size: size)
         case .paper: return .system(size: size, weight: weight, design: .serif)
-        case .neon, .matrix: return .system(size: size, weight: weight, design: .monospaced)
+        case .neon, .matrix, .vfd: return .system(size: size, weight: weight, design: .monospaced)
         case .mono: return .system(size: size, weight: weight, design: .default)
         case .aero, .pastel, .aurora, .bubble, .raindrop, .citrus: return .system(size: size, weight: weight, design: .rounded)
         }
@@ -358,7 +370,7 @@ struct ThemeFonts: ViewModifier {
     private var fontDesign: Font.Design {
         switch Theme.style {
         case .paper: return .serif
-        case .neon, .matrix: return .monospaced
+        case .neon, .matrix, .vfd: return .monospaced
         case .mono, .chalk: return .default
         case .aero, .pastel, .aurora, .bubble, .raindrop, .citrus: return .rounded
         }
@@ -386,6 +398,7 @@ struct ThemeBackdrop: View {
             case .raindrop: RainOnGlass(glow: glow, animated: animated)
             case .citrus: CitrusSun(glow: glow)
             case .matrix: MatrixRain(animated: animated, glow: glow)
+            case .vfd: VFDBackdrop()
             }
         }
         // Pure decoration: some backdrops draw well past their edges (the citrus slices, the
@@ -703,6 +716,9 @@ struct GlassBackground<S: Shape>: View {
                 .overlay(shape.stroke(chalk.opacity(0.32), lineWidth: 1).offset(x: 0.9, y: -0.8))
                 .overlay(shape.stroke(chalk.opacity(0.18), lineWidth: 1.4).offset(x: -0.7, y: 1))
                 .shadow(color: Color.black.opacity(0.3 * shadowDepth), radius: 8 * shadowDepth, y: 3 * shadowDepth)
+        case .vfd:
+            // A panel on the display: black, with a one-pixel border in the dim colour.
+            shape.fill(Color.black).overlay(shape.stroke(p.subtitle, lineWidth: 1))
         case .bubble, .raindrop, .citrus:
             // Aqua glass: milky white, a bright wet shine over the top half, a crisp white rim
             // and a soft glow in the accent colour underneath — Frutiger Aero.
