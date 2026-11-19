@@ -253,6 +253,8 @@ targets:
       - path: Sources/Models/Weather.swift
       - path: Sources/Design/Theme.swift
       - path: Sources/Design/MatrixRain.swift
+      - path: Sources/Design/VFD/VFDBuffer.swift
+      - path: Sources/Design/VFD/VFDFont.swift
       - path: Sources/Design/TouchViz.swift
       - path: Sources/Models/TouchPattern.swift
       - path: Sources/Models/Heartbeat.swift
@@ -326,6 +328,8 @@ targets:
       - path: Sources/Views/Color+RGB.swift
       - path: Sources/Design/Theme.swift
       - path: Sources/Design/MatrixRain.swift
+      - path: Sources/Design/VFD/VFDBuffer.swift
+      - path: Sources/Design/VFD/VFDFont.swift
       - path: Sources/Design/TouchViz.swift
     info:
       path: NotificationContent/Info.plist
